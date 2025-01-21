@@ -3,8 +3,8 @@ import { Editor } from "@monaco-editor/react";
 const CodeEditor = () => {
   return (
     <Editor
-      height="75vh"
-      width="90vh"
+      height="70vh"
+      width="100%"
       theme="vs-dark"
       defaultLanguage="python"
       defaultValue="# some comment"
