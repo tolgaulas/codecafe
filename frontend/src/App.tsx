@@ -1,9 +1,10 @@
 import "./App.css";
+import CodeEditor from "./components/CodeEditor";
 
 function App() {
   return (
     <>
-      <text className="text-red-700">hi</text>
+      <CodeEditor />
     </>
   );
 }
