@@ -3,8 +3,13 @@ import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import { FitAddon } from "xterm-addon-fit";
 
-const TerminalComponent: React.FC = () => {
+interface TerminalComponentProps {
+  output?: string;
+}
+
+const TerminalComponent: React.FC<TerminalComponentProps> = ({ output }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
+  const terminalInstance = useRef<Terminal | null>(null);
 
   useEffect(() => {
     const term = new Terminal({
@@ -16,39 +21,53 @@ const TerminalComponent: React.FC = () => {
         foreground: "#ffffff",
       },
     });
+
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
 
     if (terminalRef.current) {
       term.open(terminalRef.current);
-
       fitAddon.fit();
     }
 
-    // Display a welcome message and the prompt
+    terminalInstance.current = term;
     term.write("Welcome to CodeCafe!\r\n$ ");
 
-    term.onData((data) => {
-      if (data === "\r") {
-        term.write("\r\n$ "); // On Enter, add a new line and prompt
-      } else if (data === "\u007f") {
-        // Handle backspace
-        term.write("\b \b");
-      } else {
-        term.write(data); // Display typed character
-      }
-    });
-
-    return () => term.dispose(); // Clean up terminal instance on unmount
+    return () => term.dispose();
   }, []);
+
+  // Effect to handle new output
+  useEffect(() => {
+    if (output && terminalInstance.current) {
+      const term = terminalInstance.current;
+
+      // Clear the current line (where the prompt is)
+      term.write("\x1b[2K\r");
+
+      // Split the output into lines and handle each line properly
+      const lines = output.split("\n");
+      lines.forEach((line, index) => {
+        if (index > 0) {
+          term.write("\r\n");
+        }
+        term.write(line);
+      });
+
+      // Only add a newline if the output doesn't end with one
+      if (!output.endsWith("\n")) {
+        term.write("\r\n");
+      }
+      term.write("$ ");
+    }
+  }, [output]);
 
   return (
     <div
       ref={terminalRef}
       style={{
         width: "100%",
-        height: "100%", // Full viewport height
-        backgroundColor: "#1e1e1e", // Match terminal theme
+        height: "100%",
+        backgroundColor: "#1e1e1e",
       }}
     />
   );
