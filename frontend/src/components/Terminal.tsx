@@ -1,7 +1,7 @@
-// Terminal.tsx
 import React, { useEffect, useRef } from "react";
 import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
+import { FitAddon } from "xterm-addon-fit";
 
 const TerminalComponent: React.FC = () => {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -16,9 +16,13 @@ const TerminalComponent: React.FC = () => {
         foreground: "#ffffff",
       },
     });
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
 
     if (terminalRef.current) {
       term.open(terminalRef.current);
+
+      fitAddon.fit();
     }
 
     // Display a welcome message and the prompt
@@ -43,7 +47,7 @@ const TerminalComponent: React.FC = () => {
       ref={terminalRef}
       style={{
         width: "100%",
-        height: "100vh", // Full viewport height
+        height: "100%", // Full viewport height
         backgroundColor: "#1e1e1e", // Match terminal theme
       }}
     />
