@@ -1,13 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
 import { FitAddon } from "xterm-addon-fit";
 
-interface TerminalComponentProps {
-  output?: string;
-}
-
-const TerminalComponent: React.FC<TerminalComponentProps> = ({ output }) => {
+const TerminalComponent = forwardRef((_, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
 
@@ -36,30 +32,27 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ output }) => {
     return () => term.dispose();
   }, []);
 
-  // Effect to handle new output
-  useEffect(() => {
-    if (output && terminalInstance.current) {
-      const term = terminalInstance.current;
+  useImperativeHandle(ref, () => ({
+    writeToTerminal: (output: string) => {
+      if (terminalInstance.current) {
+        const term = terminalInstance.current;
+        term.write("\x1b[2K\r");
 
-      // Clear the current line (where the prompt is)
-      term.write("\x1b[2K\r");
+        const lines = output.split("\n");
+        lines.forEach((line, index) => {
+          if (index > 0) {
+            term.write("\r\n");
+          }
+          term.write(line);
+        });
 
-      // Split the output into lines and handle each line properly
-      const lines = output.split("\n");
-      lines.forEach((line, index) => {
-        if (index > 0) {
+        if (!output.endsWith("\n")) {
           term.write("\r\n");
         }
-        term.write(line);
-      });
-
-      // Only add a newline if the output doesn't end with one
-      if (!output.endsWith("\n")) {
-        term.write("\r\n");
+        term.write("$ ");
       }
-      term.write("$ ");
-    }
-  }, [output]);
+    },
+  }));
 
   return (
     <div
@@ -71,6 +64,6 @@ const TerminalComponent: React.FC<TerminalComponentProps> = ({ output }) => {
       }}
     />
   );
-};
+});
 
 export default TerminalComponent;

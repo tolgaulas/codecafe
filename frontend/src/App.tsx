@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import Terminal from "./components/Terminal";
@@ -25,6 +25,7 @@ const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
   const [output, setOutput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
@@ -50,20 +51,20 @@ const App: React.FC = () => {
         }
       );
 
-      // Update the output with both stdout and stderr if present
       const executionOutput = response.data.run.stderr
         ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
         : response.data.run.stdout;
 
       setOutput(executionOutput);
-      console.log(executionOutput);
+      // Write directly to terminal
+      terminalRef.current?.writeToTerminal(executionOutput);
     } catch (error) {
-      console.error("Error executing code:", error);
-      setOutput(
-        `Error: ${
-          error instanceof Error ? error.message : "Unknown error occurred"
-        }`
-      );
+      const errorOutput = `Error: ${
+        error instanceof Error ? error.message : "Unknown error occurred"
+      }`;
+      setOutput(errorOutput);
+      // Write errors directly to terminal
+      terminalRef.current?.writeToTerminal(errorOutput);
     } finally {
       setIsLoading(false);
     }
@@ -108,7 +109,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex-grow p-4">
             <div className="h-full">
-              <Terminal output={output} />
+              <Terminal ref={terminalRef} />
             </div>
           </div>
         </div>
