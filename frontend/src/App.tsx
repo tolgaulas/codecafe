@@ -21,6 +21,33 @@ interface CodeExecutionResponse {
   };
 }
 
+const users: User[] = [
+  {
+    id: "user1",
+    name: "John",
+    color: "#ff7800", // Orange
+    cursorPosition: { lineNumber: 2, column: 10 },
+    selection: {
+      startLineNumber: 2,
+      startColumn: 1,
+      endLineNumber: 3,
+      endColumn: 15,
+    },
+  },
+  {
+    id: "user2",
+    name: "Alice",
+    color: "#00a2ff", // Blue
+    cursorPosition: { lineNumber: 3, column: 10 },
+    selection: {
+      startLineNumber: 3,
+      startColumn: 5,
+      endLineNumber: 4,
+      endColumn: 10,
+    },
+  },
+];
+
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -93,7 +120,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex-grow p-4">
             <div className="h-full">
-              <CodeEditor onCodeChange={handleCodeChange} />
+              <CodeEditor onCodeChange={handleCodeChange} users={users} />
             </div>
           </div>
         </div>

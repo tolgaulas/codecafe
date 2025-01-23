@@ -2,11 +2,31 @@ import { useState, useRef, useEffect } from "react";
 import { Editor } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 
-interface CodeEditorProps {
-  onCodeChange: (code: string) => void;
+interface User {
+  id: string;
+  name: string;
+  color: string;
+  cursorPosition: {
+    lineNumber: number;
+    column: number;
+  };
+  selection?: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  };
 }
 
-const CodeEditor: React.FC<CodeEditorProps> = ({ onCodeChange }) => {
+interface CodeEditorProps {
+  onCodeChange: (code: string) => void;
+  users?: User[];
+}
+
+const CodeEditor: React.FC<CodeEditorProps> = ({
+  onCodeChange,
+  users = [],
+}) => {
   const [code, setCode] = useState<string>(
     "// some comment\nfunction hello() {\n  console.log('Hello world');\n}\n\n// More code here\nconst x = 42;\nconsole.log(x);"
   );
@@ -16,57 +36,72 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCodeChange }) => {
   useEffect(() => {
     onCodeChange(code);
   });
+
+  useEffect(() => {
+    if (editorRef.current) {
+      updateDecorations();
+    }
+  }, [users]);
+
+  const updateDecorations = () => {
+    if (!editorRef.current) return;
+
+    const decorations = users.flatMap((user) => {
+      const decorationArray = [];
+
+      // Add selection if it exists
+      if (user.selection) {
+        decorationArray.push({
+          range: new monaco.Range(
+            user.selection.startLineNumber,
+            user.selection.startColumn,
+            user.selection.endLineNumber,
+            user.selection.endColumn
+          ),
+          options: {
+            className: `user-${user.id}-selection`,
+            hoverMessage: { value: `Selected by ${user.name}` },
+          },
+        });
+      }
+
+      // Add cursor
+      decorationArray.push({
+        range: new monaco.Range(
+          user.cursorPosition.lineNumber,
+          user.cursorPosition.column,
+          user.cursorPosition.lineNumber,
+          user.cursorPosition.column
+        ),
+        options: {
+          className: `user-${user.id}-cursor`,
+          beforeContentClassName: "cursor-label",
+          before: {
+            content: user.name,
+            inlineClassName: `user-${user.id}-label`,
+          },
+        },
+      });
+
+      return decorationArray;
+    });
+
+    // Update decorations
+    decorationsRef.current = editorRef.current.deltaDecorations(
+      decorationsRef.current,
+      decorations
+    );
+  };
+
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
 
-    const blinkInterval = 500;
-
-    const otherUserPosition = new monaco.Position(3, 15);
-    const selectionStart = new monaco.Position(2, 1);
-
-    const decorations = [
-      {
-        range: new monaco.Range(
-          selectionStart.lineNumber,
-          selectionStart.column,
-          otherUserPosition.lineNumber,
-          otherUserPosition.column
-        ),
-        options: {
-          className: "other-user-selection",
-          glyphMarginClassName: "other-user-glyph",
-          isWholeLine: false,
-          hoverMessage: { value: "Selected by John" },
-          inlineClassName: "other-user-inline",
-          beforeContentClassName: "other-user-before",
-        },
-      },
-      {
-        range: new monaco.Range(
-          otherUserPosition.lineNumber,
-          otherUserPosition.column,
-          otherUserPosition.lineNumber,
-          otherUserPosition.column
-        ),
-        options: {
-          className: "other-user-cursor",
-          glyphMarginClassName: "other-user-cursor-glyph",
-          beforeContentClassName: "cursor-label",
-          before: {
-            content: "John",
-            inlineClassName: "user-label",
-          },
-        },
-      },
-    ];
-
-    // Apply the decorations
-    decorationsRef.current = editor.deltaDecorations([], decorations);
-
-    // Add custom CSS for decorations with dynamic blink rate
+    // Add custom CSS for decorations
     const styleSheet = document.createElement("style");
-    styleSheet.textContent = `
-      @keyframes blink {
+    styleSheet.textContent = users
+      .map(
+        (user) => `
+      @keyframes blink-${user.id} {
         0% { opacity: 1; }
         49% { opacity: 1; }
         50% { opacity: 0; }
@@ -74,17 +109,17 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCodeChange }) => {
         100% { opacity: 1; }
       }
 
-      .other-user-selection {
-        background-color: rgba(255, 120, 0, 0.2);
+      .user-${user.id}-selection {
+        background-color: ${user.color}33;
       }
-      .other-user-cursor {
-        border-left: 2px solid #ff7800;
+      .user-${user.id}-cursor {
+        border-left: 2px solid ${user.color};
         height: 20px !important;
         margin-left: -1px;
-        animation: blink ${blinkInterval * 2}ms step-end infinite;
+        animation: blink-${user.id} 1000ms step-end infinite;
       }
-      .user-label {
-        background-color: #ff7800;
+      .user-${user.id}-label {
+        background-color: ${user.color};
         color: white;
         padding: 2px 6px;
         border-radius: 3px;
@@ -94,8 +129,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCodeChange }) => {
         top: -20px;
         white-space: nowrap;
       }
-    `;
+    `
+      )
+      .join("\n");
     document.head.appendChild(styleSheet);
+
+    updateDecorations();
   };
 
   const handleEditorChange = (value: string | undefined) => {
@@ -120,8 +159,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCodeChange }) => {
           lineHeight: 20,
           minimap: { enabled: false },
           wordWrap: "on",
-          cursorBlinking: "blink", // This ensures cursor blinking is enabled
-          cursorStyle: "line", // Use a line cursor
+          cursorBlinking: "blink",
+          cursorStyle: "line",
         }}
       />
     </div>
