@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Editor } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 
@@ -13,13 +13,14 @@ const CodeEditor: React.FC<CodeEditorProps> = ({ onCodeChange }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
 
+  useEffect(() => {
+    onCodeChange(code);
+  });
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
 
-    // Get the editor's cursor blink rate
-    const blinkInterval = 500; // Default to 500ms if not set
+    const blinkInterval = 500;
 
-    // Add the other user's cursor and selection
     const otherUserPosition = new monaco.Position(3, 15);
     const selectionStart = new monaco.Position(2, 1);
 

@@ -23,7 +23,6 @@ interface CodeExecutionResponse {
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
-  const [output, setOutput] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
 
@@ -54,15 +53,12 @@ const App: React.FC = () => {
       const executionOutput = response.data.run.stderr
         ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
         : response.data.run.stdout;
-
-      setOutput(executionOutput);
       // Write directly to terminal
       terminalRef.current?.writeToTerminal(executionOutput);
     } catch (error) {
       const errorOutput = `Error: ${
         error instanceof Error ? error.message : "Unknown error occurred"
       }`;
-      setOutput(errorOutput);
       // Write errors directly to terminal
       terminalRef.current?.writeToTerminal(errorOutput);
     } finally {
