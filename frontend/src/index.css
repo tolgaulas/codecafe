@@ -12,4 +12,5 @@ body,
 
 .monaco-editor {
   outline: none !important;
+  overflow: hidden !important;
 }

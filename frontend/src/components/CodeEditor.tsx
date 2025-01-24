@@ -111,6 +111,13 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
 
+    // editor.onMouseDown((e: any) => {
+    //   if (e.event.browserEvent.type === "wheel") {
+    //     // Allow the event to propagate to the page
+    //     e.event.browserEvent.stopPropagation = false;
+    //   }
+    // });
+
     // Add custom CSS for decorations
     const styleSheet = document.createElement("style");
 
@@ -164,7 +171,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
 
   return (
-    <div className="h-full w-full bg-">
+    <div className="h-full w-full">
       <Editor
         height="100%"
         width="100%"
@@ -180,6 +187,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           wordWrap: "on",
           cursorBlinking: "blink",
           cursorStyle: "line",
+          scrollBeyondLastLine: false,
+          scrollbar: {
+            scrollByPage: true,
+            verticalScrollbarSize: 0,
+          },
         }}
         className="monaco-editor"
       />
