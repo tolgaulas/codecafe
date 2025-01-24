@@ -69,9 +69,12 @@ const users: User[] = [
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
-  const [height, setHeight] = useState(256);
-  const [width, setWidth] = useState(256);
-  // const [leftOffset, setLeftOffset] = useState(0);
+  const [height, setHeight] = useState(window.innerHeight * 0.25);
+  const [width, setWidth] = useState(window.innerWidth * 0.75);
+  const screenSixteenth = {
+    width: window.innerWidth * (1 / 16),
+    height: window.innerHeight * (1 / 16),
+  };
 
   // const [isLoading, setIsLoading] = useState<boolean>(false);
   // const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
@@ -183,18 +186,29 @@ const App: React.FC = () => {
           <ResizableBox
             width={width}
             height={height}
-            minConstraints={[300, 100]}
-            maxConstraints={[Infinity, 600]}
+            minConstraints={[
+              Math.max(300, window.innerWidth * 0.75 - screenSixteenth.width),
+              Math.max(100, window.innerHeight * 0.25 - screenSixteenth.height),
+            ]}
+            maxConstraints={[
+              Math.min(
+                window.innerWidth,
+                window.innerWidth * 0.75 + screenSixteenth.width
+              ),
+              Math.min(
+                window.innerHeight,
+                window.innerHeight * 0.25 + screenSixteenth.height
+              ),
+            ]}
             onResize={(e, { size }) => {
               setWidth(size.width);
               setHeight(size.height);
-              // setLeftOffset((prevOffset) => prevOffset + (width - size.width));
             }}
             resizeHandles={["w", "nw", "n", "ne", "e", "se", "s", "sw"]}
             style={{
               position: "fixed",
               bottom: 0,
-              left: `calc(100vw - ${width}px)`, // Position the box such that the right bottom corner is at the left bottom of the screen
+              left: `calc(100vw - ${width}px)`,
               zIndex: 10,
             }}
           >
