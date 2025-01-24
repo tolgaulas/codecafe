@@ -3,6 +3,8 @@ import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import Terminal from "./components/Terminal";
 import { Card, Theme } from "@radix-ui/themes";
+import "react-resizable/css/styles.css";
+import { ResizableBox } from "react-resizable";
 
 interface CodeExecutionRequest {
   language: string;
@@ -67,6 +69,10 @@ const users: User[] = [
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
+  const [height, setHeight] = useState(256);
+  const [width, setWidth] = useState(256);
+  // const [leftOffset, setLeftOffset] = useState(0);
+
   // const [isLoading, setIsLoading] = useState<boolean>(false);
   // const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
 
@@ -158,7 +164,7 @@ const App: React.FC = () => {
   // );
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
-      <div className="bg-neutral-950 h-screen flex items-center justify-center p-4 relative">
+      <div className="bg-gradient-to-b from-neutral-950 to bg-neutral-900 h-max flex items-center justify-center p-4 relative">
         <div className="relative flex flex-col items-center h-screen w-full max-w-4xl">
           {/* Code Area - Added z-index to ensure hints are visible */}
           <Card className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] h-full max-h-screen relative">
@@ -168,11 +174,39 @@ const App: React.FC = () => {
           </Card>
 
           {/* Terminal */}
-          <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl absolute bottom-0 left-0 ml-10 w-[300%]">
+          {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
             <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
               <Terminal />
             </div>
-          </Card>
+          </Card> */}
+
+          <ResizableBox
+            width={width}
+            height={height}
+            minConstraints={[300, 100]}
+            maxConstraints={[Infinity, 600]}
+            onResize={(e, { size }) => {
+              setWidth(size.width);
+              setHeight(size.height);
+              // setLeftOffset((prevOffset) => prevOffset + (width - size.width));
+            }}
+            resizeHandles={["w", "nw", "n", "ne", "e", "se", "s", "sw"]}
+            style={{
+              position: "fixed",
+              bottom: 0,
+              left: `calc(100vw - ${width}px)`, // Position the box such that the right bottom corner is at the left bottom of the screen
+              zIndex: 10,
+            }}
+          >
+            <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl">
+              <div
+                className="p-4 font-mono text-green-400/80 overflow-auto"
+                style={{ height, width }}
+              >
+                <Terminal />
+              </div>
+            </Card>
+          </ResizableBox>
         </div>
       </div>
     </Theme>

@@ -189,8 +189,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           cursorStyle: "line",
           scrollBeyondLastLine: false,
           scrollbar: {
-            scrollByPage: true,
+            handleMouseWheel: false,
             verticalScrollbarSize: 0,
+            verticalSliderSize: 0,
           },
         }}
         className="monaco-editor"
