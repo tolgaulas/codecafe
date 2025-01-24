@@ -13,7 +13,7 @@ const TerminalComponent = forwardRef((_, ref) => {
       fontSize: 14,
       fontFamily: "monospace",
       theme: {
-        background: "#1e1e1e",
+        background: "rgba(0,0,0,0)",
         foreground: "#ffffff",
       },
     });
@@ -60,7 +60,7 @@ const TerminalComponent = forwardRef((_, ref) => {
       style={{
         width: "100%",
         height: "100%",
-        backgroundColor: "#1e1e1e",
+        backgroundColor: "rgba(0,0,0,0)",
       }}
     />
   );
