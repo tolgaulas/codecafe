@@ -113,15 +113,13 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
     // Add custom CSS for decorations
     const styleSheet = document.createElement("style");
-    styleSheet.textContent = `
-      .monaco-editor:focus {
-        outline: none !important;
-      }
-    `;
-    document.head.appendChild(styleSheet);
+
     styleSheet.textContent = users
       .map(
         (user) => `
+    .monaco-editor {
+      border: none !important;
+    }
       @keyframes blink-${user.id} {
         0% { opacity: 1; }
         49% { opacity: 1; }

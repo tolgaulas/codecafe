@@ -160,9 +160,9 @@ const App: React.FC = () => {
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-neutral-950 h-screen flex items-center justify-center p-4 relative">
         <div className="relative flex flex-col items-center h-screen w-full max-w-4xl">
-          {/* Code Area */}
-          <Card className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] h-full max-h-screen">
-            <div className="p-6 h-full text-neutral-300 overflow-auto">
+          {/* Code Area - Added z-index to ensure hints are visible */}
+          <Card className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] h-full max-h-screen relative">
+            <div className="p-6 h-full text-neutral-300 overflow-visible">
               <CodeEditor onCodeChange={handleCodeChange} users={users} />
             </div>
           </Card>
@@ -170,7 +170,7 @@ const App: React.FC = () => {
           {/* Terminal */}
           <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl absolute bottom-0 left-0 ml-10 w-[300%]">
             <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
-              {/* Terminal Placeholder */}
+              <Terminal />
             </div>
           </Card>
         </div>
