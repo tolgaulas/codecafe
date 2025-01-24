@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Editor } from "@monaco-editor/react";
+import { Editor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 
 interface User {
@@ -42,6 +42,21 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       updateDecorations();
     }
   }, [users]);
+
+  useEffect(() => {
+    loader.init().then((monaco) => {
+      monaco.editor.defineTheme("transparentTheme", {
+        base: "vs-dark", // Use "vs-dark" as the base theme
+        inherit: true,
+        rules: [],
+        colors: {
+          "editor.background": "#00000000",
+          "editorGutter.background": "#00000000",
+          "minimap.background": "#00000000",
+        },
+      });
+    });
+  }, []);
 
   const updateDecorations = () => {
     if (!editorRef.current) return;
@@ -98,6 +113,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
     // Add custom CSS for decorations
     const styleSheet = document.createElement("style");
+    styleSheet.textContent = `
+      .monaco-editor:focus {
+        outline: none !important;
+      }
+    `;
+    document.head.appendChild(styleSheet);
     styleSheet.textContent = users
       .map(
         (user) => `
@@ -145,11 +166,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
 
   return (
-    <div className="h-full w-full">
+    <div className="h-full w-full bg-">
       <Editor
         height="100%"
         width="100%"
-        theme="vs-dark"
+        theme="transparentTheme"
         defaultLanguage="javascript"
         value={code}
         onChange={handleEditorChange}
@@ -162,6 +183,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           cursorBlinking: "blink",
           cursorStyle: "line",
         }}
+        className="monaco-editor"
       />
     </div>
   );

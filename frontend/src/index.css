@@ -9,3 +9,9 @@ body,
   margin: 0;
   padding: 0;
 }
+
+code-editor:focus {
+  border-color: inherit;
+  -webkit-box-shadow: none;
+  box-shadow: none;
+}
