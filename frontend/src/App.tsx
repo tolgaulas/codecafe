@@ -5,6 +5,8 @@ import Terminal from "./components/Terminal";
 import { Card, Theme } from "@radix-ui/themes";
 import "react-resizable/css/styles.css";
 import { ResizableBox } from "react-resizable";
+import SockJS from 'sockjs-client';
+import Stomp from 'stompjs';
 
 interface CodeExecutionRequest {
   language: string;
@@ -96,7 +98,20 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const handleRunCode = async () => {
+  useEffect(() => {
+    const socket = new SockJS('http://localhost:8080/ws');
+const stompClient = Stomp.over(socket);
+
+stompClient.connect({}, function (frame: any) {
+    console.log('Connected: ' + frame);
+    stompClient.subscribe('/topic/greetings', function (message:any) {
+        console.log('Received: ' + message.body);
+    });
+    stompClient.send("/app/hello", {}, JSON.stringify({ name: "John" }));
+});
+  }, []);
+
+    const handleRunCode = async () => {
     setIsLoading(true);
     try {
       const requestBody: CodeExecutionRequest = {
