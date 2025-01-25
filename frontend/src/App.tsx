@@ -222,7 +222,7 @@ const App: React.FC = () => {
 
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
-      <div className="bg-gradient-to-b from-stone-950 to bg-stone-950/90 h-max flex items-center justify-center p-4 relative">
+      <div className="bg-gradient-to-b from-stone-950 to bg-stone-900 h-max flex items-center justify-center p-4 relative">
         <div className="fixed top-4 left-4 z-50">
           <button
             onClick={handleRunCode}
