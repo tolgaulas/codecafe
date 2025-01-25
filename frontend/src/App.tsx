@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import Terminal from "./components/Terminal";
@@ -69,6 +69,7 @@ const users: User[] = [
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
+  const [editorHeight, setEditorHeight] = useState(700);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
   const screenSixteenth = {
@@ -82,6 +83,18 @@ const App: React.FC = () => {
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
   };
+
+  useEffect(() => {
+    const handleResize = () => {
+      setHeight(window.innerHeight * 0.25);
+      setWidth(window.innerWidth * 0.75);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
 
   // const handleRunCode = async () => {
   //   setIsLoading(true);
@@ -165,14 +178,47 @@ const App: React.FC = () => {
   //     </div>
   //   </div>
   // );
+
+  const handleCursorPositionChange = (lineNumber: number) => {
+    const editorElement = document.querySelector(".monaco-editor");
+    if (!editorElement) return;
+
+    const cursorPositionFromTop = lineNumber * 20;
+
+    console.log("Current Height:", editorHeight); // Debug log
+
+    // Calculate the dynamic threshold: current scroll position + 75% of the viewport height
+    const dynamicThreshold = window.scrollY + window.innerHeight * 0.5;
+
+    if (cursorPositionFromTop > dynamicThreshold) {
+      setEditorHeight((prevHeight) => {
+        const newHeight = prevHeight + 5 * 20;
+        console.log("New Height:", newHeight); // Debug log
+        return newHeight;
+      });
+
+      window.scrollBy({
+        top: 5 * 20,
+        behavior: "smooth",
+      });
+    }
+  };
+
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
-      <div className="bg-gradient-to-b from-neutral-950 to bg-neutral-900 h-max flex items-center justify-center p-4 relative">
-        <div className="relative flex flex-col items-center h-screen w-full max-w-4xl">
+      <div className="bg-gradient-to-b from-stone-950 to bg-stone-950/90 h-max flex items-center justify-center p-4 relative">
+        <div className="relative flex flex-col items-center w-full max-w-4xl">
           {/* Code Area - Added z-index to ensure hints are visible */}
-          <Card className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] h-full max-h-screen relative">
-            <div className="p-6 h-full text-neutral-300 overflow-visible">
-              <CodeEditor onCodeChange={handleCodeChange} users={users} />
+          <Card
+            className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] relative"
+            style={{ height: editorHeight }}
+          >
+            <div className="p-6 h-full text-neutral-300">
+              <CodeEditor
+                onCodeChange={handleCodeChange}
+                users={users}
+                onCursorPositionChange={handleCursorPositionChange}
+              />
             </div>
           </Card>
 
@@ -212,7 +258,7 @@ const App: React.FC = () => {
               zIndex: 10,
             }}
           >
-            <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl">
+            <Card className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl">
               <div
                 className="p-4 font-mono text-green-400/80 overflow-auto"
                 style={{ height, width }}

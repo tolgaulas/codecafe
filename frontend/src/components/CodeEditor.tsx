@@ -21,11 +21,13 @@ interface User {
 interface CodeEditorProps {
   onCodeChange: (code: string) => void;
   users?: User[];
+  onCursorPositionChange?: (lineNumber: number) => void; // New prop
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   onCodeChange,
   users = [],
+  onCursorPositionChange,
 }) => {
   const [code, setCode] = useState<string>(
     "// some comment\nfunction hello() {\n  console.log('Hello world');\n}\n\n// More code here\nconst x = 42;\nconsole.log(x);"
@@ -111,14 +113,13 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
 
-    // editor.onMouseDown((e: any) => {
-    //   if (e.event.browserEvent.type === "wheel") {
-    //     // Allow the event to propagate to the page
-    //     e.event.browserEvent.stopPropagation = false;
-    //   }
-    // });
+    editor.onDidChangeCursorPosition(
+      (e: monaco.editor.ICursorPositionChangedEvent) => {
+        const lineNumber = e.position.lineNumber;
+        onCursorPositionChange?.(lineNumber); // Call the prop function
+      }
+    );
 
-    // Add custom CSS for decorations
     const styleSheet = document.createElement("style");
 
     styleSheet.textContent = users

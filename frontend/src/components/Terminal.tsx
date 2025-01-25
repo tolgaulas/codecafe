@@ -9,7 +9,7 @@ const TerminalComponent = forwardRef((_, ref) => {
 
   useEffect(() => {
     const term = new Terminal({
-      cursorBlink: false,
+      cursorBlink: true,
       fontSize: 14,
       fontFamily: "monospace",
       theme: {
