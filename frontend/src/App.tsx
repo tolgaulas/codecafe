@@ -77,8 +77,8 @@ const App: React.FC = () => {
     height: window.innerHeight * (1 / 16),
   };
 
-  // const [isLoading, setIsLoading] = useState<boolean>(false);
-  // const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
@@ -96,41 +96,42 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // const handleRunCode = async () => {
-  //   setIsLoading(true);
-  //   try {
-  //     const requestBody: CodeExecutionRequest = {
-  //       language: "javascript",
-  //       version: "18.15.0",
-  //       files: [{ content: code }],
-  //     };
+  const handleRunCode = async () => {
+    setIsLoading(true);
+    try {
+      const requestBody: CodeExecutionRequest = {
+        language: "javascript",
+        version: "18.15.0",
+        files: [{ content: code }],
+      };
 
-  //     const response = await axios.post<CodeExecutionResponse>(
-  //       "http://localhost:8080/api/execute",
-  //       requestBody,
-  //       {
-  //         headers: {
-  //           "Content-Type": "application/json",
-  //           Accept: "application/json",
-  //         },
-  //       }
-  //     );
+      const response = await axios.post<CodeExecutionResponse>(
+        "http://localhost:8080/api/execute",
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        }
+      );
 
-  //     const executionOutput = response.data.run.stderr
-  //       ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
-  //       : response.data.run.stdout;
-  //     // Write directly to terminal
-  //     terminalRef.current?.writeToTerminal(executionOutput);
-  //   } catch (error) {
-  //     const errorOutput = `Error: ${
-  //       error instanceof Error ? error.message : "Unknown error occurred"
-  //     }`;
-  //     // Write errors directly to terminal
-  //     terminalRef.current?.writeToTerminal(errorOutput);
-  //   } finally {
-  //     setIsLoading(false);
-  //   }
-  // };
+      const executionOutput = response.data.run.stderr
+        ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
+        : response.data.run.stdout;
+      // Write directly to terminal
+      console.log(executionOutput);
+      terminalRef.current?.writeToTerminal(executionOutput);
+    } catch (error) {
+      const errorOutput = `Error: ${
+        error instanceof Error ? error.message : "Unknown error occurred"
+      }`;
+      // Write errors directly to terminal
+      terminalRef.current?.writeToTerminal(errorOutput);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // return (
   //   <div className="bg-gray-100 h-screen w-full flex flex-col p-6">
@@ -207,11 +208,19 @@ const App: React.FC = () => {
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-950 to bg-stone-950/90 h-max flex items-center justify-center p-4 relative">
+        <div className="fixed top-4 left-4 z-50">
+          <button
+            onClick={handleRunCode}
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md"
+          >
+            Test
+          </button>
+        </div>
         <div className="relative flex flex-col items-center w-full max-w-4xl">
           {/* Code Area - Added z-index to ensure hints are visible */}
           <Card
             className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] relative"
-            style={{ height: editorHeight }}
+            style={{ height: `${editorHeight}px` }}
           >
             <div className="p-6 h-full text-neutral-300">
               <CodeEditor
@@ -263,7 +272,7 @@ const App: React.FC = () => {
                 className="p-4 font-mono text-green-400/80 overflow-auto"
                 style={{ height, width }}
               >
-                <Terminal />
+                <Terminal ref={terminalRef} />
               </div>
             </Card>
           </ResizableBox>
