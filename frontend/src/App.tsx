@@ -71,7 +71,7 @@ const users: User[] = [
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
-  const [editorHeight, setEditorHeight] = useState(700);
+  const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
   const screenSixteenth = {
@@ -88,6 +88,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleResize = () => {
+      if (editorHeight < window.innerHeight) {
+        setEditorHeight(window.innerHeight);
+      }
       setHeight(window.innerHeight * 0.25);
       setWidth(window.innerWidth * 0.75);
     };
@@ -222,11 +225,12 @@ const App: React.FC = () => {
 
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
-      <div className="bg-gradient-to-b from-stone-950 to bg-stone-900 h-max flex items-center justify-center p-4 relative">
-        <div className="fixed top-4 left-4 z-50">
+      <div className="bg-gradient-to-b from-stone-900 to-stone-800 fixed top-0 left-0 right-0 h-screen z-0" />
+      <div className="items-center justify-center p-4 relative flex flex-col h-max">
+        <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-900 via-stone-900/90 to-transparent p-4 z-50 outline-none">
           <button
             onClick={handleRunCode}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md"
+            className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md"
           >
             Test
           </button>
