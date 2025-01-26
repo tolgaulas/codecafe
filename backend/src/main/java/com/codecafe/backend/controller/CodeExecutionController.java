@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173") // Allow requests from your Vite dev server
+@CrossOrigin(origins = "*") // Allow requests from your Vite dev server
 @RequestMapping("/api")
 public class CodeExecutionController {
     private final RestTemplate restTemplate;
