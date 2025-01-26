@@ -69,6 +69,9 @@ const users: User[] = [
   },
 ];
 
+const socket = new SockJS("http://localhost:8080/ws");
+const stompClient = Stomp.over(socket);
+
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
@@ -102,17 +105,27 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const socket = new SockJS("http://localhost:8080/ws");
-    const stompClient = Stomp.over(socket);
-
     stompClient.connect({}, function (frame: any) {
       console.log("Connected: " + frame);
-      stompClient.subscribe("/topic/greetings", function (message: any) {
-        console.log("Received: " + message.body);
+      stompClient.subscribe("/topic/messages", function (message: any) {
+        showMessage(message.body);
       });
-      stompClient.send("/app/hello", {}, JSON.stringify({ name: "John" }));
     });
+
+    function showMessage(message: string) {
+      const messagesDiv = document.getElementById('messages');
+      if (messagesDiv) {
+        const messageElement = document.createElement('div');
+        messageElement.textContent = message;
+        messagesDiv.appendChild(messageElement);
+      }
+    }
   }, []);
+
+  function sendMessage() {
+    const message = code;
+    stompClient.send("/app/message", {}, message);
+  }
 
   const handleRunCode = async () => {
     setIsLoading(true);
@@ -151,53 +164,6 @@ const App: React.FC = () => {
     }
   };
 
-  // return (
-  //   <div className="bg-gray-100 h-screen w-full flex flex-col p-6">
-  //     {/* Header with run button */}
-  //     <div className="flex justify-center mb-6">
-  //       <button
-  //         className={`px-6 py-2 rounded-lg shadow-md transition-colors duration-200 font-medium
-  //           ${
-  //             isLoading
-  //               ? "bg-gray-400 cursor-not-allowed"
-  //               : "bg-blue-600 hover:bg-blue-700 text-white"
-  //           }`}
-  //         onClick={handleRunCode}
-  //         disabled={isLoading}
-  //       >
-  //         {isLoading ? "Running..." : "Run Code"}
-  //       </button>
-  //     </div>
-
-  //     {/* Main content area */}
-  //     <div className="flex-grow flex justify-between gap-6">
-  //       {/* Code editor panel */}
-  //       <div className="w-1/2 bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 flex flex-col">
-  //         <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-  //           <h2 className="text-sm font-medium text-gray-700">Editor</h2>
-  //         </div>
-  //         <div className="flex-grow p-4">
-  //           <div className="h-full">
-  //             <CodeEditor onCodeChange={handleCodeChange} users={users} />
-  //           </div>
-  //         </div>
-  //       </div>
-
-  //       {/* Terminal panel */}
-  //       <div className="w-1/2 bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 flex flex-col">
-  //         <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-  //           <h2 className="text-sm font-medium text-gray-700">Terminal</h2>
-  //         </div>
-  //         <div className="flex-grow p-4">
-  //           <div className="h-full">
-  //             <Terminal ref={terminalRef} />
-  //           </div>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   </div>
-  // );
-
   const handleCursorPositionChange = (lineNumber: number) => {
     const editorElement = document.querySelector(".monaco-editor");
     if (!editorElement) return;
@@ -228,12 +194,15 @@ const App: React.FC = () => {
       <div className="bg-gradient-to-b from-stone-900 to-stone-800 fixed top-0 left-0 right-0 h-screen z-0" />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
         <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-900 via-stone-900/90 to-transparent p-4 z-50 outline-none">
-          <button
-            onClick={handleRunCode}
+            <button
+            onClick={() => {
+              handleRunCode();
+              sendMessage();
+            }}
             className="px-4 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 shadow-md"
-          >
+            >
             Test
-          </button>
+            </button>
         </div>
         <div className="relative flex flex-col items-center w-full max-w-4xl">
           {/* Code Area - Added z-index to ensure hints are visible */}
@@ -250,12 +219,9 @@ const App: React.FC = () => {
             </div>
           </Card>
 
-          {/* Terminal */}
-          {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
-            <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
-              <Terminal />
-            </div>
-          </Card> */}
+          <input id="messageInput" type="text" placeholder="Type a message" />
+          <button onClick={() => sendMessage()}>Send</button>
+          <div id="messages"></div>
 
           <ResizableBox
             width={width}
