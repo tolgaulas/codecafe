@@ -4,7 +4,7 @@ import CodeEditor from "./components/CodeEditor";
 import Terminal from "./components/Terminal";
 import { Card, Theme } from "@radix-ui/themes";
 import "react-resizable/css/styles.css";
-import { ResizableBox } from "react-resizable";
+import { ResizableBox, ResizeHandle } from "react-resizable";
 import SockJS from "sockjs-client";
 import Stomp from "stompjs";
 import { VscRunAll } from "react-icons/vsc";
@@ -287,14 +287,17 @@ const App: React.FC = () => {
             resizeHandles={["w", "nw", "n"]}
             handle={(handleAxis, ref) => {
               const baseStyle = {
-                position: "absolute",
+                // position: "absolute",
                 background: "transparent",
-                // border: "2px solid rgba(200, 200, 200, 0.3)",
+                border: "2px solid rgba(200, 200, 200, 0.3)",
                 transform: "translate(-50%, -50%)",
               };
 
               // Custom styles for each handle
-              const styles = {
+              const styles: Record<
+                ResizeHandle,
+                React.CSSProperties | undefined
+              > = {
                 nw: {
                   ...baseStyle,
                   width: "5px",
@@ -315,6 +318,11 @@ const App: React.FC = () => {
                   padding: "5px",
                   transform: "translate(-50%, -50%) translateY(15px)",
                 },
+                s: undefined,
+                e: undefined,
+                sw: undefined,
+                se: undefined,
+                ne: undefined,
               };
 
               return (
