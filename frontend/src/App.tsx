@@ -231,12 +231,12 @@ const App: React.FC = () => {
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
         <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-900 via-stone-900/90 to-transparent p-4 z-50 outline-none flex flex-row">
           <button
-            className="flex items-center justify-center px-2 py-1 rounded-sm transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 text-stone-500"
+            className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
             onClick={handleRunCode}
           >
             <VscRunAll className="text-lg" />
           </button>
-          <button className="flex flex-row gap-1 items-center p-1 rounded-sm transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 cursor-pointer text-lg text-stone-500">
+          <button className="flex flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500">
             <GoPersonAdd />
             <span className="text-xs">Share</span>
           </button>
@@ -268,7 +268,7 @@ const App: React.FC = () => {
             height={height}
             minConstraints={[
               Math.max(300, window.innerWidth * 0.75 - screenSixteenth.width),
-              Math.max(100, window.innerHeight * 0.25 - screenSixteenth.height),
+              Math.max(100, window.innerHeight * 0.1 - screenSixteenth.height),
             ]}
             maxConstraints={[
               Math.min(
@@ -284,7 +284,47 @@ const App: React.FC = () => {
               setWidth(size.width);
               setHeight(size.height);
             }}
-            resizeHandles={["w", "nw", "n", "ne", "e", "se", "s", "sw"]}
+            resizeHandles={["w", "nw", "n"]}
+            handle={(handleAxis, ref) => {
+              const baseStyle = {
+                position: "absolute",
+                background: "transparent",
+                // border: "2px solid rgba(200, 200, 200, 0.3)",
+                transform: "translate(-50%, -50%)",
+              };
+
+              // Custom styles for each handle
+              const styles = {
+                nw: {
+                  ...baseStyle,
+                  width: "5px",
+                  height: "5px",
+                  padding: "5px",
+                },
+                n: {
+                  ...baseStyle,
+                  width: `${width}px`,
+                  height: "5px",
+                  padding: "5px",
+                  transform: "translate(-50%, -50%) translateX(15px)",
+                },
+                w: {
+                  ...baseStyle,
+                  width: "5px",
+                  height: `${height}px`,
+                  padding: "5px",
+                  transform: "translate(-50%, -50%) translateY(15px)",
+                },
+              };
+
+              return (
+                <div
+                  ref={ref}
+                  className={`react-resizable-handle react-resizable-handle-${handleAxis}`}
+                  style={styles[handleAxis]}
+                />
+              );
+            }}
             style={{
               position: "fixed",
               bottom: 0,
