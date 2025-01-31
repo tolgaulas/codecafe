@@ -253,9 +253,9 @@ const App: React.FC = () => {
 
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
-      <div className="bg-gradient-to-b from-stone-900 to-stone-800 fixed top-0 left-0 right-0 h-screen z-0" />
+      <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
-        <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-900 via-stone-900/90 to-transparent p-4 z-50 outline-none flex flex-row">
+        <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-800 via-stone-800/90 to-transparent p-4 z-50 outline-none flex flex-row">
           <button
             className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
             onClick={() => {
