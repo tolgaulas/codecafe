@@ -81,6 +81,11 @@ const App: React.FC = () => {
     height: window.innerHeight * (1 / 16),
   };
 
+  const socket = new SockJS("http://localhost:8080/ws");
+  const stompClient = Stomp.over(socket);
+
+
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
 
@@ -109,12 +114,16 @@ const App: React.FC = () => {
 
     stompClient.connect({}, function (frame: any) {
       console.log("Connected: " + frame);
-      stompClient.subscribe("/topic/greetings", function (message: any) {
+      stompClient.subscribe("/topic/messages", function (message: any) {
         console.log("Received: " + message.body);
       });
-      stompClient.send("/app/hello", {}, JSON.stringify({ name: "John" }));
     });
   }, []);
+
+  function sendMessage() {
+    const message = code;
+    stompClient.send("/app/message", {}, message);
+  }
 
   const handleRunCode = async () => {
     setIsLoading(true);
@@ -230,12 +239,15 @@ const App: React.FC = () => {
       <div className="bg-gradient-to-b from-stone-900 to-stone-800 fixed top-0 left-0 right-0 h-screen z-0" />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
         <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-900 via-stone-900/90 to-transparent p-4 z-50 outline-none flex flex-row">
-          <button
+            <button
             className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
-            onClick={handleRunCode}
-          >
+            onClick={() => {
+              handleRunCode();
+              sendMessage();
+            }}
+            >
             <VscRunAll className="text-lg" />
-          </button>
+            </button>
           <button className="flex flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500">
             <GoPersonAdd />
             <span className="text-xs">Share</span>
