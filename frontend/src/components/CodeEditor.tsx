@@ -22,28 +22,34 @@ interface CodeEditorProps {
   onCodeChange: (code: string) => void;
   users?: User[];
   onCursorPositionChange?: (lineNumber: number) => void; // New prop
+  code?: string;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   onCodeChange,
   users = [],
   onCursorPositionChange,
+  code,
 }) => {
-  const [code, setCode] = useState<string>(
-    "// some comment\nfunction hello() {\n  console.log('Hello world');\n}\n\n// More code here\nconst x = 42;\nconsole.log(x);"
-  );
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
+  // const [internalCode, setInternalCode] = useState(code);
 
   useEffect(() => {
-    onCodeChange(code);
-  });
-
-  useEffect(() => {
+    // setInternalCode(code);
     if (editorRef.current) {
-      updateDecorations();
+      const currentValue = editorRef.current.getValue();
+      if (currentValue !== code) {
+        editorRef.current.setValue(code);
+      }
     }
-  }, [users]);
+  }, [code]);
+
+  // useEffect(() => {
+  //   if (editorRef.current) {
+  //     updateDecorations();
+  //   }
+  // }, [users]);
 
   useEffect(() => {
     loader.init().then((monaco) => {
@@ -166,8 +172,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 
   const handleEditorChange = (value: string | undefined) => {
     if (value) {
-      setCode(value);
       onCodeChange(value);
+      // setInternalCode(code);
     }
   };
 

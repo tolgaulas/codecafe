@@ -72,25 +72,28 @@ const users: User[] = [
 ];
 
 const App: React.FC = () => {
-  const [code, setCode] = useState<string>("");
+  const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
+  const stompClientRef = useRef<Stomp.Client | null>(null);
+
   const screenSixteenth = {
     width: window.innerWidth * (1 / 16),
     height: window.innerHeight * (1 / 16),
   };
 
-  const socket = new SockJS("http://localhost:8080/ws");
-  const stompClient = Stomp.over(socket);
-
-
+  // const socket = new SockJS("http://localhost:8080/ws");
+  // const stompClient = Stomp.over(socket);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
+
+    if (stompClientRef.current && stompClientRef.current.connected)
+      stompClientRef.current?.send("/app/message", {}, newCode);
   };
 
   useEffect(() => {
@@ -116,14 +119,28 @@ const App: React.FC = () => {
       console.log("Connected: " + frame);
       stompClient.subscribe("/topic/messages", function (message: any) {
         console.log("Received: " + message.body);
+        setCode(message.body);
       });
     });
+    stompClientRef.current = stompClient;
+
+    return () => {
+      if (stompClient.connected) {
+        stompClient.disconnect(function () {
+          console.log("Disconnected");
+        }, {});
+      }
+      if (socket.readyState === SockJS.OPEN) {
+        socket.close();
+      }
+    };
   }, []);
 
-  function sendMessage() {
-    const message = code;
-    stompClient.send("/app/message", {}, message);
-  }
+  // function sendMessage() {
+  //   const message = code;
+  // }
+
+  // useEffect(sendMessage, [code]);
 
   const handleRunCode = async () => {
     setIsLoading(true);
@@ -215,7 +232,7 @@ const App: React.FC = () => {
 
     const cursorPositionFromTop = lineNumber * 20;
 
-    console.log("Current Height:", editorHeight); // Debug log
+    // console.log("Current Height:", editorHeight); // Debug log
 
     // Calculate the dynamic threshold: current scroll position + 75% of the viewport height
     const dynamicThreshold = window.scrollY + window.innerHeight * 0.5;
@@ -239,15 +256,14 @@ const App: React.FC = () => {
       <div className="bg-gradient-to-b from-stone-900 to-stone-800 fixed top-0 left-0 right-0 h-screen z-0" />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
         <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-900 via-stone-900/90 to-transparent p-4 z-50 outline-none flex flex-row">
-            <button
+          <button
             className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
             onClick={() => {
               handleRunCode();
-              sendMessage();
             }}
-            >
+          >
             <VscRunAll className="text-lg" />
-            </button>
+          </button>
           <button className="flex flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500">
             <GoPersonAdd />
             <span className="text-xs">Share</span>
@@ -264,6 +280,7 @@ const App: React.FC = () => {
                 onCodeChange={handleCodeChange}
                 users={users}
                 onCursorPositionChange={handleCursorPositionChange}
+                code={code}
               />
             </div>
           </Card>
@@ -301,7 +318,7 @@ const App: React.FC = () => {
               const baseStyle = {
                 // position: "absolute",
                 background: "transparent",
-                border: "2px solid rgba(200, 200, 200, 0.3)",
+                // border: "2px solid rgba(200, 200, 200, 0.3)",
                 transform: "translate(-50%, -50%)",
               };
 
