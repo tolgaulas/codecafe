@@ -51,6 +51,12 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   // const [internalCode, setInternalCode] = useState(code);
 
   useEffect(() => {
+    if (editorRef.current) {
+      updateDecorations();
+    }
+  }, [users]);
+
+  useEffect(() => {
     // setInternalCode(code);
     if (editorRef.current) {
       const currentValue = editorRef.current.getValue();

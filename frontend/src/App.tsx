@@ -59,38 +59,39 @@ interface User {
   };
 }
 
-const users: User[] = [
-  // {
-  //   id: "user1",
-  //   name: "John",
-  //   color: "#ff7800", // Orange
-  //   cursorPosition: { lineNumber: 2, column: 10 },
-  //   selection: {
-  //     startLineNumber: 2,
-  //     startColumn: 1,
-  //     endLineNumber: 3,
-  //     endColumn: 15,
-  //   },
-  // },
-  // {
-  //   id: "user2",
-  //   name: "Alice",
-  //   color: "#00a2ff", // Blue
-  //   cursorPosition: { lineNumber: 3, column: 10 },
-  //   selection: {
-  //     startLineNumber: 3,
-  //     startColumn: 5,
-  //     endLineNumber: 4,
-  //     endColumn: 10,
-  //   },
-  // },
-];
+// const users: User[] = [
+// {
+//   id: "user1",
+//   name: "John",
+//   color: "#ff7800", // Orange
+//   cursorPosition: { lineNumber: 2, column: 10 },
+//   selection: {
+//     startLineNumber: 2,
+//     startColumn: 1,
+//     endLineNumber: 3,
+//     endColumn: 15,
+//   },
+// },
+// {
+//   id: "user2",
+//   name: "Alice",
+//   color: "#00a2ff", // Blue
+//   cursorPosition: { lineNumber: 3, column: 10 },
+//   selection: {
+//     startLineNumber: 3,
+//     startColumn: 5,
+//     endLineNumber: 4,
+//     endColumn: 10,
+//   },
+// },
+// ];
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
+  const [users, setUsers] = useState<User[]>();
 
   const stompClientRef = useRef<Stomp.Client | null>(null);
 
@@ -154,19 +155,53 @@ const App: React.FC = () => {
       console.log("Connected: " + frame);
       stompClient.subscribe("/topic/messages", function (message: any) {
         const messageData = JSON.parse(message.body);
-        console.log("Recieved: ", messageData);
+        console.log("Received: ", messageData);
+
         if (messageData.code !== null) {
           setCode(messageData.code);
         }
+
+        if (messageData.user) {
+          setUsers((prevUsers) => {
+            const index = 1; // Hardcoded index
+
+            // Check if there are enough users in the list
+            if (prevUsers && prevUsers.length > index) {
+              // Update user at index 1
+              const updatedUsers = [...prevUsers];
+              updatedUsers[index] = {
+                ...updatedUsers[index], // Retain existing properties
+                name: messageData.user.name,
+                color: messageData.user.color,
+                cursorPosition: messageData.user.cursor.cursorPosition, // Extract cursor position
+                selection: messageData.user.cursor.selection, // Extract selection data
+              };
+              return updatedUsers;
+            }
+
+            // If not enough users exist, create the user at the index
+            const updatedUsers = [...(prevUsers || [])];
+            updatedUsers.push({
+              name: messageData.user.name,
+              color: messageData.user.color,
+              cursorPosition: messageData.user.cursor.cursorPosition,
+              selection: messageData.user.cursor.selection,
+              id: "1",
+            });
+
+            return updatedUsers;
+          });
+        }
       });
     });
+
     stompClientRef.current = stompClient;
 
     return () => {
       if (stompClient.connected) {
         stompClient.disconnect(function () {
           console.log("Disconnected");
-        }, {});
+        });
       }
       if (socket.readyState === SockJS.OPEN) {
         socket.close();
