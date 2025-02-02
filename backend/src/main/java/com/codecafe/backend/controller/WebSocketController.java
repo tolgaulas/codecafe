@@ -5,27 +5,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.SendTo;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 @Controller
 public class WebSocketController {
 
-    private final SimpMessagingTemplate messagingTemplate;
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Autowired
-    public WebSocketController(SimpMessagingTemplate messagingTemplate, RedisTemplate<String, Object> redisTemplate) {
-        this.messagingTemplate = messagingTemplate;
+    public WebSocketController(RedisTemplate<String, Object> redisTemplate) {
         this.redisTemplate = redisTemplate;
     }
 
     @MessageMapping("/message")
     @SendTo("/topic/messages")
     public WebSocketMessage broadcastMessage(WebSocketMessage message) {
-        // Store message in Redis
-        System.out.println("Received message: " + message);
-
         redisTemplate.opsForList().rightPush("messages", message);
 
         // Broadcast message to all clients
