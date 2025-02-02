@@ -1,5 +1,6 @@
 package com.codecafe.backend.controller;
 
+import com.codecafe.backend.dto.WebSocketMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -21,12 +22,14 @@ public class WebSocketController {
 
     @MessageMapping("/message")
     @SendTo("/topic/messages")
-    public String broadcastMessage(String message) {
+    public WebSocketMessage broadcastMessage(WebSocketMessage message) {
         // Store message in Redis
+        System.out.println("Received message: " + message);
+
         redisTemplate.opsForList().rightPush("messages", message);
 
         // Broadcast message to all clients
-        messagingTemplate.convertAndSend("/topic/messages", message);
+//        messagingTemplate.convertAndSend("/topic/messages", message);
         return message;
     }
 }

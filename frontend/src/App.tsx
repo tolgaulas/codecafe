@@ -18,6 +18,19 @@ interface CodeExecutionRequest {
   files: { content: string }[];
 }
 
+interface CursorData {
+  cursorPosition: {
+    lineNumber: number;
+    column: number;
+  };
+  selection: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  } | null;
+}
+
 interface CodeExecutionResponse {
   language: string;
   version: string;
@@ -78,6 +91,7 @@ const App: React.FC = () => {
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
+
   const stompClientRef = useRef<Stomp.Client | null>(null);
 
   const screenSixteenth = {
@@ -94,8 +108,27 @@ const App: React.FC = () => {
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
 
+    const message = {
+      code: newCode,
+      user: null,
+    };
+
     if (stompClientRef.current && stompClientRef.current.connected)
-      stompClientRef.current?.send("/app/message", {}, newCode);
+      stompClientRef.current?.send("/app/message", {}, JSON.stringify(message));
+  };
+
+  const sendCursorData = (cursorData: CursorData) => {
+    const message = {
+      code: null,
+      user: {
+        name: "Alice",
+        color: "#FFFFFF",
+        cursor: cursorData,
+      },
+    };
+    if (stompClientRef.current && stompClientRef.current.connected) {
+      stompClientRef.current?.send("/app/message", {}, JSON.stringify(message));
+    }
   };
 
   useEffect(() => {
@@ -120,8 +153,11 @@ const App: React.FC = () => {
     stompClient.connect({}, function (frame: any) {
       console.log("Connected: " + frame);
       stompClient.subscribe("/topic/messages", function (message: any) {
-        console.log("Received: " + message.body);
-        setCode(message.body);
+        const messageData = JSON.parse(message.body);
+        console.log("Recieved: ", messageData);
+        if (messageData.code !== null) {
+          setCode(messageData.code);
+        }
       });
     });
     stompClientRef.current = stompClient;
@@ -252,9 +288,9 @@ const App: React.FC = () => {
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
         <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-800 via-stone-800/90 to-transparent red py-2 px-4 z-50 outline-none flex flex-row">
-          <img src="codecafe_logo.png" className="p-2 h-8 mt-[2px]" />
+          <img src="codecafe_logo.png" className="p-2 h-8 mt-[1.5px]" />
           <button
-            className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
+            className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
             onClick={() => {
               handleRunCode();
             }}
@@ -284,6 +320,7 @@ const App: React.FC = () => {
                 users={users}
                 onCursorPositionChange={handleCursorPositionChange}
                 code={code}
+                sendCursorData={sendCursorData}
               />
             </div>
           </Card>

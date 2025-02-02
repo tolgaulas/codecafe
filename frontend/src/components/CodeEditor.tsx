@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { Editor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 
@@ -18,11 +18,25 @@ interface User {
   };
 }
 
+interface CursorData {
+  cursorPosition: {
+    lineNumber: number;
+    column: number;
+  };
+  selection: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  } | null;
+}
+
 interface CodeEditorProps {
   onCodeChange: (code: string) => void;
   users?: User[];
   onCursorPositionChange?: (lineNumber: number) => void; // New prop
   code?: string;
+  sendCursorData?: (cursorData: CursorData) => void;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -30,6 +44,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   users = [],
   onCursorPositionChange,
   code,
+  sendCursorData,
 }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -123,6 +138,25 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       (e: monaco.editor.ICursorPositionChangedEvent) => {
         const lineNumber = e.position.lineNumber;
         onCursorPositionChange?.(lineNumber); // Call the prop function
+
+        const position = e.position;
+        const selection = editor.getSelection();
+
+        const cursorData = {
+          cursorPosition: {
+            lineNumber: position.lineNumber,
+            column: position.column,
+          },
+          selection: selection
+            ? {
+                startLineNumber: selection.startLineNumber,
+                startColumn: selection.startColumn,
+                endLineNumber: selection.endLineNumber,
+                endColumn: selection.endColumn,
+              }
+            : null,
+        };
+        sendCursorData?.(cursorData);
       }
     );
 
