@@ -91,7 +91,7 @@ const App: React.FC = () => {
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
-  const [users, setUsers] = useState<User[]>();
+  const [users, setUsers] = useState<User[]>([]);
 
   const stompClientRef = useRef<Stomp.Client | null>(null);
 
@@ -105,6 +105,8 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
+
+  useEffect(() => console.log("User state: ", users), [users]);
 
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
@@ -123,8 +125,11 @@ const App: React.FC = () => {
       code: null,
       user: {
         name: "Alice",
-        color: "#FFFFFF",
-        cursor: cursorData,
+        color: "#00FF00",
+        cursor: {
+          cursorPosition: cursorData.cursorPosition,
+          selection: cursorData.selection,
+        },
       },
     };
     if (stompClientRef.current && stompClientRef.current.connected) {
@@ -153,6 +158,7 @@ const App: React.FC = () => {
 
     stompClient.connect({}, function (frame: any) {
       console.log("Connected: " + frame);
+
       stompClient.subscribe("/topic/messages", function (message: any) {
         const messageData = JSON.parse(message.body);
         console.log("Received: ", messageData);
@@ -163,33 +169,24 @@ const App: React.FC = () => {
 
         if (messageData.user) {
           setUsers((prevUsers) => {
-            const index = 1; // Hardcoded index
-
-            // Check if there are enough users in the list
-            if (prevUsers && prevUsers.length > index) {
-              // Update user at index 1
-              const updatedUsers = [...prevUsers];
-              updatedUsers[index] = {
-                ...updatedUsers[index], // Retain existing properties
-                name: messageData.user.name,
-                color: messageData.user.color,
-                cursorPosition: messageData.user.cursor.cursorPosition, // Extract cursor position
-                selection: messageData.user.cursor.selection, // Extract selection data
-              };
-              return updatedUsers;
-            }
-
-            // If not enough users exist, create the user at the index
-            const updatedUsers = [...(prevUsers || [])];
-            updatedUsers.push({
+            const updatedUser: User = {
+              id: "1",
               name: messageData.user.name,
               color: messageData.user.color,
               cursorPosition: messageData.user.cursor.cursorPosition,
-              selection: messageData.user.cursor.selection,
-              id: "1",
-            });
+              selection: messageData.user.cursor.selection || undefined,
+            };
 
-            return updatedUsers;
+            // If we already have a user with ID "1", update it
+            const existingUser = prevUsers.find((u) => u.id === "1");
+            if (existingUser) {
+              return prevUsers.map((user) =>
+                user.id === "1" ? updatedUser : user
+              );
+            }
+
+            // Otherwise, add the new user
+            return [...prevUsers, updatedUser];
           });
         }
       });
@@ -199,9 +196,7 @@ const App: React.FC = () => {
 
     return () => {
       if (stompClient.connected) {
-        stompClient.disconnect(function () {
-          console.log("Disconnected");
-        });
+        stompClient.disconnect(() => console.log("Disconnected"));
       }
       if (socket.readyState === SockJS.OPEN) {
         socket.close();
@@ -362,10 +357,10 @@ const App: React.FC = () => {
 
           {/* Terminal */}
           {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
-            <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
-              <Terminal />
-            </div>
-          </Card> */}
+              <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
+                <Terminal />
+              </div>
+            </Card> */}
 
           <ResizableBox
             width={width}
