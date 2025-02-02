@@ -138,12 +138,6 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // function sendMessage() {
-  //   const message = code;
-  // }
-
-  // useEffect(sendMessage, [code]);
-
   const handleRunCode = async () => {
     setIsLoading(true);
     try {
