@@ -13,3 +13,23 @@ body,
 .monaco-editor {
   outline: none !important;
 }
+
+.force-mount {
+  display: block !important; /* Overrides any `display: none` */
+  visibility: visible !important;
+  opacity: 1 !important;
+  content-visibility: auto;
+}
+
+.persist {
+  animation: persist 0.01s infinite;
+}
+
+@keyframes persist {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}

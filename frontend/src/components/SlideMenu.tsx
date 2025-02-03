@@ -49,7 +49,7 @@ const SlideMenu = () => {
             <h2 className="text-sm font-medium text-stone-400">Starred</h2>
             <ContextMenu.Root>
               <ContextMenu.Trigger>
-                <div className="px-4 py-8 border border-dashed border-neutral-700 rounded-lg text-xs text-stone-400 text-center">
+                <div className="px-4 py-8 border border-dashed border-neutral-700 rounded-lg text-[10px] text-stone-400 text-center">
                   Star code spaces you use often
                 </div>
               </ContextMenu.Trigger>
@@ -62,8 +62,8 @@ const SlideMenu = () => {
             <h2 className="text-sm font-medium text-stone-400">Recent</h2>
             <ContextMenu.Root>
               <ContextMenu.Trigger>
-                <div className="px-4 py-8 border border-dashed border-neutral-700 rounded-lg text-xs text-stone-400 text-center">
-                  Recent code spaces appear here
+                <div className="px-4 py-8 border border-dashed border-neutral-700 rounded-lg text-[10px] text-stone-400 text-center">
+                  Recent code spaces will appear here
                 </div>
               </ContextMenu.Trigger>
               <ContextMenu.Content className="min-w-[220px] bg-neutral-900 rounded-lg p-1 shadow-xl">

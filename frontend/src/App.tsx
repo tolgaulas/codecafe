@@ -353,9 +353,10 @@ const App: React.FC = () => {
         </div>
         <div className="relative flex flex-col items-center w-full max-w-4xl">
           {/* Code Area - Added z-index to ensure hints are visible */}
-          <Card
-            className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-2xl mt-32 w-[120%] relative"
-            style={{ height: `${editorHeight}px` }}
+          <div
+            className=" bg-neutral-900/70  rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
+            style={{ height: `${editorHeight}px`, willChange: "transform" }}
+            // variant="ghost"
           >
             <div className="p-6 h-full text-neutral-300">
               <CodeEditor
@@ -366,7 +367,7 @@ const App: React.FC = () => {
                 sendCursorData={sendCursorData}
               />
             </div>
-          </Card>
+          </div>
 
           {/* Terminal */}
           {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
