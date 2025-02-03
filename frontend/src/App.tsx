@@ -318,7 +318,17 @@ const App: React.FC = () => {
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
         <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-800 via-stone-800/90 to-transparent red py-2 px-4 z-50 outline-none flex flex-row">
-          <img src="codecafe_logo.png" className="p-2 h-8 mt-[1.5px]" />
+          <div className="relative h-8 w-auto cursor-pointer">
+            <img
+              src="codecafe_logo.png"
+              className="top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
+            />
+            <img
+              src="codecafe_logo_light.png"
+              className="absolute top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
+            />
+          </div>
+
           <button
             className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
             onClick={() => {
