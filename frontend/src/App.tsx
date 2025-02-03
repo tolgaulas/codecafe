@@ -11,6 +11,7 @@ import { VscRunAll } from "react-icons/vsc";
 import { GoPersonAdd } from "react-icons/go";
 import { VscSettings } from "react-icons/vsc";
 import { IoStarOutline } from "react-icons/io5";
+import SlideMenu from "./components/SlideMenu";
 
 interface CodeExecutionRequest {
   language: string;
@@ -316,9 +317,11 @@ const App: React.FC = () => {
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
+      <SlideMenu />
       <div className="items-center justify-center p-4 relative flex flex-col h-max">
-        <div className="fixed top-0 left-0 w-full bg-gradient-to-b from-stone-800 via-stone-800/90 to-transparent red py-2 px-4 z-50 outline-none flex flex-row">
-          <div className="relative h-8 w-auto cursor-pointer">
+        <div className="fixed top-0 left-0 w-full h-12 bg-gradient-to-b from-stone-800 via-stone-800 to-transparent py-2 px-4 z-40 outline-none flex flex-row" />
+        <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row">
+          <div className="relative h-8 w-auto cursor-pointer -ml-2">
             <img
               src="codecafe_logo.png"
               className="top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
@@ -330,21 +333,21 @@ const App: React.FC = () => {
           </div>
 
           <button
-            className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500"
+            className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
             onClick={() => {
               handleRunCode();
             }}
           >
             <VscRunAll className="text-lg" />
           </button>
-          <button className="flex ml-auto flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500">
+          <button className="flex ml-auto flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500 hover:text-stone-400">
             <GoPersonAdd />
             <span className="text-xs">Share</span>
           </button>
-          <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500">
+          <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
             <IoStarOutline />
           </button>
-          <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500">
+          <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
             <VscSettings />
           </button>
         </div>
