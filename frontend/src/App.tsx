@@ -293,22 +293,33 @@ const App: React.FC = () => {
     const editorElement = document.querySelector(".monaco-editor");
     if (!editorElement) return;
 
-    const cursorPositionFromTop = lineNumber * 20;
+    const lineHeight = 20; // Assume each line is 20px in height
+    const cursorPositionFromTop = lineNumber * lineHeight;
 
-    // console.log("Current Height:", editorHeight); // Debug log
-
-    // Calculate the dynamic threshold: current scroll position + 75% of the viewport height
+    // Calculate the dynamic threshold: current scroll position + 50% of the viewport height
     const dynamicThreshold = window.scrollY + window.innerHeight * 0.5;
 
+    // Scroll Down: If the cursor is below the threshold
     if (cursorPositionFromTop > dynamicThreshold) {
       setEditorHeight((prevHeight) => {
-        const newHeight = prevHeight + 5 * 20;
+        const newHeight = prevHeight + 5 * lineHeight;
         console.log("New Height:", newHeight); // Debug log
         return newHeight;
       });
 
       window.scrollBy({
-        top: 5 * 20,
+        top: 5 * lineHeight,
+        behavior: "smooth",
+      });
+    }
+
+    // Scroll Up: If the cursor is in the top 10% of the screen
+    else if (
+      cursorPositionFromTop <
+      window.scrollY - window.innerHeight * 0.15
+    ) {
+      window.scrollBy({
+        top: -5 * lineHeight,
         behavior: "smooth",
       });
     }
