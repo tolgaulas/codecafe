@@ -242,52 +242,7 @@ const App: React.FC = () => {
     }
   };
 
-  // return (
-  //   <div className="bg-gray-100 h-screen w-full flex flex-col p-6">
-  //     {/* Header with run button */}
-  //     <div className="flex justify-center mb-6">
-  //       <button
-  //         className={`px-6 py-2 rounded-lg shadow-md transition-colors duration-200 font-medium
-  //           ${
-  //             isLoading
-  //               ? "bg-gray-400 cursor-not-allowed"
-  //               : "bg-blue-600 hover:bg-blue-700 text-white"
-  //           }`}
-  //         onClick={handleRunCode}
-  //         disabled={isLoading}
-  //       >
-  //         {isLoading ? "Running..." : "Run Code"}
-  //       </button>
-  //     </div>
-
-  //     {/* Main content area */}
-  //     <div className="flex-grow flex justify-between gap-6">
-  //       {/* Code editor panel */}
-  //       <div className="w-1/2 bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 flex flex-col">
-  //         <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-  //           <h2 className="text-sm font-medium text-gray-700">Editor</h2>
-  //         </div>
-  //         <div className="flex-grow p-4">
-  //           <div className="h-full">
-  //             <CodeEditor onCodeChange={handleCodeChange} users={users} />
-  //           </div>
-  //         </div>
-  //       </div>
-
-  //       {/* Terminal panel */}
-  //       <div className="w-1/2 bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 flex flex-col">
-  //         <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-  //           <h2 className="text-sm font-medium text-gray-700">Terminal</h2>
-  //         </div>
-  //         <div className="flex-grow p-4">
-  //           <div className="h-full">
-  //             <Terminal ref={terminalRef} />
-  //           </div>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   </div>
-  // );
+  let isScrolling = false; // Flag to track if a scroll action is in progress
 
   const handleCursorPositionChange = (lineNumber: number) => {
     const editorElement = document.querySelector(".monaco-editor");
@@ -297,13 +252,18 @@ const App: React.FC = () => {
     const cursorPositionFromTop = lineNumber * lineHeight;
 
     // Calculate the dynamic threshold: current scroll position + 50% of the viewport height
-    const dynamicThreshold = window.scrollY + window.innerHeight * 0.5;
+    const dynamicThreshold = window.scrollY + window.innerHeight * 0.52;
+
+    // Only trigger height adjustment if the scroll action is not in progress
+    if (isScrolling) return;
 
     // Scroll Down: If the cursor is below the threshold
     if (cursorPositionFromTop > dynamicThreshold) {
+      // Mark the scroll action as in progress
+      isScrolling = true;
+
       setEditorHeight((prevHeight) => {
         const newHeight = prevHeight + 5 * lineHeight;
-        console.log("New Height:", newHeight); // Debug log
         return newHeight;
       });
 
@@ -311,6 +271,11 @@ const App: React.FC = () => {
         top: 5 * lineHeight,
         behavior: "smooth",
       });
+
+      // Reset the flag after a delay to prevent rapid triggering
+      setTimeout(() => {
+        isScrolling = false;
+      }, 200); // Adjust delay (200ms) as needed
     }
 
     // Scroll Up: If the cursor is in the top 10% of the screen
@@ -318,10 +283,18 @@ const App: React.FC = () => {
       cursorPositionFromTop <
       window.scrollY - window.innerHeight * 0.15
     ) {
+      // Mark the scroll action as in progress
+      isScrolling = true;
+
       window.scrollBy({
         top: -5 * lineHeight,
         behavior: "smooth",
       });
+
+      // Reset the flag after a delay to prevent rapid triggering
+      setTimeout(() => {
+        isScrolling = false;
+      }, 200); // Adjust delay (200ms) as needed
     }
   };
 
