@@ -437,7 +437,7 @@ const App: React.FC = () => {
               zIndex: 10,
             }}
           >
-            <Card className="bg-neutral-900/70 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl">
+            <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-xl border border-neutral-800/50 shadow-xl">
               <div
                 className="p-4 font-mono text-green-400/80 overflow-auto"
                 style={{ height, width }}
