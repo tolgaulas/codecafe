@@ -19,7 +19,7 @@ public class OtController {
     private String code = "// Hello there";
   private int version = 0;
 
-  @MessageMapping("/ot")
+  @MessageMapping("/otOperation")
   @SendTo("/topic/ot")
   public TextOperation handleOtOperation(@Payload TextOperation op) {
     // If op.baseVersion < version, in a real scenario, you'd do transform

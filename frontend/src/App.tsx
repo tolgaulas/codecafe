@@ -87,6 +87,9 @@ const App: React.FC = () => {
   const [localVersion, setLocalVersion] = useState<number>(0);      // track our local doc version
   const [pendingOps, setPendingOps] = useState<TextOperation[]>([]); // store ops that have not been Acked
   
+  const id = Date.now().toString();
+  const name = Date.now().toString();
+
   const stompClientRef = useRef<Stomp.Client | null>(null);
 
   const screenSixteenth = {
@@ -129,18 +132,17 @@ const App: React.FC = () => {
 
   const sendCursorData = (cursorData: CursorData) => {
     const message = {
-      code: null,
       user: {
-        name: "Alice",
+        id: id, // Replace with the actual connected user's id if dynamic
+        name: name, // or the dynamic name previously set
         color: "#00FF00",
-        cursor: {
-          cursorPosition: cursorData.cursorPosition,
-          selection: cursorData.selection,
-        },
+        // Flatten the cursor data so that they are not nested under "cursor"
+        cursorPosition: cursorData.cursorPosition,
+        selection: cursorData.selection,
       },
     };
     if (stompClientRef.current && stompClientRef.current.connected) {
-      stompClientRef.current?.send("/app/message", {}, JSON.stringify(message));
+      stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
     }
   };
 
@@ -194,6 +196,14 @@ const App: React.FC = () => {
           setLocalVersion(incomingOp.baseVersion + 1);
         }
       });
+
+      // NEW: Subscription for cursor data updates
+    stompClient.subscribe("/topic/cursors", function (message: any) {
+      const cursorsData = JSON.parse(message.body);
+      // Assume the backend sends an array (or an object map) of all users' cursor data.
+      console.log("Received cursor data: ", cursorsData);
+      setUsers(cursorsData);
+    });
   
       // Your existing subscription if you still want to handle other messages:
       // stompClient.subscribe("/topic/messages", function (message: any) {

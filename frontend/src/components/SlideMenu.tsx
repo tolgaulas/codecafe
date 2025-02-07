@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Card } from "@/components/ui/card";
+import { Card } from "@radix-ui/themes";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { IoIosAddCircleOutline } from "react-icons/io";
 
