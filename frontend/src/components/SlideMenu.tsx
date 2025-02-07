@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Card } from "@radix-ui/themes";
+import { Card } from "@/components/ui/card";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { IoIosAddCircleOutline } from "react-icons/io";
 
 const SlideMenu = () => {
   const [isVisible, setIsVisible] = useState(false);
+  const [shadowIntensity, setShadowIntensity] = useState(0);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -18,21 +19,44 @@ const SlideMenu = () => {
           e.clientY <= menuRect.bottom;
 
         setIsVisible(e.clientX <= 50 || isInsideMenu);
+
+        // Only calculate shadow when menu is not visible
+        if (!isVisible && e.clientX <= 200) {
+          // Create exponential curve
+          const normalizedPosition = (200 - e.clientX) / 200;
+          const exponentialIntensity = Math.pow(normalizedPosition, 3) * 100;
+          setShadowIntensity(exponentialIntensity);
+        } else {
+          setShadowIntensity(0);
+        }
       } else {
         setIsVisible(e.clientX <= 50);
+        setShadowIntensity(0);
       }
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
+  }, [isVisible]);
 
   return (
     <div
       ref={menuRef}
-      className={`fixed left-0 top-0 h-screen z-50 transition-transform duration-300 ease-in-out ${
-        isVisible ? "translate-x-0" : "-translate-x-full"
-      }`}
+      style={{
+        boxShadow:
+          shadowIntensity > 0
+            ? `${shadowIntensity * 1}px 0 ${
+                shadowIntensity * 1.5
+              }px rgba(0, 0, 0, ${shadowIntensity * 0.01})`
+            : "none",
+        position: "fixed",
+        left: 0,
+        top: 0,
+        height: "100vh",
+        zIndex: 50,
+        transform: `translateX(${isVisible ? "0" : "-100%"})`,
+        transition: "transform 300ms ease-in-out, box-shadow 150ms ease-out",
+      }}
     >
       <Card className="h-full w-64 bg-neutral-900/40 backdrop-blur-md border-neutral-800/50 rounded-r-xl">
         <div className="space-y-6 py-4">
@@ -43,7 +67,6 @@ const SlideMenu = () => {
               <span className="text-sm">New</span>
             </button>
           </div>
-
           {/* Starred Section */}
           <div className="space-y-2 px-4">
             <h2 className="text-sm font-medium text-stone-400">Starred</h2>
@@ -56,7 +79,6 @@ const SlideMenu = () => {
               <ContextMenu.Content className="min-w-[220px] bg-neutral-900 rounded-lg p-1 shadow-xl"></ContextMenu.Content>
             </ContextMenu.Root>
           </div>
-
           {/* Recent Section */}
           <div className="space-y-2 px-4">
             <h2 className="text-sm font-medium text-stone-400">Recent</h2>
