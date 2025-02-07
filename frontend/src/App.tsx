@@ -60,32 +60,23 @@ interface User {
   };
 }
 
-// const users: User[] = [
-// {
-//   id: "user1",
-//   name: "John",
-//   color: "#ff7800", // Orange
-//   cursorPosition: { lineNumber: 2, column: 10 },
-//   selection: {
-//     startLineNumber: 2,
-//     startColumn: 1,
-//     endLineNumber: 3,
-//     endColumn: 15,
-//   },
-// },
-// {
-//   id: "user2",
-//   name: "Alice",
-//   color: "#00a2ff", // Blue
-//   cursorPosition: { lineNumber: 3, column: 10 },
-//   selection: {
-//     startLineNumber: 3,
-//     startColumn: 5,
-//     endLineNumber: 4,
-//     endColumn: 10,
-//   },
-// },
-// ];
+interface TextOperation {
+  baseVersion: number;  // The doc version the operation is based on
+  newText: string;      // The entire updated text or just the diff, depending on your strategy
+}
+
+const transformOperation = (
+  localOp: TextOperation,
+  incomingOp: TextOperation
+): TextOperation => {
+  // Naive strategy: if base versions differ and the newText differs, 
+  // localOp is replaced with incomingOp’s text. More advanced logic 
+  // would do partial merges, line-based transformations, etc.
+  return {
+    baseVersion: incomingOp.baseVersion + 1,
+    newText: incomingOp.newText
+  };
+};
 
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("// Hello there");
@@ -93,7 +84,9 @@ const App: React.FC = () => {
   const [height, setHeight] = useState(window.innerHeight * 0.25);
   const [width, setWidth] = useState(window.innerWidth * 0.75);
   const [users, setUsers] = useState<User[]>([]);
-
+  const [localVersion, setLocalVersion] = useState<number>(0);      // track our local doc version
+  const [pendingOps, setPendingOps] = useState<TextOperation[]>([]); // store ops that have not been Acked
+  
   const stompClientRef = useRef<Stomp.Client | null>(null);
 
   const screenSixteenth = {
@@ -112,13 +105,26 @@ const App: React.FC = () => {
   const handleCodeChange = (newCode: string) => {
     setCode(newCode);
 
-    const message = {
-      code: newCode,
-      user: null,
-    };
+    // Build an OT operation referencing our current localVersion
+  const op: TextOperation = {
+    baseVersion: localVersion,
+    newText: newCode
+  };
 
-    if (stompClientRef.current && stompClientRef.current.connected)
-      stompClientRef.current?.send("/app/message", {}, JSON.stringify(message));
+  // Stash this op in local pending operations
+  setPendingOps((prevOps) => [...prevOps, op]);
+
+  // Increment local version in anticipation
+  setLocalVersion((prev) => prev + 1);
+
+  // Send the operation to the server (stomp)
+    if (stompClientRef.current && stompClientRef.current.connected) {
+      stompClientRef.current.send(
+        "/app/ot",       // or your endpoint
+        {},
+        JSON.stringify(op)
+      );
+    }
   };
 
   const sendCursorData = (cursorData: CursorData) => {
@@ -156,45 +162,72 @@ const App: React.FC = () => {
   useEffect(() => {
     const socket = new SockJS("http://localhost:8080/ws");
     const stompClient = Stomp.over(socket);
-
+  
     stompClient.connect({}, function (frame: any) {
       console.log("Connected: " + frame);
-
-      stompClient.subscribe("/topic/messages", function (message: any) {
-        const messageData = JSON.parse(message.body);
-        console.log("Received: ", messageData);
-
-        if (messageData.code !== null) {
-          setCode(messageData.code);
-        }
-
-        if (messageData.user) {
-          setUsers((prevUsers) => {
-            const updatedUser: User = {
-              id: "1",
-              name: messageData.user.name,
-              color: messageData.user.color,
-              cursorPosition: messageData.user.cursor.cursorPosition,
-              selection: messageData.user.cursor.selection || undefined,
-            };
-
-            // If we already have a user with ID "1", update it
-            const existingUser = prevUsers.find((u) => u.id === "1");
-            if (existingUser) {
-              return prevUsers.map((user) =>
-                user.id === "1" ? updatedUser : user
-              );
-            }
-
-            // Otherwise, add the new user
-            return [...prevUsers, updatedUser];
+  
+      // Subscribe to your new OT channel (e.g. '/topic/ot')
+      stompClient.subscribe("/topic/ot", function (message: any) {
+        const incomingOp = JSON.parse(message.body) as TextOperation;
+        console.log("Received OT operation: ", incomingOp);
+  
+        // If incomingOp.baseVersion < localVersion, we might need to discard or transform
+        // For now, assume incomingOp is the source of truth if the version leads ours
+        if (incomingOp.baseVersion >= localVersion) {
+          // Clear out any pending ops (or transform them). 
+          // For simplicity, we just discard them here:
+          setPendingOps([]);
+  
+          // Update local code
+          setCode(incomingOp.newText);
+  
+          // Update local version to incomingOp.baseVersion + 1 
+          // because we just accepted a new doc state.
+          setLocalVersion(incomingOp.baseVersion + 1);
+        } else {
+          // We have local ops that might conflict with this. 
+          // Transform or skip. For now, let's do naive transform:
+          setPendingOps((prevPending) => {
+            return prevPending.map((op) => transformOperation(op, incomingOp));
           });
+          setCode(incomingOp.newText);
+          setLocalVersion(incomingOp.baseVersion + 1);
         }
       });
+  
+      // Your existing subscription if you still want to handle other messages:
+      // stompClient.subscribe("/topic/messages", function (message: any) {
+      //   const messageData = JSON.parse(message.body);
+      //   console.log("Received: ", messageData);
+  
+      //   if (messageData.code !== null) {
+      //     setCode(messageData.code);
+      //   }
+  
+      //   if (messageData.user) {
+      //     setUsers((prevUsers) => {
+      //       const updatedUser: User = {
+      //         id: "1",
+      //         name: messageData.user.name,
+      //         color: messageData.user.color,
+      //         cursorPosition: messageData.user.cursor.cursorPosition,
+      //         selection: messageData.user.cursor.selection || undefined,
+      //       };
+  
+      //       const existingUser = prevUsers.find((u) => u.id === "1");
+      //       if (existingUser) {
+      //         return prevUsers.map((user) =>
+      //           user.id === "1" ? updatedUser : user
+      //         );
+      //       }
+      //       return [...prevUsers, updatedUser];
+      //     });
+      //   }
+      // });
     });
-
+  
     stompClientRef.current = stompClient;
-
+  
     return () => {
       if (stompClient.connected) {
         stompClient.disconnect(() => console.log("Disconnected"));
