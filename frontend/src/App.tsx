@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import Terminal from "./components/Terminal";
@@ -12,6 +12,7 @@ import { GoPersonAdd } from "react-icons/go";
 import { VscSettings } from "react-icons/vsc";
 import { IoStarOutline } from "react-icons/io5";
 import SlideMenu from "./components/SlideMenu";
+import { debounce } from "lodash";
 
 interface CodeExecutionRequest {
   language: string;
@@ -63,6 +64,7 @@ interface User {
 interface TextOperation {
   baseVersion: number; // The doc version the operation is based on
   newText: string; // The entire updated text or just the diff, depending on your strategy
+  userId: string;
 }
 
 const transformOperation = (
@@ -114,32 +116,36 @@ const App: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const terminalRef = useRef<{ writeToTerminal: (text: string) => void }>(null);
+  const codeRef = useRef(code);
+  useEffect(() => {
+    codeRef.current = code;
+  }, [code]);
 
-  useEffect(() => console.log("User state: ", users), [users]);
+  // useEffect(() => console.log("User state: ", users), [users]);
+  const debouncedSendUpdate = useCallback(
+    debounce((op: TextOperation) => {
+      if (stompClientRef.current?.connected) {
+        stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
+      }
+    }, 50), // 100ms delay
+    []
+  );
 
   const handleCodeChange = (newCode: string) => {
-    setCode(newCode);
+    if (code === newCode) return;
 
-    // Build an OT operation referencing our current localVersion
     const op: TextOperation = {
       baseVersion: localVersion,
       newText: newCode,
+      userId: id,
     };
 
-    // Stash this op in local pending operations
+    setCode(newCode);
     setPendingOps((prevOps) => [...prevOps, op]);
-
-    // Increment local version in anticipation
     setLocalVersion((prev) => prev + 1);
 
-    // Send the operation to the server (stomp)
-    if (stompClientRef.current && stompClientRef.current.connected) {
-      stompClientRef.current.send(
-        "/app/ot", // or your endpoint
-        {},
-        JSON.stringify(op)
-      );
-    }
+    // Use debounced update for server communication
+    debouncedSendUpdate(op);
   };
 
   const sendCursorData = (cursorData: CursorData) => {
@@ -183,29 +189,25 @@ const App: React.FC = () => {
       // Subscribe to your new OT channel (e.g. '/topic/ot')
       stompClient.subscribe("/topic/ot", function (message: any) {
         const incomingOp = JSON.parse(message.body) as TextOperation;
-        console.log("Received OT operation: ", incomingOp);
 
-        // If incomingOp.baseVersion < localVersion, we might need to discard or transform
-        // For now, assume incomingOp is the source of truth if the version leads ours
-        if (incomingOp.baseVersion >= localVersion) {
-          // Clear out any pending ops (or transform them).
-          // For simplicity, we just discard them here:
-          setPendingOps([]);
-
-          // Update local code
-          setCode(incomingOp.newText);
-
-          // Update local version to incomingOp.baseVersion + 1
-          // because we just accepted a new doc state.
-          setLocalVersion(incomingOp.baseVersion + 1);
-        } else {
-          // We have local ops that might conflict with this.
-          // Transform or skip. For now, let's do naive transform:
-          setPendingOps((prevPending) => {
-            return prevPending.map((op) => transformOperation(op, incomingOp));
-          });
-          setCode(incomingOp.newText);
-          setLocalVersion(incomingOp.baseVersion + 1);
+        // Only apply changes if they're not from the current user
+        if (incomingOp.userId !== id) {
+          if (incomingOp.baseVersion >= localVersion) {
+            if (codeRef.current !== incomingOp.newText) {
+              setCode(incomingOp.newText);
+            }
+            setLocalVersion(incomingOp.baseVersion);
+          } else {
+            setPendingOps((prevPending) => {
+              return prevPending.map((op) =>
+                transformOperation(op, incomingOp)
+              );
+            });
+            if (codeRef.current !== incomingOp.newText) {
+              setCode(incomingOp.newText);
+            }
+            setLocalVersion(incomingOp.baseVersion);
+          }
         }
       });
 
@@ -213,7 +215,7 @@ const App: React.FC = () => {
       stompClient.subscribe("/topic/cursors", function (message: any) {
         const cursorsData = JSON.parse(message.body);
         // Assume the backend sends an array (or an object map) of all users' cursor data.
-        console.log("Received cursor data: ", cursorsData);
+        // console.log("Received cursor data: ", cursorsData);
         setUsers(cursorsData);
       });
 

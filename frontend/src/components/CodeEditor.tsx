@@ -130,7 +130,25 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       const currentValue = editorRef.current.getValue();
       if (currentValue !== code && !isUpdatingRef.current) {
         isUpdatingRef.current = true;
-        editorRef.current.setValue(code);
+
+        const model = editorRef.current.getModel();
+        const prevTokenization = model.getLanguageId();
+
+        // Update content while preserving tokenization
+        model.pushEditOperations(
+          [],
+          [
+            {
+              range: model.getFullModelRange(),
+              text: code,
+            },
+          ],
+          () => null
+        );
+
+        // Force tokenization update
+        model.forceTokenization(model.getLineCount());
+
         isUpdatingRef.current = false;
       }
     }
@@ -191,7 +209,14 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
 
-    // Set up cursor position change handler
+    // Force theme immediately after mount
+    editor.updateOptions({
+      theme: "transparentTheme",
+      fontLigatures: true,
+      fixedOverflowWidgets: true,
+    });
+
+    // Set up change handler
     editor.onDidChangeCursorPosition(
       (e: monaco.editor.ICursorPositionChangedEvent) => {
         if (isUpdatingRef.current) return;
@@ -218,12 +243,11 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       }
     );
 
-    // Initial decoration update
     updateDecorations();
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (!value || isUpdatingRef.current) return;
+    if (value === undefined || isUpdatingRef.current) return;
     onCodeChange(value);
   };
 

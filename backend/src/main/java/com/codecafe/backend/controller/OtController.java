@@ -9,24 +9,19 @@ import org.springframework.stereotype.Controller;
 
 @Controller
 public class OtController {
-
     private final OtService otService;
+    private String code = "// Hello there";
+    private int version = 0;
 
     public OtController(OtService otService) {
         this.otService = otService;
     }
 
-    private String code = "// Hello there";
-  private int version = 0;
-
-  @MessageMapping("/otOperation")
-  @SendTo("/topic/ot")
-  public TextOperation handleOtOperation(@Payload TextOperation op) {
-    // If op.baseVersion < version, in a real scenario, you'd do transform
-    // For now, we overwrite with new text and assume the client has done the version check
-    code = op.getNewText();
-    version++;
-    TextOperation newOp = new TextOperation(version, code);
-    return newOp;
-  }
+    @MessageMapping("/otOperation")
+    @SendTo("/topic/ot")
+    public TextOperation handleOtOperation(@Payload TextOperation op) {
+        code = op.getNewText();
+        version++;
+        return new TextOperation(version, code, op.getUserId());
+    }
 }
