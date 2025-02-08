@@ -5,6 +5,7 @@ public class Selection {
     private int startColumn;
     private int endLineNumber;
     private int endColumn;
+
     // Getters and setters
     public int getStartLineNumber() {
         return startLineNumber;
@@ -30,5 +31,5 @@ public class Selection {
     public void setEndColumn(int endColumn) {
         this.endColumn = endColumn;
     }
-  }
+}
   

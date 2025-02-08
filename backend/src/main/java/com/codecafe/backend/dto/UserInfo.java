@@ -4,7 +4,9 @@ public class UserInfo {
     private String id;
     private String name;
     private String color;
-    private CursorData cursor;  // Use similar structure as your frontend
+    private Position cursorPosition;  // directly on UserInfo
+    private Selection selection;      // directly on UserInfo
+
     // Getters and setters
     public String getId() {
         return id;
@@ -24,10 +26,18 @@ public class UserInfo {
     public void setColor(String color) {
         this.color = color;
     }
-    public CursorData getCursor() {
-        return cursor;
+    public Position getCursorPosition() {
+        return cursorPosition;
     }
-    public void setCursor(CursorData cursor) {
-        this.cursor = cursor;
+    public void setCursorPosition(Position cursorPosition) {
+        this.cursorPosition = cursorPosition;
     }
-  }
+    public Selection getSelection() {
+        return selection;
+    }
+    public void setSelection(Selection selection) {
+        this.selection = selection;
+    }
+}
+
+
