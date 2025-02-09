@@ -55,7 +55,17 @@ const SlideMenu = () => {
         height: "100vh",
         zIndex: 50,
         transform: `translateX(${isVisible ? "0" : "-100%"})`,
-        transition: "transform 300ms ease-in-out, box-shadow 150ms ease-out",
+        // Modified transition with custom cubic-bezier curve for exponential effect
+        // Opening: Fast start, slower end (0.16, 1, 0.3, 1)
+        // Closing: Slow start, fast end (0.7, 0, 0.84, 0)
+        transition: `
+          transform ${
+            isVisible
+              ? "400ms cubic-bezier(0.16, 1, 0.3, 1)"
+              : "300ms cubic-bezier(0.7, 0, 0.84, 0)"
+          }, 
+          box-shadow 150ms ease-out
+        `,
       }}
     >
       <Card className="h-full w-64 bg-neutral-900/40 backdrop-blur-md border-neutral-800/50 rounded-r-xl">
