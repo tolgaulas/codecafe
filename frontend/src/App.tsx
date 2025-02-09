@@ -148,20 +148,27 @@ const App: React.FC = () => {
     debouncedSendUpdate(op);
   };
 
+  const debouncedSendCursor = useCallback(
+    debounce((cursorData: CursorData) => {
+      const message = {
+        user: {
+          id: id,
+          name: name,
+          color: color,
+          cursorPosition: cursorData.cursorPosition,
+          selection: cursorData.selection,
+        },
+      };
+
+      if (stompClientRef.current?.connected) {
+        stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
+      }
+    }, 50), // 50ms delay for cursor updates
+    [] // Empty dependency array since we want the same debounce instance
+  );
+
   const sendCursorData = (cursorData: CursorData) => {
-    const message = {
-      user: {
-        id: id, // Replace with the actual connected user's id if dynamic
-        name: name, // or the dynamic name previously set
-        color: color,
-        // Flatten the cursor data so that they are not nested under "cursor"
-        cursorPosition: cursorData.cursorPosition,
-        selection: cursorData.selection,
-      },
-    };
-    if (stompClientRef.current && stompClientRef.current.connected) {
-      stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
-    }
+    debouncedSendCursor(cursorData);
   };
 
   useEffect(() => {
