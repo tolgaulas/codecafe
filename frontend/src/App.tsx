@@ -127,7 +127,7 @@ const App: React.FC = () => {
       if (stompClientRef.current?.connected) {
         stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
       }
-    }, 50), // 100ms delay
+    }, 100), // 100ms delay
     []
   );
 
@@ -180,7 +180,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const socket = new SockJS("http://157.245.244.233:8080/ws");
+    const socket = new SockJS("http://localhost:8080/ws");
     const stompClient = Stomp.over(socket);
 
     stompClient.connect({}, function (frame: any) {
@@ -193,8 +193,12 @@ const App: React.FC = () => {
         // Only apply changes if they're not from the current user
         if (incomingOp.userId !== id) {
           if (incomingOp.baseVersion >= localVersion) {
+            // Don't trigger a re-render if the text is the same
             if (codeRef.current !== incomingOp.newText) {
-              setCode(incomingOp.newText);
+              setCode((prevCode) => {
+                if (prevCode === incomingOp.newText) return prevCode;
+                return incomingOp.newText;
+              });
             }
             setLocalVersion(incomingOp.baseVersion);
           } else {
@@ -203,8 +207,12 @@ const App: React.FC = () => {
                 transformOperation(op, incomingOp)
               );
             });
+            // Don't trigger a re-render if the text is the same
             if (codeRef.current !== incomingOp.newText) {
-              setCode(incomingOp.newText);
+              setCode((prevCode) => {
+                if (prevCode === incomingOp.newText) return prevCode;
+                return incomingOp.newText;
+              });
             }
             setLocalVersion(incomingOp.baseVersion);
           }

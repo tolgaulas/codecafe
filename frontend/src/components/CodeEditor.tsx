@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Editor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 
@@ -50,6 +50,14 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const decorationsRef = useRef<string[]>([]);
   const isUpdatingRef = useRef(false);
   const styleSheetRef = useRef<HTMLStyleElement | null>(null);
+  const cursorStateRef = useRef<{
+    position: monaco.Position | null;
+    selection: monaco.Selection | null;
+  }>({
+    position: null,
+    selection: null,
+  });
+  const prevCodeRef = useRef<string>("");
 
   // Initialize Monaco theme
   useEffect(() => {
@@ -67,14 +75,88 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     });
   }, []);
 
-  // Update styles whenever users change
+  // Store cursor state before any updates
+  const saveCursorState = () => {
+    if (editorRef.current) {
+      const position = editorRef.current.getPosition();
+      const selection = editorRef.current.getSelection();
+
+      cursorStateRef.current = {
+        position: position
+          ? new monaco.Position(position.lineNumber, position.column)
+          : null,
+        selection: selection
+          ? new monaco.Selection(
+              selection.startLineNumber,
+              selection.startColumn,
+              selection.endLineNumber,
+              selection.endColumn
+            )
+          : null,
+      };
+    }
+  };
+
+  // Restore cursor state after updates
+  const restoreCursorState = () => {
+    if (!editorRef.current || !cursorStateRef.current.position) return;
+
+    const { position, selection } = cursorStateRef.current;
+
+    // Use requestAnimationFrame to ensure the editor has processed content changes
+    requestAnimationFrame(() => {
+      if (position) {
+        editorRef.current.setPosition(position);
+      }
+      if (selection) {
+        editorRef.current.setSelection(selection);
+      }
+      editorRef.current.focus();
+    });
+  };
+
+  // Handle code updates with improved cursor preservation
   useEffect(() => {
-    // Remove old stylesheet if it exists
+    if (!editorRef.current || code === undefined || isUpdatingRef.current)
+      return;
+
+    const currentValue = editorRef.current.getValue();
+    if (currentValue === code || prevCodeRef.current === code) return;
+
+    isUpdatingRef.current = true;
+    prevCodeRef.current = code;
+
+    try {
+      saveCursorState();
+
+      const editor = editorRef.current;
+      const model = editor.getModel();
+
+      // Create and apply the edit operation
+      model.pushEditOperations(
+        [],
+        [
+          {
+            range: model.getFullModelRange(),
+            text: code,
+            forceMoveMarkers: true,
+          },
+        ],
+        () => null
+      );
+
+      restoreCursorState();
+    } finally {
+      isUpdatingRef.current = false;
+    }
+  }, [code]);
+
+  // Update styles for user cursors
+  useEffect(() => {
     if (styleSheetRef.current) {
       styleSheetRef.current.remove();
     }
 
-    // Create new stylesheet
     const styleSheet = document.createElement("style");
     styleSheet.textContent = `
       .monaco-editor {
@@ -118,41 +200,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     document.head.appendChild(styleSheet);
     styleSheetRef.current = styleSheet;
 
-    // Update decorations if editor is mounted
     if (editorRef.current) {
       updateDecorations();
     }
   }, [users]);
-
-  // Handle code updates
-  useEffect(() => {
-    if (editorRef.current && code !== undefined) {
-      const currentValue = editorRef.current.getValue();
-      if (currentValue !== code && !isUpdatingRef.current) {
-        isUpdatingRef.current = true;
-
-        const model = editorRef.current.getModel();
-        const prevTokenization = model.getLanguageId();
-
-        // Update content while preserving tokenization
-        model.pushEditOperations(
-          [],
-          [
-            {
-              range: model.getFullModelRange(),
-              text: code,
-            },
-          ],
-          () => null
-        );
-
-        // Force tokenization update
-        model.forceTokenization(model.getLineCount());
-
-        isUpdatingRef.current = false;
-      }
-    }
-  }, [code]);
 
   const updateDecorations = () => {
     if (!editorRef.current) return;
@@ -160,7 +211,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     const decorations = users.flatMap((user) => {
       const decorationArray = [];
 
-      // Add selection decoration
       if (user.selection) {
         decorationArray.push({
           range: new monaco.Range(
@@ -176,7 +226,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         });
       }
 
-      // Add cursor decoration
       if (user.cursorPosition) {
         decorationArray.push({
           range: new monaco.Range(
@@ -199,7 +248,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       return decorationArray;
     });
 
-    // Update decorations
     decorationsRef.current = editorRef.current.deltaDecorations(
       decorationsRef.current,
       decorations
@@ -209,14 +257,6 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
 
-    // Force theme immediately after mount
-    editor.updateOptions({
-      theme: "transparentTheme",
-      fontLigatures: true,
-      fixedOverflowWidgets: true,
-    });
-
-    // Set up change handler
     editor.onDidChangeCursorPosition(
       (e: monaco.editor.ICursorPositionChangedEvent) => {
         if (isUpdatingRef.current) return;
@@ -247,7 +287,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (value === undefined || isUpdatingRef.current) return;
+    if (!value || isUpdatingRef.current) return;
     onCodeChange(value);
   };
 
@@ -258,7 +298,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         width="100%"
         theme="transparentTheme"
         defaultLanguage="javascript"
-        value={code}
+        // value={code}
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
         options={{
