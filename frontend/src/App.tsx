@@ -180,7 +180,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const socket = new SockJS("http://localhost:8080/ws");
+    const socket = new SockJS("http://157.245.244.233:8080/ws");
     const stompClient = Stomp.over(socket);
 
     stompClient.connect({}, function (frame: any) {
