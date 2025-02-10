@@ -68,7 +68,7 @@ const SlideMenu = () => {
         `,
       }}
     >
-      <Card className="h-full w-64 bg-neutral-900/40 backdrop-blur-md border-neutral-800/50 rounded-r-xl">
+      <Card className="h-full w-64 bg-neutral-900/40 backdrop-blur-xl border-neutral-800/50 rounded-r-xl">
         <div className="space-y-6 py-4">
           {/* Start New Code Space Button */}
           <div className="px-2">
