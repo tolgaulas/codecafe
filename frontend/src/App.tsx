@@ -375,7 +375,7 @@ const App: React.FC = () => {
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
-      {(isEditorLoading || isLoading) && (
+      {isEditorLoading && (
         <div className="absolute inset-0 flex justify-center items-center z-50">
           <ReactLoading
             type="spin"
@@ -386,7 +386,7 @@ const App: React.FC = () => {
           />
         </div>
       )}
-      <div className={`${isLoading || isEditorLoading ? "hidden" : ""}`}>
+      <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
         <div className="items-center justify-center p-4 relative flex flex-col h-max">
           <div className="fixed top-0 left-0 w-full h-12 bg-gradient-to-b from-stone-800 via-stone-800 to-transparent py-2 px-4 z-40 outline-none flex flex-row" />
