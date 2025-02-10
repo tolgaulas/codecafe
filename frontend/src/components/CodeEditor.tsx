@@ -37,6 +37,7 @@ interface CodeEditorProps {
   onCursorPositionChange?: (lineNumber: number) => void;
   code?: string;
   sendCursorData?: (cursorData: CursorData) => void;
+  onLoadingChange?: (loading: boolean) => void;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -45,6 +46,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   onCursorPositionChange,
   code,
   sendCursorData,
+  onLoadingChange,
 }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -300,7 +302,13 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         defaultLanguage="javascript"
         // value={code}
         onChange={handleEditorChange}
-        onMount={handleEditorDidMount}
+        beforeMount={() => onLoadingChange?.(true)} // Add loading state
+        onMount={(editor) => {
+          handleEditorDidMount(editor);
+          setTimeout(() => {
+            onLoadingChange?.(false);
+          }, 550);
+        }}
         options={{
           fontSize: 16,
           lineHeight: 20,

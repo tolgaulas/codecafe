@@ -13,6 +13,7 @@ import { VscSettings } from "react-icons/vsc";
 import { IoStarOutline } from "react-icons/io5";
 import SlideMenu from "./components/SlideMenu";
 import { debounce } from "lodash";
+import ReactLoading from "react-loading";
 
 interface CodeExecutionRequest {
   language: string;
@@ -88,6 +89,7 @@ const App: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [localVersion, setLocalVersion] = useState<number>(0); // track our local doc version
   const [pendingOps, setPendingOps] = useState<TextOperation[]>([]); // store ops that have not been Acked
+  const [isEditorLoading, setIsEditorLoading] = useState(true);
 
   const [id, setId] = useState<string>(Date.now().toString());
   const [name, setName] = useState<string>(Date.now().toString());
@@ -373,151 +375,167 @@ const App: React.FC = () => {
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
-      <SlideMenu />
-      <div className="items-center justify-center p-4 relative flex flex-col h-max">
-        <div className="fixed top-0 left-0 w-full h-12 bg-gradient-to-b from-stone-800 via-stone-800 to-transparent py-2 px-4 z-40 outline-none flex flex-row" />
-        <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row">
-          <div className="relative h-8 w-auto cursor-pointer -ml-2">
-            <img
-              src="codecafe_logo.png"
-              className="top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
-            />
-            <img
-              src="codecafe_logo_light.png"
-              className="absolute top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
-            />
-          </div>
-
-          <button
-            className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
-            onClick={() => {
-              handleRunCode();
-            }}
-          >
-            <VscRunAll className="text-lg" />
-          </button>
-          <button className="flex ml-auto flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500 hover:text-stone-400">
-            <GoPersonAdd />
-            <span className="text-xs">Share</span>
-          </button>
-          <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1">
-            <IoStarOutline />
-          </button>
-          <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1 -mr-2">
-            <VscSettings />
-          </button>
+      {(isEditorLoading || isLoading) && (
+        <div className="absolute inset-0 flex justify-center items-center z-50">
+          <ReactLoading
+            type="spin"
+            color="#57534e"
+            height={100}
+            width={80}
+            delay={0}
+          />
         </div>
-        <div className="relative flex flex-col items-center w-full max-w-4xl">
-          {/* Code Area - Added z-index to ensure hints are visible */}
-          <div
-            className=" bg-neutral-900/70  rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
-            style={{ height: `${editorHeight}px`, willChange: "transform" }}
-            // variant="ghost"
-          >
-            <div className="p-6 h-full text-neutral-300">
-              <CodeEditor
-                onCodeChange={handleCodeChange}
-                users={users}
-                onCursorPositionChange={handleCursorPositionChange}
-                code={code}
-                sendCursorData={sendCursorData}
+      )}
+      <div className={`${isLoading || isEditorLoading ? "hidden" : ""}`}>
+        <SlideMenu />
+        <div className="items-center justify-center p-4 relative flex flex-col h-max">
+          <div className="fixed top-0 left-0 w-full h-12 bg-gradient-to-b from-stone-800 via-stone-800 to-transparent py-2 px-4 z-40 outline-none flex flex-row" />
+          <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row">
+            <div className="relative h-8 w-auto cursor-pointer -ml-2">
+              <img
+                src="codecafe_logo.png"
+                className="top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
+              />
+              <img
+                src="codecafe_logo_light.png"
+                className="absolute top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
               />
             </div>
+
+            <button
+              className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
+              onClick={() => {
+                handleRunCode();
+              }}
+            >
+              <VscRunAll className="text-lg" />
+            </button>
+            <button className="flex ml-auto flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500 hover:text-stone-400">
+              <GoPersonAdd />
+              <span className="text-xs">Share</span>
+            </button>
+            <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1">
+              <IoStarOutline />
+            </button>
+            <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1 -mr-2">
+              <VscSettings />
+            </button>
           </div>
-
-          {/* Terminal */}
-          {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
-              <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
-                <Terminal />
-              </div>
-            </Card> */}
-
-          <ResizableBox
-            width={width}
-            height={height}
-            minConstraints={[
-              Math.max(300, window.innerWidth * 0.75 - screenSixteenth.width),
-              Math.max(100, window.innerHeight * 0.1 - screenSixteenth.height),
-            ]}
-            maxConstraints={[
-              Math.min(
-                window.innerWidth,
-                window.innerWidth * 0.75 + screenSixteenth.width
-              ),
-              Math.min(
-                window.innerHeight,
-                window.innerHeight * 0.25 + screenSixteenth.height
-              ),
-            ]}
-            onResize={(e, { size }) => {
-              setWidth(size.width);
-              setHeight(size.height);
-            }}
-            resizeHandles={["w", "nw", "n"]}
-            handle={(handleAxis, ref) => {
-              const baseStyle = {
-                // position: "absolute",
-                background: "transparent",
-                // border: "2px solid rgba(200, 200, 200, 0.3)",
-                transform: "translate(-50%, -50%)",
-              };
-
-              // Custom styles for each handle
-              const styles: Record<
-                ResizeHandle,
-                React.CSSProperties | undefined
-              > = {
-                nw: {
-                  ...baseStyle,
-                  width: "5px",
-                  height: "5px",
-                  padding: "5px",
-                },
-                n: {
-                  ...baseStyle,
-                  width: `${width}px`,
-                  height: "5px",
-                  padding: "5px",
-                  transform: "translate(-50%, -50%) translateX(15px)",
-                },
-                w: {
-                  ...baseStyle,
-                  width: "5px",
-                  height: `${height}px`,
-                  padding: "5px",
-                  transform: "translate(-50%, -50%) translateY(15px)",
-                },
-                s: undefined,
-                e: undefined,
-                sw: undefined,
-                se: undefined,
-                ne: undefined,
-              };
-
-              return (
-                <div
-                  ref={ref}
-                  className={`react-resizable-handle react-resizable-handle-${handleAxis}`}
-                  style={styles[handleAxis]}
+          <div className="relative flex flex-col items-center w-full max-w-4xl">
+            {/* Code Area - Added z-index to ensure hints are visible */}
+            <div
+              className=" bg-neutral-900/70  rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
+              style={{ height: `${editorHeight}px`, willChange: "transform" }}
+            >
+              <div className="p-6 h-full text-neutral-300">
+                <CodeEditor
+                  onCodeChange={handleCodeChange}
+                  users={users}
+                  onCursorPositionChange={handleCursorPositionChange}
+                  code={code}
+                  sendCursorData={sendCursorData}
+                  onLoadingChange={setIsEditorLoading}
                 />
-              );
-            }}
-            style={{
-              position: "fixed",
-              bottom: 0,
-              left: `calc(100vw - ${width}px)`,
-              zIndex: 10,
-            }}
-          >
-            <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-xl border border-neutral-800/50 shadow-xl">
-              <div
-                className="p-4 font-mono text-green-400/80 overflow-hidden"
-                style={{ height, width }}
-              >
-                <Terminal ref={terminalRef} />
               </div>
-            </Card>
-          </ResizableBox>
+            </div>
+
+            {/* Terminal */}
+            {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
+        <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
+          <Terminal />
+        </div>
+      </Card> */}
+
+            <ResizableBox
+              width={width}
+              height={height}
+              minConstraints={[
+                Math.max(300, window.innerWidth * 0.75 - screenSixteenth.width),
+                Math.max(
+                  100,
+                  window.innerHeight * 0.1 - screenSixteenth.height
+                ),
+              ]}
+              maxConstraints={[
+                Math.min(
+                  window.innerWidth,
+                  window.innerWidth * 0.75 + screenSixteenth.width
+                ),
+                Math.min(
+                  window.innerHeight,
+                  window.innerHeight * 0.25 + screenSixteenth.height
+                ),
+              ]}
+              onResize={(e, { size }) => {
+                setWidth(size.width);
+                setHeight(size.height);
+              }}
+              resizeHandles={["w", "nw", "n"]}
+              handle={(handleAxis, ref) => {
+                const baseStyle = {
+                  // position: "absolute",
+                  background: "transparent",
+                  // border: "2px solid rgba(200, 200, 200, 0.3)",
+                  transform: "translate(-50%, -50%)",
+                };
+
+                // Custom styles for each handle
+                const styles: Record<
+                  ResizeHandle,
+                  React.CSSProperties | undefined
+                > = {
+                  nw: {
+                    ...baseStyle,
+                    width: "5px",
+                    height: "5px",
+                    padding: "5px",
+                  },
+                  n: {
+                    ...baseStyle,
+                    width: `${width}px`,
+                    height: "5px",
+                    padding: "5px",
+                    transform: "translate(-50%, -50%) translateX(15px)",
+                  },
+                  w: {
+                    ...baseStyle,
+                    width: "5px",
+                    height: `${height}px`,
+                    padding: "5px",
+                    transform: "translate(-50%, -50%) translateY(15px)",
+                  },
+                  s: undefined,
+                  e: undefined,
+                  sw: undefined,
+                  se: undefined,
+                  ne: undefined,
+                };
+
+                return (
+                  <div
+                    ref={ref}
+                    className={`react-resizable-handle react-resizable-handle-${handleAxis}`}
+                    style={styles[handleAxis]}
+                  />
+                );
+              }}
+              style={{
+                position: "fixed",
+                bottom: 0,
+                left: `calc(100vw - ${width}px)`,
+                zIndex: 10,
+              }}
+            >
+              <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-xl border border-neutral-800/50 shadow-xl">
+                <div
+                  className="p-4 font-mono text-green-400/80 overflow-hidden"
+                  style={{ height, width }}
+                >
+                  <Terminal ref={terminalRef} />
+                </div>
+              </Card>
+            </ResizableBox>
+          </div>
         </div>
       </div>
     </Theme>
