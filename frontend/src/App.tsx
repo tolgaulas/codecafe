@@ -393,17 +393,17 @@ const App: React.FC = () => {
           <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row">
             <div className="relative h-8 w-auto cursor-pointer -ml-2">
               <img
-                src="codecafe_logo.png"
-                className="top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
+                src="logo.svg"
+                className="top-0 left-0 p-1 h-7 mt-[3px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
               />
               <img
-                src="codecafe_logo_light.png"
-                className="absolute top-0 left-0 p-2 h-8 mt-[1.5px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
+                src="logo-light.svg"
+                className="absolute top-0 left-0 p-1 h-7 mt-[3px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
               />
             </div>
 
             <button
-              className="flex ml-2 items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
+              className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
               onClick={() => {
                 handleRunCode();
               }}

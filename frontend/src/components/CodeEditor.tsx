@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { Editor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 
@@ -289,7 +289,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (value === undefined || isUpdatingRef.current) return;
+    if (!value || isUpdatingRef.current) return;
     onCodeChange(value);
   };
 
