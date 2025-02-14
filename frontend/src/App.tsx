@@ -129,7 +129,7 @@ const App: React.FC = () => {
       if (stompClientRef.current?.connected) {
         stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
       }
-    }, 100), // 100ms delay
+    }, 50), // 100ms delay
     []
   );
 
