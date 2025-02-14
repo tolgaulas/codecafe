@@ -18,33 +18,42 @@ const SlideMenu = () => {
           e.clientY >= menuRect.top &&
           e.clientY <= menuRect.bottom;
 
-        setIsVisible(e.clientX <= 50 || isInsideMenu);
+        const shouldBeVisible = e.clientX <= 50 || isInsideMenu;
+        setIsVisible(shouldBeVisible);
 
-        // Only calculate shadow when menu is not visible
-        if (!isVisible && e.clientX <= 200) {
-          // Create exponential curve
+        // Only show shadow when menu is hidden AND mouse is in trigger zone
+        if (!shouldBeVisible && e.clientX <= 200 && e.clientX >= 0) {
           const normalizedPosition = (200 - e.clientX) / 200;
           const exponentialIntensity = Math.pow(normalizedPosition, 3) * 100;
           setShadowIntensity(exponentialIntensity);
         } else {
           setShadowIntensity(0);
         }
-      } else {
-        setIsVisible(e.clientX <= 50);
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (!menuRef.current?.contains(document.activeElement)) {
+        setIsVisible(false);
         setShadowIntensity(0);
       }
     };
 
     window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [isVisible]);
+    window.addEventListener("mouseleave", handleMouseLeave);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, []);
 
   return (
     <div
       ref={menuRef}
       style={{
         boxShadow:
-          shadowIntensity > 0
+          shadowIntensity > 0 && !isVisible
             ? `${shadowIntensity * 1}px 0 ${
                 shadowIntensity * 1.5
               }px rgba(0, 0, 0, ${shadowIntensity * 0.01})`
@@ -55,9 +64,6 @@ const SlideMenu = () => {
         height: "100vh",
         zIndex: 50,
         transform: `translateX(${isVisible ? "0" : "-100%"})`,
-        // Modified transition with custom cubic-bezier curve for exponential effect
-        // Opening: Fast start, slower end (0.16, 1, 0.3, 1)
-        // Closing: Slow start, fast end (0.7, 0, 0.84, 0)
         transition: `
           transform ${
             isVisible
@@ -70,14 +76,12 @@ const SlideMenu = () => {
     >
       <Card className="h-full w-64 bg-neutral-900/40 backdrop-blur-xl border-neutral-800/50 rounded-r-xl">
         <div className="space-y-6 py-4">
-          {/* Start New Code Space Button */}
           <div className="px-2">
             <button className="mt-8 flex items-center gap-2 w-full py-2 px-2 rounded-md transition-colors duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 text-stone-500 hover:text-stone-400">
               <IoIosAddCircleOutline className="w-5 h-5" />
               <span className="text-sm">New</span>
             </button>
           </div>
-          {/* Starred Section */}
           <div className="space-y-2 px-4">
             <h2 className="text-sm font-medium text-stone-400">Starred</h2>
             <ContextMenu.Root>
@@ -89,7 +93,6 @@ const SlideMenu = () => {
               <ContextMenu.Content className="min-w-[220px] bg-neutral-900 rounded-lg p-1 shadow-xl"></ContextMenu.Content>
             </ContextMenu.Root>
           </div>
-          {/* Recent Section */}
           <div className="space-y-2 px-4">
             <h2 className="text-sm font-medium text-stone-400">Recent</h2>
             <ContextMenu.Root>
