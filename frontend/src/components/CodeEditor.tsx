@@ -289,7 +289,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   };
 
   const handleEditorChange = (value: string | undefined) => {
-    if (!value || isUpdatingRef.current) return;
+    if (value == undefined || isUpdatingRef.current) return;
     onCodeChange(value);
   };
 
