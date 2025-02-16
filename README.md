@@ -50,7 +50,7 @@ npm start
 
 ## License
 
-MIT
+CodeCafé is licensed under the GNU Affero General Public License v3.0.
 
 ---
 Making collaborative coding accessible for everyone.
