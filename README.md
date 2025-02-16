@@ -28,7 +28,7 @@ We saw coding classes relying on tools meant for writing essays—not code. Whil
 
 ```bash
 # Clone repo
-git clone https://github.com/yourusername/codecafe.git
+git clone https://github.com/mrktsm/codecafe.git
 
 # Install dependencies & run backend
 cd backend
