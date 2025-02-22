@@ -76,12 +76,12 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                   <div className="flex gap-6">
                     <div className="relative">
                       <div
-                        className="w-28 h-28 rounded-full flex items-center justify-center text-4xl font-medium cursor-pointer shadow-lg relative overflow-hidden"
+                        className="w-28 h-28 rounded-full flex items-center justify-center text-5xl font-medium cursor-pointer shadow-lg relative overflow-hidden"
                         style={{ backgroundColor: selectedColor }}
                         onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
                       >
                         <span className="text-white/90">
-                          {name ? name[0].toUpperCase() : "?"}
+                          {name ? name[0].toUpperCase() : ""}
                         </span>
                       </div>
 
