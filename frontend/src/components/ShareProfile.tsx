@@ -16,7 +16,17 @@ const COLORS = [
   "#2ECC71",
 ];
 
-const ShareProfile = () => {
+interface ShareProfileProps {
+  onNameChange: (name: string) => void;
+  onColorChange: (color: string) => void;
+  //   initialColor: string;
+  //   initialName: string;
+}
+
+const ShareProfile: React.FC<ShareProfileProps> = ({
+  onNameChange,
+  onColorChange,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState(COLORS[0]);
@@ -96,6 +106,7 @@ const ShareProfile = () => {
                                   style={{ backgroundColor: color }}
                                   onClick={() => {
                                     setSelectedColor(color);
+                                    onColorChange(color); // Add this line
                                     setIsColorPickerOpen(false);
                                   }}
                                 />
@@ -113,7 +124,10 @@ const ShareProfile = () => {
                         </label>
                         <input
                           value={name}
-                          onChange={(e) => setName(e.target.value)}
+                          onChange={(e) => {
+                            setName(e.target.value);
+                            onNameChange(e.target.value); // Add this line
+                          }}
                           placeholder="Enter your name"
                           className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 placeholder-stone-500 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"
                         />

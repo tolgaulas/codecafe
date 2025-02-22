@@ -8,7 +8,6 @@ import { ResizableBox, ResizeHandle } from "react-resizable";
 import SockJS from "sockjs-client";
 import Stomp from "stompjs";
 import { VscRunAll } from "react-icons/vsc";
-import { GoPersonAdd } from "react-icons/go";
 import { VscSettings } from "react-icons/vsc";
 import { IoStarOutline } from "react-icons/io5";
 import SlideMenu from "./components/SlideMenu";
@@ -415,7 +414,12 @@ const App: React.FC = () => {
               <GoPersonAdd />
               <span className="text-xs">Share</span>
             </button> */}
-            <ShareProfile />
+            <ShareProfile
+              onNameChange={setName}
+              onColorChange={setColor}
+              // initialColor={color}
+              // initialName={name}
+            />
             <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1">
               <IoStarOutline />
             </button>
