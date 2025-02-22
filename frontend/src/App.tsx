@@ -90,6 +90,7 @@ const App: React.FC = () => {
   const [localVersion, setLocalVersion] = useState<number>(0); // track our local doc version
   const [pendingOps, setPendingOps] = useState<TextOperation[]>([]); // store ops that have not been Acked
   const [isEditorLoading, setIsEditorLoading] = useState(true);
+  const codeCafeRef = useRef<HTMLDivElement | null>(null);
 
   const [id, setId] = useState<string>(Date.now().toString());
   const [name, setName] = useState<string>(Date.now().toString());
@@ -372,6 +373,15 @@ const App: React.FC = () => {
     }
   };
 
+  const scrollToTop = () => {
+    if (codeCafeRef.current) {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth", // smooth scrolling
+      });
+    }
+  };
+
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
@@ -388,10 +398,16 @@ const App: React.FC = () => {
       )}
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
-        <div className="items-center justify-center p-4 relative flex flex-col h-max">
+        <div
+          className="items-center justify-center p-4 relative flex flex-col h-max"
+          ref={codeCafeRef}
+        >
           <div className="fixed top-0 left-0 w-full h-12 bg-gradient-to-b from-stone-800 via-stone-800 to-transparent py-2 px-4 z-40 outline-none flex flex-row" />
           <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row">
-            <div className="relative h-8 w-auto cursor-pointer -ml-2">
+            <div
+              className="relative h-8 w-auto cursor-pointer -ml-2"
+              onClick={scrollToTop}
+            >
               <img
                 src="logo.svg"
                 className="top-0 left-0 p-1 h-7 mt-[3px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
