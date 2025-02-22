@@ -14,6 +14,7 @@ import { IoStarOutline } from "react-icons/io5";
 import SlideMenu from "./components/SlideMenu";
 import { debounce } from "lodash";
 import ReactLoading from "react-loading";
+import ShareProfile from "./components/ShareProfile";
 
 interface CodeExecutionRequest {
   language: string;
@@ -410,10 +411,11 @@ const App: React.FC = () => {
             >
               <VscRunAll className="text-lg" />
             </button>
-            <button className="flex ml-auto flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500 hover:text-stone-400">
+            {/* <button className="flex ml-auto flex-row gap-1 items-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-neutral-950 active:scale-95 cursor-pointer text-lg text-stone-500 hover:text-stone-400">
               <GoPersonAdd />
               <span className="text-xs">Share</span>
-            </button>
+            </button> */}
+            <ShareProfile />
             <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1">
               <IoStarOutline />
             </button>
