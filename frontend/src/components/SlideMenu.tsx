@@ -6,12 +6,12 @@ import { IoIosAddCircleOutline } from "react-icons/io";
 const SlideMenu = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [shadowIntensity, setShadowIntensity] = useState(0);
-  const menuRef = useRef<HTMLElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: any) => {
       if (menuRef.current) {
-        const menuRect = menuRef.current?.getBoundingClientRect();
+        const menuRect = menuRef.current.getBoundingClientRect();
         const isInsideMenu =
           e.clientX >= menuRect.left &&
           e.clientX <= menuRect.right &&
