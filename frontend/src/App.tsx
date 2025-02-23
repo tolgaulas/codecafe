@@ -10,6 +10,7 @@ import Stomp from "stompjs";
 import { VscRunAll } from "react-icons/vsc";
 import { VscSettings } from "react-icons/vsc";
 import { IoStarOutline } from "react-icons/io5";
+import { IoStar } from "react-icons/io5";
 import SlideMenu from "./components/SlideMenu";
 import { debounce } from "lodash";
 import ReactLoading from "react-loading";
@@ -95,6 +96,12 @@ const App: React.FC = () => {
   const [id, setId] = useState<string>(Date.now().toString());
   const [name, setName] = useState<string>(Date.now().toString());
   const [color, setColor] = useState<string>(getRandomColor());
+  const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
+
+  useEffect(() => {
+    console.log(name);
+  }, [name]);
+
   function getRandomColor() {
     let letters = "0123456789ABCDEF";
     let color = "#";
@@ -382,6 +389,10 @@ const App: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    console.log("starredEnabled changed to:", starredEnabled);
+  }, [starredEnabled]);
+
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
@@ -431,13 +442,18 @@ const App: React.FC = () => {
               <span className="text-xs">Share</span>
             </button> */}
             <ShareProfile
-              onNameChange={setName}
-              onColorChange={setColor}
+              onNameChange={(name: string) => setName(name)}
+              onColorChange={(color: string) => setColor(color)}
               // initialColor={color}
               // initialName={name}
             />
-            <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1">
-              <IoStarOutline />
+            <button
+              onClick={() => {
+                setStarredEnabled(!starredEnabled);
+              }}
+              className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1"
+            >
+              {starredEnabled ? <IoStar /> : <IoStarOutline />}
             </button>
             <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1 -mr-2">
               <VscSettings />
