@@ -138,7 +138,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                       </div>
 
                       <div className="pt-2">
-                        <div className="flex gap-3 mt-10">
+                        <div className="flex gap-3 mt-[54px]">
                           <button
                             className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
                             onClick={() => setIsOpen(false)}
