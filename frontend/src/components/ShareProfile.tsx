@@ -58,14 +58,14 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="w-full max-w-lg mx-4"
+              className="w-full max-w-[34rem] mx-4"
             >
               <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-visible">
-                <div className="p-8">
+                <div className="px-8 py-6">
                   {/* Added Title Section */}
                   <div className="mb-10">
-                    <h2 className="text-xl font-semibold text-stone-200">
-                      Start Collaboration
+                    <h2 className="text-2xl font-semibold text-stone-200">
+                      Start Sharing
                     </h2>
                     <p className="text-stone-400 text-sm mt-1">
                       Customize how others will see you during the collaboration
@@ -76,7 +76,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                   <div className="flex gap-6">
                     <div className="relative">
                       <div
-                        className="w-28 h-28 rounded-full flex items-center justify-center text-5xl font-medium cursor-pointer shadow-lg relative overflow-hidden"
+                        className="w-[6.5rem] h-[6.5rem] rounded-full flex items-center justify-center text-5xl font-medium cursor-pointer shadow-lg relative overflow-hidden"
                         style={{ backgroundColor: selectedColor }}
                         onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
                       >
@@ -131,7 +131,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                           placeholder="Enter your name"
                           className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 placeholder-stone-500 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"
                         />
-                        <p className="text-stone-500 text-[10px] mt-1.5">
+                        <p className="text-stone-500 text-[12px] mt-1.5">
                           This name will be visible to other participants in the
                           session
                         </p>
