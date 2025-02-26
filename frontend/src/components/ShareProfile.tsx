@@ -59,7 +59,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   return (
     <>
       <button
-        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-300 rounded-md transition-all duration-200 ml-auto"
+        className="flex items-center gap-1.5 px-2 text-[0.8rem] text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
         onClick={() => setIsOpen(true)}
       >
         <GoPersonAdd className="text-lg" />
@@ -114,11 +114,11 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                         <AnimatePresence>
                           {isColorPickerOpen && (
                             <motion.div
-                              initial={{ opacity: 0, y: -10 }}
+                              initial={{ opacity: 0, y: -12 }}
                               animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -10 }}
+                              exit={{ opacity: 0, y: -12 }}
                               transition={{ duration: 0.2 }}
-                              className="absolute left-0 top-[118px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
+                              className="absolute -left-1 top-[95px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
                             >
                               <div className="flex flex-wrap gap-1 w-24">
                                 {COLORS.map((color) => (
