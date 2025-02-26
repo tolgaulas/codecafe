@@ -80,7 +80,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="w-full max-w-[34rem] mx-4"
+              className="w-full max-w-[32rem] mx-4"
             >
               <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-visible">
                 <div className="px-8 py-6">
