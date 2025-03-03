@@ -16,14 +16,32 @@ const COLORS = [
   "#2ECC71",
 ];
 
+interface User {
+  id: string;
+  name: string;
+  color: string;
+  cursorPosition: {
+    lineNumber: number;
+    column: number;
+  };
+  selection?: {
+    startLineNumber: number;
+    startColumn: number;
+    endLineNumber: number;
+    endColumn: number;
+  };
+}
+
 interface ShareProfileProps {
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
+  users: User[];
 }
 
 const ShareProfile: React.FC<ShareProfileProps> = ({
   onNameChange,
   onColorChange,
+  users,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -52,19 +70,65 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
 
   const handleClose = () => {
     setIsOpen(false);
-    setSessionStarted(false);
+    // setSessionStarted(false);
     setIsColorPickerOpen(false);
+  };
+
+  const renderShareButtonOrUserAvatars = () => {
+    if (!sessionStarted) {
+      return (
+        <button
+          className="flex items-center gap-1.5 px-2 text-[0.8rem] text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
+          onClick={() => setIsOpen(true)}
+        >
+          <GoPersonAdd className="text-lg" />
+          <span>Share</span>
+        </button>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-1 ml-auto">
+        {/* Display user avatars */}
+        {users.slice(0, 3).map((user, index) => (
+          <div
+            key={user.id}
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shadow-md`}
+            style={{
+              backgroundColor: user.color,
+            }}
+          >
+            <span className="text-white/90">
+              {user.name ? user.name[0].toUpperCase() : ""}
+            </span>
+          </div>
+        ))}
+
+        {/* Additional users count */}
+        {users.length > 3 && (
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-stone-700 text-stone-300 shadow-md">
+            +{users.length - 3}
+          </div>
+        )}
+
+        {/* Button to reopen share dialog */}
+        <div
+          className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-800 hover:bg-stone-700 cursor-pointer transition-colors shadow-md"
+          onClick={() => setIsOpen(true)}
+        >
+          <div className="flex items-center justify-center gap-[3px]">
+            <div className="w-1 h-1 rounded-full bg-stone-400"></div>
+            <div className="w-1 h-1 rounded-full bg-stone-400"></div>
+            <div className="w-1 h-1 rounded-full bg-stone-400"></div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
     <>
-      <button
-        className="flex items-center gap-1.5 px-2 text-[0.8rem] text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
-        onClick={() => setIsOpen(true)}
-      >
-        <GoPersonAdd className="text-lg" />
-        <span>Share</span>
-      </button>
+      {renderShareButtonOrUserAvatars()}
       <AnimatePresence>
         {isOpen && (
           <div

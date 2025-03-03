@@ -444,12 +444,12 @@ const App: React.FC = () => {
             <ShareProfile
               onNameChange={(name: string) => setName(name)}
               onColorChange={(color: string) => setColor(color)}
-              // initialColor={color}
-              // initialName={name}
+              users={users}
             />
             <button
               onClick={() => {
                 setStarredEnabled(!starredEnabled);
+                console.log(users);
               }}
               className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1"
             >
@@ -462,8 +462,11 @@ const App: React.FC = () => {
           <div className="relative flex flex-col items-center w-full max-w-4xl">
             {/* Code Area - Added z-index to ensure hints are visible */}
             <div
-              className=" bg-neutral-900/70  rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
-              style={{ height: `${editorHeight}px`, willChange: "transform" }}
+              className="absolute bg-neutral-900/70 rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
+              style={{
+                height: `${editorHeight}px`,
+                willChange: "transform",
+              }}
             >
               <div className="p-6 h-full text-neutral-300">
                 <CodeEditor
@@ -476,6 +479,17 @@ const App: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* <div
+              className="absolute bg-neutral-900/70 border-l border-r border-b border-neutral-800/50 w-[120%]"
+              style={{
+                left: "50%",
+                transform: "translateX(-50%)",
+                bottom: "0", // Attach to bottom instead of using top
+                height: "200px", // Give it some height beyond the screen
+                zIndex: 50,
+              }}
+            /> */}
 
             {/* Terminal */}
             {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
