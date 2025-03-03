@@ -113,7 +113,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
 
         {/* Button to reopen share dialog */}
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-800 hover:bg-stone-700 cursor-pointer transition-colors shadow-md"
+          className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-900 hover:bg-stone-700 cursor-pointer transition-colors shadow-md"
           onClick={() => setIsOpen(true)}
         >
           <div className="flex items-center justify-center gap-[3px]">
