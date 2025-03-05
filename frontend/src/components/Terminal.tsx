@@ -6,6 +6,8 @@ import { FitAddon } from "xterm-addon-fit";
 const TerminalComponent = forwardRef((_, ref) => {
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstance = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
     const term = new Terminal({
@@ -23,13 +25,39 @@ const TerminalComponent = forwardRef((_, ref) => {
 
     if (terminalRef.current) {
       term.open(terminalRef.current);
+
+      // Create a ResizeObserver to handle container resize
+      const resizeObserver = new ResizeObserver(() => {
+        try {
+          fitAddon.fit();
+        } catch (error) {
+          console.error("Terminal resize error:", error);
+        }
+      });
+
+      // Observe the parent container
+      if (terminalRef.current.parentElement) {
+        resizeObserver.observe(terminalRef.current.parentElement);
+      }
+
+      // Initial fit
       fitAddon.fit();
+
+      // Store references
+      terminalInstance.current = term;
+      fitAddonRef.current = fitAddon;
+      resizeObserverRef.current = resizeObserver;
+
+      term.write("Welcome to CodeCafe!\r\n$ ");
     }
 
-    terminalInstance.current = term;
-    term.write("Welcome to CodeCafe!\r\n$ ");
-
-    return () => term.dispose();
+    // Cleanup function
+    return () => {
+      term.dispose();
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+    };
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -62,6 +90,7 @@ const TerminalComponent = forwardRef((_, ref) => {
         height: "100%",
         backgroundColor: "rgba(0,0,0,0)",
       }}
+      className="overflow-hidden"
     />
   );
 });

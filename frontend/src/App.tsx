@@ -499,6 +499,7 @@ const App: React.FC = () => {
       </Card> */}
 
             <ResizableBox
+              className="overflow-hidden overscroll-none"
               width={width}
               height={height}
               minConstraints={[
@@ -578,9 +579,9 @@ const App: React.FC = () => {
                 zIndex: 10,
               }}
             >
-              <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-xl border border-neutral-800/50 shadow-xl">
+              <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-2xl border border-neutral-800/50 shadow-xl overflow-auto overscroll-none">
                 <div
-                  className="p-4 font-mono text-green-400/80 overflow-auto"
+                  className="p-4 font-mono text-green-400/80"
                   style={{ height, width }}
                 >
                   <Terminal ref={terminalRef} />
