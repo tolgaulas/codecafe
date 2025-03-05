@@ -27,12 +27,14 @@ const TerminalComponent = forwardRef((_, ref) => {
       term.open(terminalRef.current);
 
       // Create a ResizeObserver to handle container resize
-      const resizeObserver = new ResizeObserver(() => {
-        try {
-          fitAddon.fit();
-        } catch (error) {
-          console.error("Terminal resize error:", error);
-        }
+      const resizeObserver = new ResizeObserver((entries) => {
+        requestAnimationFrame(() => {
+          try {
+            fitAddon.fit();
+          } catch (error) {
+            console.error("Terminal resize error:", error);
+          }
+        });
       });
 
       // Observe the parent container

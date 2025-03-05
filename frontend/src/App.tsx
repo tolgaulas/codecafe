@@ -503,7 +503,7 @@ const App: React.FC = () => {
               width={width}
               height={height}
               minConstraints={[
-                Math.max(300, window.innerWidth * 0.75 - screenSixteenth.width),
+                Math.max(300, window.innerWidth * 0.55 - screenSixteenth.width),
                 Math.max(
                   100,
                   window.innerHeight * 0.1 - screenSixteenth.height
@@ -516,7 +516,7 @@ const App: React.FC = () => {
                 ),
                 Math.min(
                   window.innerHeight,
-                  window.innerHeight * 0.25 + screenSixteenth.height
+                  window.innerHeight * 0.35 + screenSixteenth.height
                 ),
               ]}
               onResize={(e, { size }) => {
