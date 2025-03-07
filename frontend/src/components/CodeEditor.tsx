@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { Editor, loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
+import codeEditorTheme from "../codeEditorTheme";
 
 interface User {
   id: string;
@@ -64,16 +65,157 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   // Initialize Monaco theme
   useEffect(() => {
     loader.init().then((monaco) => {
-      monaco.editor.defineTheme("transparentTheme", {
+      monaco.editor.defineTheme("darkTransparentTheme", {
         base: "vs-dark",
         inherit: true,
-        rules: [],
+        rules: [
+          {
+            background: "1e1e1e",
+            token: "",
+          },
+          {
+            foreground: "d4d4d4",
+            token: "text",
+          },
+          {
+            foreground: "d4d4d4",
+            background: "1e1e1e",
+            token: "source",
+          },
+          {
+            foreground: "6a9955",
+            fontStyle: "italic",
+            token: "comment",
+          },
+          {
+            foreground: "569cd6",
+            token: "meta.tag",
+          },
+          {
+            foreground: "569cd6",
+            token: "declaration.tag",
+          },
+          {
+            foreground: "569cd6",
+            token: "meta.doctype",
+          },
+          {
+            foreground: "dcdcaa",
+            token: "entity.name",
+          },
+          {
+            foreground: "dcdcaa",
+            token: "source.ruby entity.name",
+          },
+          {
+            foreground: "9cdcfe",
+            token: "variable.other",
+          },
+          {
+            foreground: "4ec9b0",
+            token: "support.class.ruby",
+          },
+          {
+            foreground: "4fc1ff",
+            token: "constant",
+          },
+          {
+            foreground: "4fc1ff",
+            token: "support.constant",
+          },
+          {
+            foreground: "c586c0",
+            token: "keyword",
+          },
+          {
+            foreground: "9cdcfe",
+            token: "other.preprocessor.c",
+          },
+          {
+            fontStyle: "italic",
+            token: "variable.parameter",
+          },
+          {
+            foreground: "d4d4d4",
+            background: "2d2d2d",
+            token: "source comment.block",
+          },
+          {
+            foreground: "ce9178",
+            token: "string",
+          },
+          {
+            foreground: "d7ba7d",
+            token: "string constant.character.escape",
+          },
+          {
+            foreground: "1e1e1e",
+            background: "4ec9b0",
+            token: "string.interpolated",
+          },
+          {
+            foreground: "d16969",
+            token: "string.regexp",
+          },
+          {
+            foreground: "d16969",
+            token: "string.literal",
+          },
+          {
+            foreground: "5a5a5a",
+            token: "string.interpolated constant.character.escape",
+          },
+          {
+            fontStyle: "underline",
+            token: "entity.name.class",
+          },
+          {
+            fontStyle: "italic underline",
+            token: "entity.other.inherited-class",
+          },
+          {
+            foreground: "dcdcaa",
+            token: "support.function",
+          },
+          {
+            foreground: "608b4e",
+            token: "markup.list.unnumbered.textile",
+          },
+          {
+            foreground: "608b4e",
+            token: "markup.list.numbered.textile",
+          },
+          {
+            foreground: "d4d4d4",
+            fontStyle: "bold",
+            token: "markup.bold.textile",
+          },
+          {
+            foreground: "ffffff",
+            background: "ff0000",
+            token: "invalid",
+          },
+          {
+            foreground: "1e1e1e",
+            background: "4fc1ff",
+            token: "collab.user1",
+          },
+        ],
         colors: {
           "editor.background": "#00000000",
+          "editor.foreground": "#d4d4d4",
+          "editorLineNumber.foreground": "#6b6b6b",
           "editorGutter.background": "#00000000",
           "minimap.background": "#00000000",
+          "editor.selectionBackground": "#264f78",
+          "editor.inactiveSelectionBackground": "#3a3d41",
+          "editorIndentGuide.background": "#404040",
+          "editor.lineHighlightBackground": "#2d2d2d",
         },
       });
+
+      // Don't forget to set the theme after defining it
+      monaco.editor.setTheme("darkTransparentTheme");
     });
   }, []);
 
@@ -298,7 +440,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       <Editor
         height="100%"
         width="100%"
-        theme="transparentTheme"
+        theme="darkTransparentTheme"
         defaultLanguage="javascript"
         // value={code}
         onChange={handleEditorChange}

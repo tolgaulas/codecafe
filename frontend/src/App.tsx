@@ -419,12 +419,12 @@ const App: React.FC = () => {
               onClick={scrollToTop}
             >
               <img
-                src="logo.svg"
-                className="top-0 left-0 p-1 h-7 mt-[3px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
+                src="image-1.png"
+                className="top-0 left-0 p-1 h-[33px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
               />
               <img
-                src="logo-light.svg"
-                className="absolute top-0 left-0 p-1 h-7 mt-[3px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
+                src="image-light.png"
+                className="absolute top-0 left-0 p-1 h-[33px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
               />
             </div>
 
