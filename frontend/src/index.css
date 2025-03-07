@@ -33,3 +33,15 @@ body,
     opacity: 1;
   }
 }
+
+.code-editor-container::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 200px; /* adjust as needed */
+  background: inherit;
+  pointer-events: none;
+  user-select: none;
+}

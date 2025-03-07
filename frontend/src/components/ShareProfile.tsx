@@ -90,7 +90,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
     return (
       <div className="flex items-center gap-1 ml-auto">
         {/* Display user avatars */}
-        {users.slice(0, 3).map((user, index) => (
+        {users.slice(0, 3).map((user) => (
           <div
             key={user.id}
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shadow-md`}

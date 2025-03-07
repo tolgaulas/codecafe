@@ -470,7 +470,7 @@ const App: React.FC = () => {
           <div className="relative flex flex-col items-center w-full max-w-4xl">
             {/* Code Area - Added z-index to ensure hints are visible */}
             <div
-              className="absolute bg-neutral-900/70 rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
+              className=" absolute bg-neutral-900/70 rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
               style={{
                 height: `${editorHeight}px`,
                 willChange: "transform",
@@ -487,6 +487,20 @@ const App: React.FC = () => {
                 />
               </div>
             </div>
+
+            <div
+              style={{
+                position: "fixed",
+                top: `${editorHeight}px`, // aligns right after the editor
+                left: 0,
+                right: 0,
+                height: "200px",
+                background: "rgba(55, 65, 81, 0.7)", // same background
+                pointerEvents: "none",
+                userSelect: "none",
+                zIndex: -1, // behind the scroll container
+              }}
+            />
 
             {/* <div
               className="absolute bg-neutral-900/70 border-l border-r border-b border-neutral-800/50 w-[120%]"

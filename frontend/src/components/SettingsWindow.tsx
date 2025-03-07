@@ -173,7 +173,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
                         value={language}
                         onChange={setLanguage}
                         options={LANGUAGES}
-                        label="Default Language"
+                        label="Editor Language"
                       />
                     </div>
                   </div>
