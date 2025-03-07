@@ -210,7 +210,8 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           "editor.selectionBackground": "#264f78",
           "editor.inactiveSelectionBackground": "#3a3d41",
           "editorIndentGuide.background": "#404040",
-          "editor.lineHighlightBackground": "#2d2d2d",
+          "editor.lineHighlightBackground": "#00000000",
+          "editor.lineHighlightBorder": "#454545",
         },
       });
 

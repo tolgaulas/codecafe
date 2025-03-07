@@ -15,6 +15,7 @@ import SlideMenu from "./components/SlideMenu";
 import { debounce } from "lodash";
 import ReactLoading from "react-loading";
 import ShareProfile from "./components/ShareProfile";
+import SettingsWindow from "./components/SettingsWindow";
 
 interface CodeExecutionRequest {
   language: string;
@@ -96,6 +97,7 @@ const App: React.FC = () => {
   const [name, setName] = useState<string>(Date.now().toString());
   const [color, setColor] = useState<string>(getRandomColor());
   const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     console.log(name);
@@ -406,6 +408,10 @@ const App: React.FC = () => {
           />
         </div>
       )}
+      <SettingsWindow
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
         <div
@@ -454,7 +460,10 @@ const App: React.FC = () => {
             >
               {starredEnabled ? <IoStar /> : <IoStarOutline />}
             </button>
-            <button className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1 -mr-2">
+            <button
+              className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1 -mr-2"
+              onClick={() => setIsSettingsOpen(true)}
+            >
               <VscSettings />
             </button>
           </div>
