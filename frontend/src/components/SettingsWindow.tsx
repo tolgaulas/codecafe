@@ -10,9 +10,8 @@ interface SettingsWindowProps {
 }
 
 const THEMES = [
-  { value: "dark", label: "Dark" },
-  { value: "light", label: "Light" },
-  { value: "system", label: "System Default" },
+  { value: "codecafe", label: "CodeCafe" },
+  { value: "vscode", label: "VS Code" },
 ];
 
 const FONT_SIZES = [
