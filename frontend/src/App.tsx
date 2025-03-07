@@ -70,15 +70,14 @@ interface TextOperation {
 }
 
 const transformOperation = (
-  localOp: TextOperation,
+  _localOp: TextOperation,
   incomingOp: TextOperation
 ): TextOperation => {
-  // Naive strategy: if base versions differ and the newText differs,
   // localOp is replaced with incomingOp’s text. More advanced logic
-  // would do partial merges, line-based transformations, etc.
   return {
     baseVersion: incomingOp.baseVersion + 1,
     newText: incomingOp.newText,
+    userId: incomingOp.userId,
   };
 };
 
@@ -93,7 +92,7 @@ const App: React.FC = () => {
   const [isEditorLoading, setIsEditorLoading] = useState(true);
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
 
-  const [id, setId] = useState<string>(Date.now().toString());
+  const [id] = useState<string>(Date.now().toString());
   const [name, setName] = useState<string>(Date.now().toString());
   const [color, setColor] = useState<string>(getRandomColor());
   const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
