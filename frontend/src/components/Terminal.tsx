@@ -8,6 +8,7 @@ const TerminalComponent = forwardRef((_, ref) => {
   const terminalInstance = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const currentLineRef = useRef<string>("");
 
   useEffect(() => {
     const term = new Terminal({
@@ -27,7 +28,7 @@ const TerminalComponent = forwardRef((_, ref) => {
       term.open(terminalRef.current);
 
       // Create a ResizeObserver to handle container resize
-      const resizeObserver = new ResizeObserver((entries) => {
+      const resizeObserver = new ResizeObserver(() => {
         requestAnimationFrame(() => {
           try {
             fitAddon.fit();
@@ -51,11 +52,52 @@ const TerminalComponent = forwardRef((_, ref) => {
       resizeObserverRef.current = resizeObserver;
 
       term.write("Welcome to CodeCafe!\r\n$ ");
+
+      // Handle user input - simple approach
+      term.onData((data) => {
+        // Handle Enter key
+        if (data === "\r") {
+          const command = currentLineRef.current;
+          currentLineRef.current = "";
+
+          term.write("\r\n");
+
+          // Process command (simple example)
+          if (command === "clear") {
+            term.clear();
+          } else if (command === "help") {
+            term.write("Available commands: clear, help, echo, date\r\n");
+          } else if (command.startsWith("echo ")) {
+            term.write(command.substring(5) + "\r\n");
+          } else if (command.length > 0) {
+            term.write(`Command not found: ${command}\r\n`);
+          }
+
+          term.write("$ ");
+        }
+        // Handle backspace
+        else if (data === "\x7f") {
+          if (currentLineRef.current.length > 0) {
+            currentLineRef.current = currentLineRef.current.substring(
+              0,
+              currentLineRef.current.length - 1
+            );
+            term.write("\b \b");
+          }
+        }
+        // Handle normal input (printable characters)
+        else if (data >= " " && data <= "~") {
+          currentLineRef.current += data;
+          term.write(data);
+        }
+      });
     }
 
     // Cleanup function
     return () => {
-      term.dispose();
+      if (terminalInstance.current) {
+        terminalInstance.current.dispose();
+      }
       if (resizeObserverRef.current) {
         resizeObserverRef.current.disconnect();
       }
@@ -66,7 +108,7 @@ const TerminalComponent = forwardRef((_, ref) => {
     writeToTerminal: (output: string) => {
       if (terminalInstance.current) {
         const term = terminalInstance.current;
-        term.write("\x1b[2K\r");
+        term.write("\x1b[2K\r"); // Clear the current line
 
         const lines = output.split("\n");
         lines.forEach((line, index) => {
@@ -80,6 +122,13 @@ const TerminalComponent = forwardRef((_, ref) => {
           term.write("\r\n");
         }
         term.write("$ ");
+      }
+    },
+
+    clear: () => {
+      if (terminalInstance.current) {
+        terminalInstance.current.clear();
+        terminalInstance.current.write("$ ");
       }
     },
   }));
@@ -96,5 +145,7 @@ const TerminalComponent = forwardRef((_, ref) => {
     />
   );
 });
+
+TerminalComponent.displayName = "TerminalComponent";
 
 export default TerminalComponent;
