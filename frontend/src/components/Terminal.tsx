@@ -69,6 +69,26 @@ const TerminalComponent = forwardRef((_, ref) => {
             term.write("Available commands: clear, help, echo, date\r\n");
           } else if (command.startsWith("echo ")) {
             term.write(command.substring(5) + "\r\n");
+          } else if (command === "date") {
+            term.write(new Date().toLocaleString() + "\r\n");
+          } else if (command === "codecafe") {
+            term.write("\r\n");
+            term.write(
+              "   ______            __       ______        ____    \r\n"
+            );
+            term.write(
+              "  / ____/____   ____/ /___   / ____/____ _ / __/___ \r\n"
+            );
+            term.write(
+              " / /    / __ \\ / __  // _ \\ / /    / __ `// /_ / _ \\\r\n"
+            );
+            term.write(
+              "/ /___ / /_/ // /_/ //  __// /___ / /_/ // __//  __/\r\n"
+            );
+            term.write(
+              "\\____/ \\____/ \\__,_/ \\___/ \\____/ \\__,_//_/   \\___/\r\n"
+            );
+            term.write("\r\n");
           } else if (command.length > 0) {
             term.write(`Command not found: ${command}\r\n`);
           }
