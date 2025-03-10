@@ -32,16 +32,24 @@ interface User {
   };
 }
 
+// Add isSessionActive to the props interface
 interface ShareProfileProps {
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
   users: User[];
+  onStartSession: () => void;
+  sessionLink?: string;
+  isSessionActive?: boolean; // Add this prop
 }
 
+// Add isSessionActive to destructured props
 const ShareProfile: React.FC<ShareProfileProps> = ({
   onNameChange,
   onColorChange,
   users,
+  onStartSession,
+  sessionLink,
+  isSessionActive = false // Default to false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -60,6 +68,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
       color: selectedColor,
     });
     setSessionStarted(true);
+    onStartSession(); // Call parent's handler
   };
 
   const handleCopyLink = () => {

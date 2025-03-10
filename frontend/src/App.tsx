@@ -92,9 +92,11 @@ const App: React.FC = () => {
   const [pendingOps, setPendingOps] = useState<TextOperation[]>([]); // store ops that have not been Acked
   const [isEditorLoading, setIsEditorLoading] = useState(true);
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
+  const [isSessionActive, setIsSessionActive] = useState(false);
 
   const [id] = useState<string>(Date.now().toString());
   const [name, setName] = useState<string>(Date.now().toString());
+  const [displayName, setDisplayName] = useState(""); // For UI updates
   const [color, setColor] = useState<string>(getRandomColor());
   const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -135,11 +137,11 @@ const App: React.FC = () => {
   // useEffect(() => console.log("User state: ", users), [users]);
   const debouncedSendUpdate = useCallback(
     debounce((op: TextOperation) => {
-      if (stompClientRef.current?.connected) {
+      if (isSessionActive && stompClientRef.current?.connected) {
         stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
       }
-    }, 50), // 100ms delay
-    []
+    }, 50),
+    [isSessionActive] // Add isSessionActive as a dependency
   );
 
   const handleCodeChange = (newCode: string) => {
@@ -159,24 +161,32 @@ const App: React.FC = () => {
     debouncedSendUpdate(op);
   };
 
-  const debouncedSendCursor = useCallback(
-    debounce((cursorData: CursorData) => {
-      const message = {
-        user: {
-          id: id,
-          name: name,
-          color: color,
-          cursorPosition: cursorData.cursorPosition,
-          selection: cursorData.selection,
-        },
-      };
+  // Update debouncedSendCursor to maintain previous selection
+const debouncedSendCursor = useCallback(
+  debounce((cursorData: CursorData) => {
+    // Create a deep copy of the most recent user data
+    const userState = users.find(u => u.id === id);
+    
+    const message = {
+      user: {
+        id: id,
+        name: name || displayName,
+        color: color,
+        cursorPosition: cursorData.cursorPosition,
+        // Preserve previous selection if not provided in this update
+        selection: cursorData.selection || (userState?.selection || null),
+      },
+    };
 
-      if (stompClientRef.current?.connected) {
-        stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
-      }
-    }, 50), // 50ms delay for cursor updates
-    [] // Empty dependency array since we want the same debounce instance
-  );
+    if (isSessionActive && stompClientRef.current?.connected) {
+      console.log("Sending cursor data:", message);
+      stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
+    } else {
+      console.log("Can't send - session inactive or client not connected");
+    }
+  }, 50),
+  [isSessionActive, id, name, displayName, color, users]
+);
 
   const sendCursorData = (cursorData: CursorData) => {
     debouncedSendCursor(cursorData); // Use debounced update for server communication
@@ -197,96 +207,88 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Replace the entire WebSocket useEffect
   useEffect(() => {
-    const socket = new SockJS("http://localhost:8080/ws");
-    const stompClient = Stomp.over(socket);
+    // Only establish connection if session is active
+    if (isSessionActive) {
+      const socket = new SockJS("http://localhost:8080/ws");
+      const stompClient = Stomp.over(socket);
+      
+      stompClient.connect({}, function (frame: any) {
+        console.log("Connected: " + frame);
+        stompClientRef.current = stompClient;
+        
+        // Subscribe to topics
+        stompClient.subscribe("/topic/ot", function (message: any) {
+          const incomingOp = JSON.parse(message.body) as TextOperation;
 
-    stompClient.connect({}, function (frame: any) {
-      console.log("Connected: " + frame);
-
-      // Subscribe to your new OT channel (e.g. '/topic/ot')
-      stompClient.subscribe("/topic/ot", function (message: any) {
-        const incomingOp = JSON.parse(message.body) as TextOperation;
-
-        // Only apply changes if they're not from the current user
-        if (incomingOp.userId !== id) {
-          if (incomingOp.baseVersion >= localVersion) {
-            // Don't trigger a re-render if the text is the same
-            if (codeRef.current !== incomingOp.newText) {
-              setCode((prevCode) => {
-                if (prevCode === incomingOp.newText) return prevCode;
-                return incomingOp.newText;
+          // Only apply changes if they're not from the current user
+          if (incomingOp.userId !== id) {
+            // Rest of your code handling OT operations...
+            if (incomingOp.baseVersion >= localVersion) {
+              if (codeRef.current !== incomingOp.newText) {
+                setCode((prevCode) => {
+                  if (prevCode === incomingOp.newText) return prevCode;
+                  return incomingOp.newText;
+                });
+              }
+              setLocalVersion(incomingOp.baseVersion);
+            } else {
+              setPendingOps((prevPending) => {
+                return prevPending.map((op) =>
+                  transformOperation(op, incomingOp)
+                );
               });
+              // Don't trigger a re-render if the text is the same
+              if (codeRef.current !== incomingOp.newText) {
+                setCode((prevCode) => {
+                  if (prevCode === incomingOp.newText) return prevCode;
+                  return incomingOp.newText;
+                });
+              }
+              setLocalVersion(incomingOp.baseVersion);
             }
-            setLocalVersion(incomingOp.baseVersion);
-          } else {
-            setPendingOps((prevPending) => {
-              return prevPending.map((op) =>
-                transformOperation(op, incomingOp)
-              );
-            });
-            // Don't trigger a re-render if the text is the same
-            if (codeRef.current !== incomingOp.newText) {
-              setCode((prevCode) => {
-                if (prevCode === incomingOp.newText) return prevCode;
-                return incomingOp.newText;
-              });
-            }
-            setLocalVersion(incomingOp.baseVersion);
           }
+        });
+        
+        stompClient.subscribe("/topic/cursors", function (message: any) {
+          const cursorsData = JSON.parse(message.body);
+          setUsers(cursorsData);
+        });
+        
+        // IMPORTANT: Send an initial cursor message immediately after connection
+        const initialCursorMessage = {
+          user: {
+            id: id,
+            name: name || displayName,
+            color: color,
+            cursorPosition: { lineNumber: 1, column: 1 },
+            selection: null,
+          },
+        };
+        
+        stompClient.send("/app/cursor", {}, JSON.stringify(initialCursorMessage));
+        console.log("Sent initial cursor message after connection");
+      });
+      
+      return () => {
+        if (stompClient.connected) {
+          stompClient.disconnect(() => console.log("Disconnected"));
         }
-      });
-
-      // NEW: Subscription for cursor data updates
-      stompClient.subscribe("/topic/cursors", function (message: any) {
-        const cursorsData = JSON.parse(message.body);
-        // Assume the backend sends an array (or an object map) of all users' cursor data.
-        // console.log("Received cursor data: ", cursorsData);
-        setUsers(cursorsData);
-      });
-
-      // Your existing subscription if you still want to handle other messages:
-      // stompClient.subscribe("/topic/messages", function (message: any) {
-      //   const messageData = JSON.parse(message.body);
-      //   console.log("Received: ", messageData);
-
-      //   if (messageData.code !== null) {
-      //     setCode(messageData.code);
-      //   }
-
-      //   if (messageData.user) {
-      //     setUsers((prevUsers) => {
-      //       const updatedUser: User = {
-      //         id: "1",
-      //         name: messageData.user.name,
-      //         color: messageData.user.color,
-      //         cursorPosition: messageData.user.cursor.cursorPosition,
-      //         selection: messageData.user.cursor.selection || undefined,
-      //       };
-
-      //       const existingUser = prevUsers.find((u) => u.id === "1");
-      //       if (existingUser) {
-      //         return prevUsers.map((user) =>
-      //           user.id === "1" ? updatedUser : user
-      //         );
-      //       }
-      //       return [...prevUsers, updatedUser];
-      //     });
-      //   }
-      // });
-    });
-
-    stompClientRef.current = stompClient;
-
+        if (socket.readyState === SockJS.OPEN) {
+          socket.close();
+        }
+      };
+    }
+    
+    // Clean up any existing connection when session becomes inactive
     return () => {
-      if (stompClient.connected) {
-        stompClient.disconnect(() => console.log("Disconnected"));
-      }
-      if (socket.readyState === SockJS.OPEN) {
-        socket.close();
+      if (stompClientRef.current?.connected) {
+        stompClientRef.current.disconnect(() => console.log("Disconnected"));
+        stompClientRef.current = null;
       }
     };
-  }, []);
+  }, [isSessionActive, id, name, displayName, color]); 
 
   const handleRunCode = async () => {
     setIsLoading(true);
@@ -394,6 +396,19 @@ const App: React.FC = () => {
     console.log("starredEnabled changed to:", starredEnabled);
   }, [starredEnabled]);
 
+  // Add this function to start a session
+  const startSession = () => {
+    setIsSessionActive(true);
+    
+    // Force a cursor update after a short delay to ensure WebSocket is connected
+    setTimeout(() => {
+      debouncedSendCursor({
+        cursorPosition: { lineNumber: 1, column: 1 },
+        selection: null
+      });
+    }, 500);
+  };
+
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
@@ -447,9 +462,11 @@ const App: React.FC = () => {
               <span className="text-xs">Share</span>
             </button> */}
             <ShareProfile
-              onNameChange={(name: string) => setName(name)}
+              onNameChange={(newName: string) => setName(newName)}
               onColorChange={(color: string) => setColor(color)}
               users={users}
+              onStartSession={startSession}
+              isSessionActive={isSessionActive}
             />
             <button
               onClick={() => {
