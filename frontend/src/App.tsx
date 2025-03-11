@@ -16,6 +16,7 @@ import { debounce } from "lodash";
 import ReactLoading from "react-loading";
 import ShareProfile from "./components/ShareProfile";
 import SettingsWindow from "./components/SettingsWindow";
+import { Editor } from "@monaco-editor/react";
 
 interface CodeExecutionRequest {
   language: string;
@@ -82,6 +83,18 @@ const transformOperation = (
   };
 };
 
+const languageVersions = {
+  typescript: "1.32.3",
+  javascript: "1.32.3",
+  python: "3.10.0",
+  java: "15.0.2",
+  c: "10.2.0",
+  cplusplus: "10.2.0",
+  go: "1.16.2",
+  rust: "1.68.2",
+  ruby: "3.0.1",
+};
+
 const App: React.FC = () => {
   const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
@@ -93,6 +106,8 @@ const App: React.FC = () => {
   const [isEditorLoading, setIsEditorLoading] = useState(true);
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [editorLanguage, setEditorLanguage] =
+    useState<keyof typeof languageVersions>("python");
 
   const [id] = useState<string>(
     () => Date.now().toString() + Math.random().toString(36).substring(2)
@@ -313,8 +328,8 @@ const App: React.FC = () => {
     setIsLoading(true);
     try {
       const requestBody: CodeExecutionRequest = {
-        language: "javascript",
-        version: "18.15.0",
+        language: editorLanguage,
+        version: languageVersions[editorLanguage],
         files: [{ content: code }],
       };
 
@@ -520,6 +535,7 @@ const App: React.FC = () => {
                   code={code}
                   sendCursorData={sendCursorData}
                   onLoadingChange={setIsEditorLoading}
+                  language={editorLanguage}
                 />
               </div>
             </div>
