@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { VscCheck } from "react-icons/vsc";
@@ -40,6 +40,29 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
   const [autoSave, setAutoSave] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
+
+  // Prevent body scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+
+      // Add styles to prevent scrolling on the body
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+
+      return () => {
+        // Restore scrolling when component unmounts or modal closes
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+
+        // Restore scroll position
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isOpen]);
 
   const handleClose = () => {
     onClose();
@@ -124,10 +147,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="w-full max-w-[40rem] mx-4" // Increased width from 32rem to 40rem
+            className="w-full max-w-[40rem] mx-4 max-h-[90vh]"
           >
-            <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-visible">
-              <div className="px-8 py-6">
+            <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-hidden">
+              <div className="px-8 py-6 overflow-y-auto max-h-[80vh]">
                 {/* Title Section */}
                 <div className="mb-8">
                   <h2 className="text-2xl font-semibold text-stone-200">
@@ -139,7 +162,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
                 </div>
 
                 {/* Settings Section */}
-                <div className="grid grid-cols-2 gap-x-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10">
                   {/* Left Column */}
                   <div>
                     {/* Appearance Section */}

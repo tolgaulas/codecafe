@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
 import { GoPersonAdd, GoLink, GoCheck } from "react-icons/go";
 import { motion, AnimatePresence } from "framer-motion";
@@ -61,6 +61,29 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   // Generate a unique session ID (in a real app, this would come from your backend)
   const sessionId = Math.random().toString(36).substring(2, 15);
   const shareableLink = `https://yourdomain.com/session/${sessionId}`;
+
+  // Prevent body scrolling when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      // Save current scroll position
+      const scrollY = window.scrollY;
+
+      // Add styles to prevent scrolling on the body
+      document.body.style.position = "fixed";
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = "100%";
+
+      return () => {
+        // Restore scrolling when component unmounts or modal closes
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+
+        // Restore scroll position
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [isOpen]);
 
   const handleStartSession = () => {
     console.log("Starting session with:", {
@@ -153,10 +176,10 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="w-full max-w-[32rem] mx-4"
+              className="w-full max-w-[32rem] mx-4 max-h-[90vh]"
             >
-              <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-visible">
-                <div className="px-8 py-6">
+              <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-hidden">
+                <div className="px-8 py-6 overflow-y-auto max-h-[80vh]">
                   {/* Title Section */}
                   <div className="mb-10">
                     <h2 className="text-2xl font-semibold text-stone-200">
@@ -171,10 +194,10 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
 
                   {!sessionStarted ? (
                     // Setup Profile UI
-                    <div className="flex gap-6">
+                    <div className="flex flex-col md:flex-row gap-6">
                       <div className="relative">
                         <div
-                          className="w-[6.5rem] h-[6.5rem] rounded-full flex items-center justify-center text-5xl font-medium cursor-pointer shadow-lg relative overflow-hidden"
+                          className="w-[6.5rem] h-[6.5rem] rounded-full flex items-center justify-center text-5xl font-medium cursor-pointer shadow-lg relative overflow-hidden mx-auto md:mx-0"
                           style={{ backgroundColor: selectedColor }}
                           onClick={() =>
                             setIsColorPickerOpen(!isColorPickerOpen)
@@ -191,7 +214,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                               animate={{ opacity: 1, y: 0 }}
                               exit={{ opacity: 0, y: -12 }}
                               transition={{ duration: 0.2 }}
-                              className="absolute -left-1 top-[95px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
+                              className="absolute left-1/2 md:left-0 transform -translate-x-1/2 md:translate-x-0 top-[95px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
                             >
                               <div className="flex flex-wrap gap-1 w-24">
                                 {COLORS.map((color) => (
@@ -236,7 +259,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                           </p>
                         </div>
                         <div className="pt-2">
-                          <div className="flex gap-3 mt-[54px]">
+                          <div className="flex gap-3 mt-4 md:mt-[54px]">
                             <button
                               className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
                               onClick={handleClose}
