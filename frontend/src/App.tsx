@@ -94,12 +94,25 @@ const App: React.FC = () => {
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
 
-  const [id] = useState<string>(Date.now().toString());
+  const [id] = useState<string>(
+    () => Date.now().toString() + Math.random().toString(36).substring(2)
+  );
   const [name, setName] = useState<string>(Date.now().toString());
   const [displayName, setDisplayName] = useState(""); // For UI updates
   const [color, setColor] = useState<string>(getRandomColor());
   const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const nameRef = useRef(name);
+  const colorRef = useRef(color);
+
+  useEffect(() => {
+    nameRef.current = name;
+  }, [name]);
+
+  useEffect(() => {
+    colorRef.current = color;
+  }, [color]);
 
   useEffect(() => {
     console.log(name);
@@ -162,31 +175,32 @@ const App: React.FC = () => {
   };
 
   // Update debouncedSendCursor to maintain previous selection
-const debouncedSendCursor = useCallback(
-  debounce((cursorData: CursorData) => {
-    // Create a deep copy of the most recent user data
-    const userState = users.find(u => u.id === id);
-    
-    const message = {
-      user: {
-        id: id,
-        name: name || displayName,
-        color: color,
-        cursorPosition: cursorData.cursorPosition,
-        // Preserve previous selection if not provided in this update
-        selection: cursorData.selection || (userState?.selection || null),
-      },
-    };
+  // Add this state to track the local selection
+  const [currentSelection, setCurrentSelection] =
+    useState<CursorData["selection"]>(null);
 
-    if (isSessionActive && stompClientRef.current?.connected) {
-      console.log("Sending cursor data:", message);
-      stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
-    } else {
-      console.log("Can't send - session inactive or client not connected");
-    }
-  }, 50),
-  [isSessionActive, id, name, displayName, color, users]
-);
+  // Then modify the debouncedSendCursor function
+  const debouncedSendCursor = useCallback(
+    debounce((cursorData: CursorData) => {
+      const message = {
+        user: {
+          id: id,
+          name: nameRef.current,
+          color: colorRef.current,
+          cursorPosition: cursorData.cursorPosition,
+          // Use local state instead of depending on users array
+          selection: cursorData.selection,
+        },
+      };
+
+      if (stompClientRef.current?.connected) {
+        console.log("NAMES: ", name, displayName);
+        console.log("Sending cursor data", message);
+        stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
+      }
+    }, 50),
+    [isSessionActive, name, displayName, color]
+  );
 
   const sendCursorData = (cursorData: CursorData) => {
     debouncedSendCursor(cursorData); // Use debounced update for server communication
@@ -213,11 +227,11 @@ const debouncedSendCursor = useCallback(
     if (isSessionActive) {
       const socket = new SockJS("http://localhost:8080/ws");
       const stompClient = Stomp.over(socket);
-      
+
       stompClient.connect({}, function (frame: any) {
         console.log("Connected: " + frame);
         stompClientRef.current = stompClient;
-        
+
         // Subscribe to topics
         stompClient.subscribe("/topic/ot", function (message: any) {
           const incomingOp = JSON.parse(message.body) as TextOperation;
@@ -250,27 +264,32 @@ const debouncedSendCursor = useCallback(
             }
           }
         });
-        
+
         stompClient.subscribe("/topic/cursors", function (message: any) {
           const cursorsData = JSON.parse(message.body);
+          console.log(cursorsData, "CURSOR DATA");
           setUsers(cursorsData);
         });
-        
+
         // IMPORTANT: Send an initial cursor message immediately after connection
-        const initialCursorMessage = {
-          user: {
-            id: id,
-            name: name || displayName,
-            color: color,
-            cursorPosition: { lineNumber: 1, column: 1 },
-            selection: null,
-          },
-        };
-        
-        stompClient.send("/app/cursor", {}, JSON.stringify(initialCursorMessage));
-        console.log("Sent initial cursor message after connection");
+        // const initialCursorMessage = {
+        //   user: {
+        //     id: id,
+        //     name: name || displayName,
+        //     color: color,
+        //     cursorPosition: { lineNumber: 1, column: 1 },
+        //     selection: null,
+        //   },
+        // };
+
+        // stompClient.send(
+        //   "/app/cursor",
+        //   {},
+        //   JSON.stringify(initialCursorMessage)
+        // );
+        // console.log("Sent initial cursor message after connection");
       });
-      
+
       return () => {
         if (stompClient.connected) {
           stompClient.disconnect(() => console.log("Disconnected"));
@@ -280,7 +299,7 @@ const debouncedSendCursor = useCallback(
         }
       };
     }
-    
+
     // Clean up any existing connection when session becomes inactive
     return () => {
       if (stompClientRef.current?.connected) {
@@ -288,7 +307,7 @@ const debouncedSendCursor = useCallback(
         stompClientRef.current = null;
       }
     };
-  }, [isSessionActive, id, name, displayName, color]); 
+  }, [isSessionActive, id, name, displayName, color]);
 
   const handleRunCode = async () => {
     setIsLoading(true);
@@ -399,12 +418,12 @@ const debouncedSendCursor = useCallback(
   // Add this function to start a session
   const startSession = () => {
     setIsSessionActive(true);
-    
+
     // Force a cursor update after a short delay to ensure WebSocket is connected
     setTimeout(() => {
       debouncedSendCursor({
         cursorPosition: { lineNumber: 1, column: 1 },
-        selection: null
+        selection: null,
       });
     }, 500);
   };

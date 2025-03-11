@@ -49,7 +49,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   users,
   onStartSession,
   sessionLink,
-  isSessionActive = false // Default to false
+  isSessionActive = false, // Default to false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -225,6 +225,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                             onChange={(e) => {
                               setName(e.target.value);
                               onNameChange(e.target.value);
+                              console.log("SETTING NAME", e.target.value);
                             }}
                             placeholder="Enter your name"
                             className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 placeholder-stone-500 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"
