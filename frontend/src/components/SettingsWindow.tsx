@@ -13,6 +13,8 @@ interface SettingsWindowProps {
   availableLanguages: Array<{ value: string; label: string }>;
   currentTheme: "codeCafeTheme" | "transparentTheme"; // Add this
   onThemeChange: (theme: "codeCafeTheme" | "transparentTheme") => void; // Add this
+  currentFontSize: string;
+  onFontSizeChange: (fontSize: string) => void;
 }
 
 const THEMES = [
@@ -35,10 +37,12 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   availableLanguages,
   currentTheme,
   onThemeChange,
+  currentFontSize,
+  onFontSizeChange,
 }) => {
   // Settings state
   const [theme, setTheme] = useState(currentTheme);
-  const [fontSize, setFontSize] = useState("14");
+  const [fontSize, setFontSize] = useState(currentFontSize);
   // Use the passed currentLanguage for initial state
   const [language, setLanguage] = useState(currentLanguage);
   const [autoSave, setAutoSave] = useState(true);
@@ -53,6 +57,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   useEffect(() => {
     setTheme(currentTheme);
   }, [currentTheme, isOpen]);
+
+  useEffect(() => {
+    setFontSize(currentFontSize);
+  }, [currentFontSize, isOpen]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -98,6 +106,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
     }
     if (theme !== currentTheme) {
       onThemeChange(theme as "codeCafeTheme" | "transparentTheme");
+    }
+
+    if (fontSize !== currentFontSize) {
+      onFontSizeChange(fontSize); // Add this line
     }
 
     onClose();

@@ -16,7 +16,6 @@ import { debounce } from "lodash";
 import ReactLoading from "react-loading";
 import ShareProfile from "./components/ShareProfile";
 import SettingsWindow from "./components/SettingsWindow";
-import { Editor } from "@monaco-editor/react";
 
 interface CodeExecutionRequest {
   language: string;
@@ -107,7 +106,7 @@ const App: React.FC = () => {
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [editorLanguage, setEditorLanguage] =
-    useState<keyof typeof languageVersions>("python");
+    useState<keyof typeof languageVersions>("javascript");
 
   const [id] = useState<string>(
     () => Date.now().toString() + Math.random().toString(36).substring(2)
@@ -120,6 +119,11 @@ const App: React.FC = () => {
   const [theme, setTheme] = useState<"codeCafeTheme" | "transparentTheme">(
     "codeCafeTheme"
   );
+  const [fontSize, setFontSize] = useState<string>("16");
+
+  useEffect(() => {
+    console.log("Font size changed to:", fontSize);
+  }, [fontSize]);
 
   const nameRef = useRef(name);
   const colorRef = useRef(color);
@@ -239,7 +243,6 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Replace the entire WebSocket useEffect
   useEffect(() => {
     // Only establish connection if session is active
     if (isSessionActive) {
@@ -476,6 +479,8 @@ const App: React.FC = () => {
         )}
         currentTheme={theme}
         onThemeChange={setTheme}
+        currentFontSize={fontSize}
+        onFontSizeChange={setFontSize}
       />
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
@@ -553,6 +558,7 @@ const App: React.FC = () => {
                   onLoadingChange={setIsEditorLoading}
                   language={editorLanguage}
                   theme={theme}
+                  fontSize={fontSize}
                 />
               </div>
             </div>

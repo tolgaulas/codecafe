@@ -40,6 +40,7 @@ interface CodeEditorProps {
   onLoadingChange?: (loading: boolean) => void;
   language?: string;
   theme?: "codeCafeTheme" | "transparentTheme";
+  fontSize?: string;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -51,6 +52,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   onLoadingChange,
   language,
   theme,
+  fontSize,
 }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -467,7 +469,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           }, 550);
         }}
         options={{
-          fontSize: 16,
+          fontSize: parseInt(fontSize || "14", 10),
           lineHeight: 20,
           minimap: { enabled: false },
           wordWrap: "on",
