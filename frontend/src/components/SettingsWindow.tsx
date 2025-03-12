@@ -4,9 +4,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { VscCheck } from "react-icons/vsc";
 import { Switch } from "@radix-ui/react-switch";
 
+type LanguageOption = {
+  value: string;
+  label: string;
+};
+
 interface SettingsWindowProps {
   isOpen: boolean;
   onClose: () => void;
+  // New props for language handling
+  currentLanguage: string;
+  onLanguageChange: (language: string) => void;
+  availableLanguages: Array<{ value: string; label: string }>;
 }
 
 const THEMES = [
@@ -21,25 +30,26 @@ const FONT_SIZES = [
   { value: "18", label: "Extra Large" },
 ];
 
-const LANGUAGES = [
-  { value: "javascript", label: "JavaScript" },
-  { value: "typescript", label: "TypeScript" },
-  { value: "python", label: "Python" },
-  { value: "java", label: "Java" },
-  { value: "html", label: "HTML" },
-  { value: "css", label: "CSS" },
-  { value: "json", label: "JSON" },
-  { value: "sql", label: "SQL" },
-];
-
-const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
+const SettingsWindow: React.FC<SettingsWindowProps> = ({
+  isOpen,
+  onClose,
+  currentLanguage,
+  onLanguageChange,
+  availableLanguages,
+}) => {
   // Settings state
   const [theme, setTheme] = useState("dark");
   const [fontSize, setFontSize] = useState("14");
-  const [language, setLanguage] = useState("javascript");
+  // Use the passed currentLanguage for initial state
+  const [language, setLanguage] = useState(currentLanguage);
   const [autoSave, setAutoSave] = useState(true);
   const [wordWrap, setWordWrap] = useState(true);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setLanguage(currentLanguage);
+  }, [currentLanguage]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -78,6 +88,12 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
       wordWrap,
       showLineNumbers,
     });
+
+    // Call the parent's onLanguageChange if language was changed
+    if (language !== currentLanguage) {
+      onLanguageChange(language);
+    }
+
     onClose();
   };
 
@@ -195,7 +211,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({ isOpen, onClose }) => {
                       <StyledSelect
                         value={language}
                         onChange={setLanguage}
-                        options={LANGUAGES}
+                        options={availableLanguages}
                         label="Editor Language"
                       />
                     </div>

@@ -84,15 +84,15 @@ const transformOperation = (
 };
 
 const languageVersions = {
-  typescript: "1.32.3",
-  javascript: "1.32.3",
-  python: "3.10.0",
-  java: "15.0.2",
-  c: "10.2.0",
-  cplusplus: "10.2.0",
-  go: "1.16.2",
-  rust: "1.68.2",
-  ruby: "3.0.1",
+  typescript: { version: "1.32.3", name: "TypeScript" },
+  javascript: { version: "1.32.3", name: "JavaScript" },
+  python: { version: "3.10.0", name: "Python" },
+  java: { version: "15.0.2", name: "Java" },
+  c: { version: "10.2.0", name: "C" },
+  cplusplus: { version: "10.2.0", name: "C++" },
+  go: { version: "1.16.2", name: "Go" },
+  rust: { version: "1.68.2", name: "Rust" },
+  ruby: { version: "3.0.1", name: "Ruby" },
 };
 
 const App: React.FC = () => {
@@ -329,7 +329,7 @@ const App: React.FC = () => {
     try {
       const requestBody: CodeExecutionRequest = {
         language: editorLanguage,
-        version: languageVersions[editorLanguage],
+        version: languageVersions[editorLanguage].version,
         files: [{ content: code }],
       };
 
@@ -460,6 +460,17 @@ const App: React.FC = () => {
       <SettingsWindow
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        currentLanguage={editorLanguage}
+        onLanguageChange={(editorLanguage) => {
+          // Cast is needed since TypeScript doesn't know that newLanguage is a valid key
+          setEditorLanguage(editorLanguage as keyof typeof languageVersions);
+        }}
+        availableLanguages={Object.entries(languageVersions).map(
+          ([key, value]) => ({
+            value: key,
+            label: value.name, // Using the name property from languageVersions
+          })
+        )}
       />
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
