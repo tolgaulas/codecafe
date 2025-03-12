@@ -91,6 +91,7 @@ const TerminalComponent = forwardRef((_, ref) => {
             term.write("\r\n");
           } else if (command.length > 0) {
             term.write(`Command not found: ${command}\r\n`);
+            term.write("Type 'help' to see available commands.\r\n");
           }
 
           term.write("$ ");
