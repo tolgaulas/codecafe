@@ -117,6 +117,9 @@ const App: React.FC = () => {
   const [color, setColor] = useState<string>(getRandomColor());
   const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [theme, setTheme] = useState<"codeCafeTheme" | "transparentTheme">(
+    "codeCafeTheme"
+  );
 
   const nameRef = useRef(name);
   const colorRef = useRef(color);
@@ -471,6 +474,8 @@ const App: React.FC = () => {
             label: value.name, // Using the name property from languageVersions
           })
         )}
+        currentTheme={theme}
+        onThemeChange={setTheme}
       />
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
@@ -547,6 +552,7 @@ const App: React.FC = () => {
                   sendCursorData={sendCursorData}
                   onLoadingChange={setIsEditorLoading}
                   language={editorLanguage}
+                  theme={theme}
                 />
               </div>
             </div>

@@ -11,11 +11,13 @@ interface SettingsWindowProps {
   currentLanguage: string;
   onLanguageChange: (language: string) => void;
   availableLanguages: Array<{ value: string; label: string }>;
+  currentTheme: "codeCafeTheme" | "transparentTheme"; // Add this
+  onThemeChange: (theme: "codeCafeTheme" | "transparentTheme") => void; // Add this
 }
 
 const THEMES = [
-  { value: "codecafe", label: "CodeCafe" },
-  { value: "vscode", label: "VS Code" },
+  { value: "codeCafeTheme", label: "CodeCafe" },
+  { value: "transparentTheme", label: "VS Code" },
 ];
 
 const FONT_SIZES = [
@@ -31,9 +33,11 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   currentLanguage,
   onLanguageChange,
   availableLanguages,
+  currentTheme,
+  onThemeChange,
 }) => {
   // Settings state
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState(currentTheme);
   const [fontSize, setFontSize] = useState("14");
   // Use the passed currentLanguage for initial state
   const [language, setLanguage] = useState(currentLanguage);
@@ -87,6 +91,9 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
     // Call the parent's onLanguageChange if language was changed
     if (language !== currentLanguage) {
       onLanguageChange(language);
+    }
+    if (theme !== currentTheme) {
+      onThemeChange(theme as "codeCafeTheme" | "transparentTheme");
     }
 
     onClose();
@@ -184,7 +191,11 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
 
                       <StyledSelect
                         value={theme}
-                        onChange={setTheme}
+                        onChange={(value: string) =>
+                          setTheme(
+                            value as "codeCafeTheme" | "transparentTheme"
+                          )
+                        }
                         options={THEMES}
                         label="Theme"
                       />

@@ -39,6 +39,7 @@ interface CodeEditorProps {
   sendCursorData?: (cursorData: CursorData) => void;
   onLoadingChange?: (loading: boolean) => void;
   language?: string;
+  theme?: "codeCafeTheme" | "transparentTheme";
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -49,6 +50,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   sendCursorData,
   onLoadingChange,
   language,
+  theme,
 }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -66,7 +68,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   // Initialize Monaco theme
   useEffect(() => {
     loader.init().then((monaco) => {
-      monaco.editor.defineTheme("darkTransparentTheme", {
+      monaco.editor.defineTheme("codeCafeTheme", {
         base: "vs-dark",
         inherit: true,
         rules: [
@@ -216,8 +218,19 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         },
       });
 
-      // Don't forget to set the theme after defining it
-      monaco.editor.setTheme("darkTransparentTheme");
+      monaco.editor.defineTheme("transparentTheme", {
+        base: "vs-dark",
+        inherit: true,
+        rules: [],
+        colors: {
+          "editor.background": "#00000000",
+          "editorGutter.background": "#00000000",
+          "minimap.background": "#00000000",
+        },
+      });
+
+      // // Don't forget to set the theme after defining it
+      // monaco.editor.setTheme("codeCafeTheme");
     });
   }, []);
 
@@ -442,7 +455,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       <Editor
         height="100%"
         width="100%"
-        theme="darkTransparentTheme"
+        theme={theme}
         language={language}
         // value={code}
         onChange={handleEditorChange}
