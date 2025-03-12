@@ -48,7 +48,11 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   // Update local state when prop changes
   useEffect(() => {
     setLanguage(currentLanguage);
-  }, [currentLanguage, isOpen]);
+  }, [currentTheme, isOpen]);
+
+  useEffect(() => {
+    setTheme(currentTheme);
+  }, [currentTheme, isOpen]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
