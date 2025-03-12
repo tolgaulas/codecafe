@@ -4,11 +4,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { VscCheck } from "react-icons/vsc";
 import { Switch } from "@radix-ui/react-switch";
 
-type LanguageOption = {
-  value: string;
-  label: string;
-};
-
 interface SettingsWindowProps {
   isOpen: boolean;
   onClose: () => void;
@@ -49,7 +44,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   // Update local state when prop changes
   useEffect(() => {
     setLanguage(currentLanguage);
-  }, [currentLanguage]);
+  }, [currentLanguage, isOpen]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
