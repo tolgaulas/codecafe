@@ -53,7 +53,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   const [fontSize, setFontSize] = useState(currentFontSize);
   // Use the passed currentLanguage for initial state
   const [language, setLanguage] = useState(currentLanguage);
-  const [autoSave, setAutoSave] = useState(true);
+  // const [autoSave, setAutoSave] = useState(true);
   const [wordWrap, setWordWrap] = useState(currentWordWrap);
   const [showLineNumbers, setShowLineNumbers] = useState(
     currentShowLineNumbers
@@ -113,7 +113,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
       theme,
       fontSize,
       language,
-      autoSave,
+      // autoSave,
       wordWrap,
       showLineNumbers,
     });
@@ -305,11 +305,11 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
                         label="Show Line Numbers"
                       />
 
-                      <ToggleSwitch
+                      {/* <ToggleSwitch
                         checked={autoSave}
                         onChange={setAutoSave}
                         label="Auto Save"
-                      />
+                      /> */}
                     </div>
                   </div>
                 </div>
