@@ -121,6 +121,7 @@ const App: React.FC = () => {
   );
   const [fontSize, setFontSize] = useState<string>("16");
   const [wordWrap, setWordWrap] = useState<boolean>(true);
+  const [showLineNumbers, setShowLineNumbers] = useState(true);
 
   useEffect(() => {
     console.log("Font size changed to:", fontSize);
@@ -484,6 +485,8 @@ const App: React.FC = () => {
         onFontSizeChange={setFontSize}
         currentWordWrap={wordWrap}
         onWordWrapChange={setWordWrap}
+        currentShowLineNumbers={showLineNumbers}
+        onShowLineNumbersChange={setShowLineNumbers}
       />
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
@@ -563,6 +566,7 @@ const App: React.FC = () => {
                   theme={theme}
                   fontSize={fontSize}
                   wordWrap={wordWrap}
+                  showLineNumbers={showLineNumbers}
                 />
               </div>
             </div>

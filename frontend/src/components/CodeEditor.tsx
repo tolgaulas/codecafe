@@ -42,6 +42,7 @@ interface CodeEditorProps {
   theme?: "codeCafeTheme" | "transparentTheme";
   fontSize?: string;
   wordWrap?: boolean;
+  showLineNumbers?: boolean;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -55,6 +56,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   theme,
   fontSize,
   wordWrap,
+  showLineNumbers,
 }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -474,7 +476,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           fontSize: parseInt(fontSize || "14", 10),
           lineHeight: 20,
           minimap: { enabled: false },
-          lineNumbers: "on",
+          lineNumbers: showLineNumbers ? "on" : "off",
           wordWrap: wordWrap ? "on" : "off",
           cursorBlinking: "blink",
           cursorStyle: "line",

@@ -17,6 +17,8 @@ interface SettingsWindowProps {
   onFontSizeChange: (fontSize: string) => void;
   currentWordWrap: boolean;
   onWordWrapChange: (wordWrap: boolean) => void;
+  currentShowLineNumbers: boolean;
+  onShowLineNumbersChange: (showLineNumbers: boolean) => void;
 }
 
 const THEMES = [
@@ -43,6 +45,8 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   onFontSizeChange,
   currentWordWrap,
   onWordWrapChange,
+  currentShowLineNumbers,
+  onShowLineNumbersChange,
 }) => {
   // Settings state
   const [theme, setTheme] = useState(currentTheme);
@@ -51,7 +55,9 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   const [language, setLanguage] = useState(currentLanguage);
   const [autoSave, setAutoSave] = useState(true);
   const [wordWrap, setWordWrap] = useState(currentWordWrap);
-  const [showLineNumbers, setShowLineNumbers] = useState(true);
+  const [showLineNumbers, setShowLineNumbers] = useState(
+    currentShowLineNumbers
+  );
 
   // Update local state when prop changes
   useEffect(() => {
@@ -69,6 +75,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   useEffect(() => {
     setWordWrap(currentWordWrap);
   }, [currentWordWrap, isOpen]);
+
+  useEffect(() => {
+    setShowLineNumbers(currentShowLineNumbers);
+  }, [currentShowLineNumbers, isOpen]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -122,6 +132,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
 
     if (wordWrap !== currentWordWrap) {
       onWordWrapChange(wordWrap);
+    }
+
+    if (showLineNumbers !== currentShowLineNumbers) {
+      onShowLineNumbersChange(showLineNumbers);
     }
 
     onClose();
