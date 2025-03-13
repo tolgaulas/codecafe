@@ -120,6 +120,7 @@ const App: React.FC = () => {
     "codeCafeTheme"
   );
   const [fontSize, setFontSize] = useState<string>("16");
+  const [wordWrap, setWordWrap] = useState<boolean>(true);
 
   useEffect(() => {
     console.log("Font size changed to:", fontSize);
@@ -481,6 +482,8 @@ const App: React.FC = () => {
         onThemeChange={setTheme}
         currentFontSize={fontSize}
         onFontSizeChange={setFontSize}
+        currentWordWrap={wordWrap}
+        onWordWrapChange={setWordWrap}
       />
       <div className={`${isEditorLoading ? "hidden" : ""}`}>
         <SlideMenu />
@@ -559,6 +562,7 @@ const App: React.FC = () => {
                   language={editorLanguage}
                   theme={theme}
                   fontSize={fontSize}
+                  wordWrap={wordWrap}
                 />
               </div>
             </div>

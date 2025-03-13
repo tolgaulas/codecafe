@@ -15,6 +15,8 @@ interface SettingsWindowProps {
   onThemeChange: (theme: "codeCafeTheme" | "transparentTheme") => void; // Add this
   currentFontSize: string;
   onFontSizeChange: (fontSize: string) => void;
+  currentWordWrap: boolean;
+  onWordWrapChange: (wordWrap: boolean) => void;
 }
 
 const THEMES = [
@@ -39,6 +41,8 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   onThemeChange,
   currentFontSize,
   onFontSizeChange,
+  currentWordWrap,
+  onWordWrapChange,
 }) => {
   // Settings state
   const [theme, setTheme] = useState(currentTheme);
@@ -46,7 +50,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   // Use the passed currentLanguage for initial state
   const [language, setLanguage] = useState(currentLanguage);
   const [autoSave, setAutoSave] = useState(true);
-  const [wordWrap, setWordWrap] = useState(true);
+  const [wordWrap, setWordWrap] = useState(currentWordWrap);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
 
   // Update local state when prop changes
@@ -61,6 +65,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   useEffect(() => {
     setFontSize(currentFontSize);
   }, [currentFontSize, isOpen]);
+
+  useEffect(() => {
+    setWordWrap(currentWordWrap);
+  }, [currentWordWrap, isOpen]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -110,6 +118,10 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
 
     if (fontSize !== currentFontSize) {
       onFontSizeChange(fontSize); // Add this line
+    }
+
+    if (wordWrap !== currentWordWrap) {
+      onWordWrapChange(wordWrap);
     }
 
     onClose();
