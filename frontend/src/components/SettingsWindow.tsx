@@ -124,16 +124,36 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
     checked: boolean;
     onChange: (checked: boolean) => void;
     label: string;
-  }) => (
-    <div className="flex items-center justify-between mb-4">
-      <label className="text-sm font-medium text-stone-300">{label}</label>
-      <Switch checked={checked} onCheckedChange={onChange} className="group">
-        <div className="relative h-[24px] w-[44px] cursor-pointer rounded-full bg-stone-800 border border-stone-700/50 transition-colors data-[state=checked]:bg-stone-600">
-          <div className="absolute top-[2px] left-[2px] h-[18px] w-[18px] rounded-full bg-stone-400 transition-transform duration-200 data-[state=checked]:translate-x-[20px] data-[state=checked]:bg-stone-200" />
-        </div>
-      </Switch>
-    </div>
-  );
+  }) => {
+    return (
+      <div className="flex items-center justify-between mb-4">
+        <label className="text-sm font-medium text-stone-300">{label}</label>
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          className="relative h-[24px] w-[44px] rounded-full bg-stone-800 border border-stone-700/50 focus:outline-none transition-colors duration-300"
+          style={{
+            backgroundColor: checked ? "rgb(87 83 78)" : "rgb(41 37 36)",
+          }}
+        >
+          <div
+            className="absolute rounded-full bg-stone-400"
+            style={{
+              top: "2px",
+              left: "2px",
+              height: "18px",
+              width: "18px",
+              backgroundColor: checked
+                ? "rgb(229 229 229)"
+                : "rgb(168 162 158)",
+              transform: checked ? "translateX(20px)" : "translateX(0px)",
+              transition: "all 300ms cubic-bezier(0.4, 0.0, 0.2, 1)",
+            }}
+          />
+        </button>
+      </div>
+    );
+  };
 
   // Select component with consistent styling
   const StyledSelect = ({
