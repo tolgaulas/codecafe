@@ -9,5 +9,4 @@ public class CodeCafeBackendApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(CodeCafeBackendApplication.class, args);
 	}
-
 }

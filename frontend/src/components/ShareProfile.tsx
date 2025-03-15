@@ -32,24 +32,29 @@ interface User {
   };
 }
 
-// Add isSessionActive to the props interface
+// Update your ShareProfile component to include these new props and functionality
 interface ShareProfileProps {
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
   users: User[];
   onStartSession: () => void;
-  sessionLink?: string;
-  isSessionActive?: boolean; // Add this prop
+  isSessionActive: boolean;
+  sessionId: string | null;
+  isJoiningSession: boolean;
+  sessionCreatorName: string;
+  onJoinSession: () => void;
 }
 
-// Add isSessionActive to destructured props
 const ShareProfile: React.FC<ShareProfileProps> = ({
   onNameChange,
   onColorChange,
   users,
   onStartSession,
-  sessionLink,
-  isSessionActive = false, // Default to false
+  isSessionActive,
+  sessionId,
+  isJoiningSession,
+  sessionCreatorName,
+  onJoinSession
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -58,9 +63,10 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   const [sessionStarted, setSessionStarted] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
-  // Generate a unique session ID (in a real app, this would come from your backend)
-  const sessionId = Math.random().toString(36).substring(2, 15);
-  const shareableLink = `https://yourdomain.com/session/${sessionId}`;
+  // Use the sessionId from props instead
+  const shareableLink = sessionId 
+    ? `${window.location.origin}${window.location.pathname}?session=${sessionId}`
+    : "";
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -92,6 +98,16 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
     });
     setSessionStarted(true);
     onStartSession(); // Call parent's handler
+  };
+
+  const handleJoinSession = () => {
+    console.log("Joining session with:", {
+      name,
+      color: selectedColor,
+    });
+    onJoinSession(); // Call parent's handler
+    setSessionStarted(true);
+    handleClose(); // Close the dialog after joining
   };
 
   const handleCopyLink = () => {
@@ -158,6 +174,32 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
     );
   };
 
+  // Function to copy session link to clipboard
+  const copySessionLink = () => {
+    if (!sessionId) return;
+    
+    const url = new URL(window.location.href);
+    url.searchParams.set('session', sessionId);
+    navigator.clipboard.writeText(url.toString());
+    
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  // Show join session dialog automatically if joining from a link
+  useEffect(() => {
+    if (isJoiningSession && !isSessionActive) {
+      setIsOpen(true);
+    }
+  }, [isJoiningSession, isSessionActive]);
+
+  // Update sessionStarted when isSessionActive changes
+  useEffect(() => {
+    if (isSessionActive) {
+      setSessionStarted(true);
+    }
+  }, [isSessionActive]);
+
   return (
     <>
       {renderShareButtonOrUserAvatars()}
@@ -183,17 +225,78 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                   {/* Title Section */}
                   <div className="mb-10">
                     <h2 className="text-2xl font-semibold text-stone-200">
-                      {sessionStarted ? "Share Your Session" : "Start Sharing"}
+                      {isJoiningSession 
+                        ? `Join ${sessionCreatorName || "Shared"}'s Session` 
+                        : (isSessionActive ? "Share Your Session" : "Create Session")}
                     </h2>
                     <p className="text-stone-400 text-sm mt-1">
-                      {sessionStarted
-                        ? "Copy this link and send it to anyone you want to collaborate with"
-                        : "Customize how others will see you during the collaboration session"}
+                      {isJoiningSession
+                        ? "Enter your name to join this collaborative session"
+                        : (isSessionActive 
+                            ? "Copy this link and send it to anyone you want to collaborate with" 
+                            : "Customize how others will see you during the collaboration session")}
                     </p>
                   </div>
 
-                  {!sessionStarted ? (
-                    // Setup Profile UI
+                  {isSessionActive && !isJoiningSession ? (
+                    // Shareable Link UI (for session creator)
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <div className="mb-6">
+                        <div
+                          className="w-24 h-24 rounded-full flex items-center justify-center text-[2.5rem] font-medium mx-auto mb-4"
+                          style={{ backgroundColor: selectedColor }}
+                        >
+                          <span className="text-white/90">
+                            {name ? name[0].toUpperCase() : ""}
+                          </span>
+                        </div>
+                        <p className="text-center text-stone-300">
+                          Session started as{" "}
+                          <span className="font-medium text-stone-200">
+                            {name}
+                          </span>
+                        </p>
+                      </div>
+
+                      <div className="bg-stone-800/50 border border-stone-700/50 rounded-md p-1 mb-8">
+                        <div className="flex items-center">
+                          <div className="flex-1 truncate px-3 py-2 text-stone-300">
+                            {shareableLink}
+                          </div>
+                          <button
+                            className="flex items-center justify-center bg-stone-700/50 hover:bg-stone-600/50 text-stone-200 rounded px-3 py-2 transition-colors"
+                            onClick={copySessionLink}
+                          >
+                            {linkCopied ? (
+                              <>
+                                <GoCheck className="mr-1" />
+                                <span>Copied</span>
+                              </>
+                            ) : (
+                              <>
+                                <GoLink className="mr-1" />
+                                <span>Copy</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-3">
+                        <button
+                          className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
+                          onClick={handleClose}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    // Setup Profile UI (for both creating and joining)
                     <div className="flex flex-col md:flex-row gap-6">
                       <div className="relative">
                         <div
@@ -266,74 +369,27 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                             >
                               Cancel
                             </button>
-                            <button
-                              className="flex-1 px-4 py-2 text-sm font-medium rounded-md bg-stone-200 hover:bg-stone-300 text-stone-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              onClick={handleStartSession}
-                              disabled={!name.trim()}
-                            >
-                              Start Session
-                            </button>
+                            {isJoiningSession ? (
+                              <button
+                                className="flex-1 px-4 py-2 text-sm font-medium rounded-md bg-stone-200 hover:bg-stone-300 text-stone-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={handleJoinSession}
+                                disabled={!name.trim()}
+                              >
+                                Join Session
+                              </button>
+                            ) : (
+                              <button
+                                className="flex-1 px-4 py-2 text-sm font-medium rounded-md bg-stone-200 hover:bg-stone-300 text-stone-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={handleStartSession}
+                                disabled={!name.trim()}
+                              >
+                                Start Session
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    // Shareable Link UI
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <div className="mb-6">
-                        <div
-                          className="w-24 h-24 rounded-full flex items-center justify-center text-[2.5rem] font-medium mx-auto mb-4"
-                          style={{ backgroundColor: selectedColor }}
-                        >
-                          <span className="text-white/90">
-                            {name ? name[0].toUpperCase() : ""}
-                          </span>
-                        </div>
-                        <p className="text-center text-stone-300">
-                          Session started as{" "}
-                          <span className="font-medium text-stone-200">
-                            {name}
-                          </span>
-                        </p>
-                      </div>
-
-                      <div className="bg-stone-800/50 border border-stone-700/50 rounded-md p-1 mb-8">
-                        <div className="flex items-center">
-                          <div className="flex-1 truncate px-3 py-2 text-stone-300">
-                            {shareableLink}
-                          </div>
-                          <button
-                            className="flex items-center justify-center bg-stone-700/50 hover:bg-stone-600/50 text-stone-200 rounded px-3 py-2 transition-colors"
-                            onClick={handleCopyLink}
-                          >
-                            {linkCopied ? (
-                              <>
-                                <GoCheck className="mr-1" />
-                                <span>Copied</span>
-                              </>
-                            ) : (
-                              <>
-                                <GoLink className="mr-1" />
-                                <span>Copy</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <button
-                          className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
-                          onClick={handleClose}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </motion.div>
                   )}
                 </div>
               </Card>

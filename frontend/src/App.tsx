@@ -74,7 +74,7 @@ const transformOperation = (
   _localOp: TextOperation,
   incomingOp: TextOperation
 ): TextOperation => {
-  // localOp is replaced with incomingOp’s text. More advanced logic
+  // localOp is replaced with incomingOp's text. More advanced logic
   return {
     baseVersion: incomingOp.baseVersion + 1,
     newText: incomingOp.newText,
@@ -122,6 +122,11 @@ const App: React.FC = () => {
   const [fontSize, setFontSize] = useState<string>("16");
   const [wordWrap, setWordWrap] = useState<boolean>(true);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
+
+  // Add these new state variables
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isJoiningSession, setIsJoiningSession] = useState<boolean>(false);
+  const [sessionCreatorName, setSessionCreatorName] = useState<string>("");
 
   useEffect(() => {
     console.log("Font size changed to:", fontSize);
@@ -438,10 +443,67 @@ const App: React.FC = () => {
     console.log("starredEnabled changed to:", starredEnabled);
   }, [starredEnabled]);
 
-  // Add this function to start a session
-  const startSession = () => {
-    setIsSessionActive(true);
+  // Check for session ID in URL when component mounts
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sessionIdFromUrl = url.searchParams.get('session');
+    
+    if (sessionIdFromUrl) {
+      // If there's a session ID in the URL, we're joining an existing session
+      setSessionId(sessionIdFromUrl);
+      setIsJoiningSession(true);
+      
+      // Fetch session info
+      axios.get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
+        .then(response => {
+          setSessionCreatorName(response.data.creatorName);
+        })
+        .catch(error => {
+          console.error("Error fetching session info:", error);
+          // Handle invalid session ID
+          alert("Invalid or expired session link");
+        });
+    }
+  }, []);
 
+  // Modify the startSession function to create a new session
+  const startSession = async () => {
+    try {
+      // Create a new session on the server
+      const response = await axios.post('http://localhost:8080/api/sessions/create', {
+        creatorName: name || displayName || "Anonymous"
+      });
+      
+      const newSessionId = response.data.sessionId;
+      setSessionId(newSessionId);
+      
+      // Update URL with session ID without reloading the page
+      const url = new URL(window.location.href);
+      url.searchParams.set('session', newSessionId);
+      window.history.pushState({}, '', url.toString());
+      
+      // Now activate the WebSocket connection
+      setIsSessionActive(true);
+
+      // Force a cursor update after a short delay to ensure WebSocket is connected
+      setTimeout(() => {
+        debouncedSendCursor({
+          cursorPosition: { lineNumber: 1, column: 1 },
+          selection: null,
+        });
+      }, 500);
+    } catch (error) {
+      console.error("Error creating session:", error);
+      alert("Failed to create session. Please try again.");
+    }
+  };
+
+  // Add a function to join an existing session
+  const joinSession = () => {
+    if (!sessionId) return;
+    
+    setIsSessionActive(true);
+    
     // Force a cursor update after a short delay to ensure WebSocket is connected
     setTimeout(() => {
       debouncedSendCursor({
@@ -528,6 +590,10 @@ const App: React.FC = () => {
               users={users}
               onStartSession={startSession}
               isSessionActive={isSessionActive}
+              sessionId={sessionId}
+              isJoiningSession={isJoiningSession}
+              sessionCreatorName={sessionCreatorName}
+              onJoinSession={joinSession}
             />
             <button
               onClick={() => {
