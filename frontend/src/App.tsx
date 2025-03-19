@@ -16,6 +16,11 @@ import { debounce } from "lodash";
 import ReactLoading from "react-loading";
 import ShareProfile from "./components/ShareProfile";
 import SettingsWindow from "./components/SettingsWindow";
+import {
+  TextOperation,
+  TextOperationManager,
+  OperationAck,
+} from "./TextOperationSystem";
 
 interface CodeExecutionRequest {
   language: string;
@@ -64,23 +69,24 @@ interface User {
   };
 }
 
-interface TextOperation {
-  baseVersion: number; // The doc version the operation is based on
-  newText: string; // The entire updated text or just the diff, depending on your strategy
-  userId: string;
-}
+// interface TextOperation {
+//   baseVersion: number; // The doc version the operation is based on
+//   newText: string; // The entire updated text or just the diff, depending on your strategy
+//   userId: string;
+//   version?: number; // The new version after applying the operation
+// }
 
-const transformOperation = (
-  _localOp: TextOperation,
-  incomingOp: TextOperation
-): TextOperation => {
-  // localOp is replaced with incomingOp's text. More advanced logic
-  return {
-    baseVersion: incomingOp.baseVersion + 1,
-    newText: incomingOp.newText,
-    userId: incomingOp.userId,
-  };
-};
+// const transformOperation = (
+//   _localOp: TextOperation,
+//   incomingOp: TextOperation
+// ): TextOperation => {
+//   // localOp is replaced with incomingOp's text. More advanced logic
+//   return {
+//     baseVersion: incomingOp.baseVersion + 1,
+//     newText: incomingOp.newText,
+//     userId: incomingOp.userId,
+//   };
+// };
 
 const languageVersions = {
   typescript: { version: "1.32.3", name: "TypeScript" },
@@ -101,7 +107,10 @@ const App: React.FC = () => {
   const [width, setWidth] = useState(window.innerWidth * 0.75);
   const [users, setUsers] = useState<User[]>([]);
   const [localVersion, setLocalVersion] = useState<number>(0); // track our local doc version
-  const [pendingOps, setPendingOps] = useState<TextOperation[]>([]); // store ops that have not been Acked
+  const [pendingLocalChanges, setPendingLocalChanges] = useState<string | null>(
+    null
+  );
+  const pendingLocalChangesRef = useRef<string | null>(null);
   const [isEditorLoading, setIsEditorLoading] = useState(true);
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -127,6 +136,9 @@ const App: React.FC = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isJoiningSession, setIsJoiningSession] = useState<boolean>(false);
   const [sessionCreatorName, setSessionCreatorName] = useState<string>("");
+  const [serverDocState, setServerDocState] = useState<string>("");
+  const operationManagerRef = useRef<TextOperationManager | null>(null);
+  const editorRef = useRef<any>(null);
 
   useEffect(() => {
     console.log("Font size changed to:", fontSize);
@@ -177,31 +189,68 @@ const App: React.FC = () => {
   }, [code]);
 
   // useEffect(() => console.log("User state: ", users), [users]);
-  const debouncedSendUpdate = useCallback(
-    debounce((op: TextOperation) => {
-      if (isSessionActive && stompClientRef.current?.connected) {
-        stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
+  // const debouncedSendUpdate = useCallback(
+  //   debounce((newText: string) => {
+  //     if (isSessionActive && stompClientRef.current?.connected) {
+  //       const op: TextOperation = {
+  //         baseVersion: localVersion,
+  //         newText: newText,
+  //         userId: id,
+  //       };
+
+  //       stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
+  //       // Don't clear pending changes here - wait for server acknowledgment
+  //     }
+  //   }, 50), // Slightly increased debounce time
+  //   [isSessionActive, localVersion, id]
+  // );
+
+  const handleEditorDidMount = (editor: any) => {
+    editorRef.current = editor;
+    // Initialize the TextOperationManager
+    operationManagerRef.current = new TextOperationManager(
+      editor,
+      id,
+      localVersion,
+      sendOperation
+    );
+  };
+
+  const sendOperation = useCallback(
+    (operation: TextOperation) => {
+      if (stompClientRef.current?.connected) {
+        // Generate a unique ID for the operation
+        const operationId = `${id}-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 9)}`;
+
+        const operationToSend = {
+          ...operation,
+          id: operationId,
+        };
+
+        console.log("Sending operation to server:", operationToSend);
+
+        stompClientRef.current.send(
+          "/app/operation",
+          {},
+          JSON.stringify(operationToSend)
+        );
+      } else {
+        console.warn("Cannot send operation: session inactive or disconnected");
       }
-    }, 50),
-    [isSessionActive] // Add isSessionActive as a dependency
+    },
+    [isSessionActive, id]
   );
 
   const handleCodeChange = (newCode: string) => {
     if (code === newCode) return;
-
-    const op: TextOperation = {
-      baseVersion: localVersion,
-      newText: newCode,
-      userId: id,
-    };
-
     setCode(newCode);
-    setPendingOps((prevOps) => [...prevOps, op]);
-    setLocalVersion((prev) => prev + 1);
-
-    // Use debounced update for server communication
-    debouncedSendUpdate(op);
   };
+
+  useEffect(() => {
+    pendingLocalChangesRef.current = pendingLocalChanges;
+  }, [pendingLocalChanges]);
 
   // Update debouncedSendCursor to maintain previous selection
   // Add this state to track the local selection
@@ -223,8 +272,8 @@ const App: React.FC = () => {
       };
 
       if (stompClientRef.current?.connected) {
-        console.log("NAMES: ", name, displayName);
-        console.log("Sending cursor data", message);
+        // console.log("NAMES: ", name, displayName);
+        // console.log("Sending cursor data", message);
         stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
       }
     }, 50),
@@ -251,7 +300,6 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Only establish connection if session is active
     if (isSessionActive) {
       const socket = new SockJS("http://localhost:8080/ws");
       const stompClient = Stomp.over(socket);
@@ -260,62 +308,63 @@ const App: React.FC = () => {
         console.log("Connected: " + frame);
         stompClientRef.current = stompClient;
 
-        // Subscribe to topics
-        stompClient.subscribe("/topic/ot", function (message: any) {
-          const incomingOp = JSON.parse(message.body) as TextOperation;
+        // Subscribe to operations
+        stompClient.subscribe("/topic/operations", function (message: any) {
+          const operation = JSON.parse(message.body) as TextOperation;
+          console.log("Received operation:", operation);
 
-          // Only apply changes if they're not from the current user
-          if (incomingOp.userId !== id) {
-            // Rest of your code handling OT operations...
-            if (incomingOp.baseVersion >= localVersion) {
-              if (codeRef.current !== incomingOp.newText) {
-                setCode((prevCode) => {
-                  if (prevCode === incomingOp.newText) return prevCode;
-                  return incomingOp.newText;
-                });
-              }
-              setLocalVersion(incomingOp.baseVersion);
-            } else {
-              setPendingOps((prevPending) => {
-                return prevPending.map((op) =>
-                  transformOperation(op, incomingOp)
-                );
-              });
-              // Don't trigger a re-render if the text is the same
-              if (codeRef.current !== incomingOp.newText) {
-                setCode((prevCode) => {
-                  if (prevCode === incomingOp.newText) return prevCode;
-                  return incomingOp.newText;
-                });
-              }
-              setLocalVersion(incomingOp.baseVersion);
-            }
+          // Apply the operation to the editor
+          if (operationManagerRef.current) {
+            operationManagerRef.current.applyOperation(operation);
           }
         });
 
+        // Subscribe to operation acknowledgments
+        stompClient.subscribe("/topic/operation-ack", function (message: any) {
+          const ack = JSON.parse(message.body) as OperationAck;
+
+          console.log("Received operation acknowledgment:", ack);
+
+          // Handle operation acknowledgment
+          if (operationManagerRef.current) {
+            operationManagerRef.current.acknowledgeOperation(ack);
+          }
+
+          // Update local version
+          if (ack.userId === id) {
+            setLocalVersion(ack.version);
+          }
+        });
+
+        // Subscribe to cursor updates
         stompClient.subscribe("/topic/cursors", function (message: any) {
           const cursorsData = JSON.parse(message.body);
-          console.log(cursorsData, "CURSOR DATA");
           setUsers(cursorsData);
         });
 
-        // IMPORTANT: Send an initial cursor message immediately after connection
-        // const initialCursorMessage = {
-        //   user: {
-        //     id: id,
-        //     name: name || displayName,
-        //     color: color,
-        //     cursorPosition: { lineNumber: 1, column: 1 },
-        //     selection: null,
-        //   },
-        // };
+        // Subscribe to document state events (for initial load)
+        stompClient.subscribe("/topic/document-state", function (message: any) {
+          const documentState = JSON.parse(message.body);
 
-        // stompClient.send(
-        //   "/app/cursor",
-        //   {},
-        //   JSON.stringify(initialCursorMessage)
-        // );
-        // console.log("Sent initial cursor message after connection");
+          // Update the editor with the full document state
+          setCode(documentState.content);
+
+          // Update local version
+          setLocalVersion(documentState.version);
+
+          if (operationManagerRef.current) {
+            operationManagerRef.current.setVersion(documentState.version);
+          }
+        });
+
+        // Request initial document state
+        stompClient.send(
+          "/app/get-document-state",
+          {},
+          JSON.stringify({
+            sessionId: sessionId,
+          })
+        );
       });
 
       return () => {
@@ -335,7 +384,7 @@ const App: React.FC = () => {
         stompClientRef.current = null;
       }
     };
-  }, [isSessionActive, id, name, displayName, color]);
+  }, [isSessionActive, id, sessionId]);
 
   const handleRunCode = async () => {
     setIsLoading(true);
@@ -446,19 +495,20 @@ const App: React.FC = () => {
   // Check for session ID in URL when component mounts
   useEffect(() => {
     const url = new URL(window.location.href);
-    const sessionIdFromUrl = url.searchParams.get('session');
-    
+    const sessionIdFromUrl = url.searchParams.get("session");
+
     if (sessionIdFromUrl) {
       // If there's a session ID in the URL, we're joining an existing session
       setSessionId(sessionIdFromUrl);
       setIsJoiningSession(true);
-      
+
       // Fetch session info
-      axios.get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
-        .then(response => {
+      axios
+        .get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
+        .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
-        .catch(error => {
+        .catch((error) => {
           console.error("Error fetching session info:", error);
           // Handle invalid session ID
           alert("Invalid or expired session link");
@@ -470,18 +520,21 @@ const App: React.FC = () => {
   const startSession = async () => {
     try {
       // Create a new session on the server
-      const response = await axios.post('http://localhost:8080/api/sessions/create', {
-        creatorName: name || displayName || "Anonymous"
-      });
-      
+      const response = await axios.post(
+        "http://localhost:8080/api/sessions/create",
+        {
+          creatorName: name || displayName || "Anonymous",
+        }
+      );
+
       const newSessionId = response.data.sessionId;
       setSessionId(newSessionId);
-      
+
       // Update URL with session ID without reloading the page
       const url = new URL(window.location.href);
-      url.searchParams.set('session', newSessionId);
-      window.history.pushState({}, '', url.toString());
-      
+      url.searchParams.set("session", newSessionId);
+      window.history.pushState({}, "", url.toString());
+
       // Now activate the WebSocket connection
       setIsSessionActive(true);
 
@@ -501,9 +554,9 @@ const App: React.FC = () => {
   // Add a function to join an existing session
   const joinSession = () => {
     if (!sessionId) return;
-    
+
     setIsSessionActive(true);
-    
+
     // Force a cursor update after a short delay to ensure WebSocket is connected
     setTimeout(() => {
       debouncedSendCursor({
@@ -633,6 +686,7 @@ const App: React.FC = () => {
                   fontSize={fontSize}
                   wordWrap={wordWrap}
                   showLineNumbers={showLineNumbers}
+                  onEditorDidMount={handleEditorDidMount}
                 />
               </div>
             </div>

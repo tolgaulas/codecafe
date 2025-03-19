@@ -22,15 +22,15 @@ public class EditorController {
 
     // This method handles OT operations (for text changes) as before.
     // For OT, you may already have an endpoint similar to this.
-    @MessageMapping("/ot")
-    @SendTo("/topic/ot")
-    public TextOperation handleOtOperation(@Payload TextOperation op) {
-        // Process the operation—merge, update version, etc.
-        // For the sake of example, simply return the updated op.
-        // (Your existing OT logic goes here)
-        op.setBaseVersion(op.getBaseVersion() + 1);
-        return op;
-    }
+//    @MessageMapping("/ot")
+//    @SendTo("/topic/ot")
+//    public TextOperation handleOtOperation(@Payload TextOperation op) {
+//        // Process the operation—merge, update version, etc.
+//        // For the sake of example, simply return the updated op.
+//        // (Your existing OT logic goes here)
+//        op.setBaseVersion(op.getBaseVersion() + 1);
+//        return op;
+//    }
 
     // New endpoint to receive cursor data from a client.
     @MessageMapping("/cursor")

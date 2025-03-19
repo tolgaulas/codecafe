@@ -43,6 +43,7 @@ interface CodeEditorProps {
   fontSize?: string;
   wordWrap?: boolean;
   showLineNumbers?: boolean;
+  onEditorDidMount?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
 }
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -57,6 +58,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   fontSize,
   wordWrap,
   showLineNumbers,
+  onEditorDidMount,
 }) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -449,6 +451,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     );
 
     updateDecorations();
+    if (onEditorDidMount) {
+      onEditorDidMount(editor);
+    }
   };
 
   const handleEditorChange = (value: string | undefined) => {

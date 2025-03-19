@@ -1,27 +1,50 @@
 package com.codecafe.backend.controller;
 
+import com.codecafe.backend.dto.DocumentState;
+import com.codecafe.backend.dto.OperationAck;
 import com.codecafe.backend.dto.TextOperation;
 import com.codecafe.backend.service.OtService;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.handler.annotation.SendTo;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 @Controller
 public class OtController {
     private final OtService otService;
-    private String code = "// Hello there";
-    private int version = 0;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public OtController(OtService otService) {
+    public OtController(OtService otService, SimpMessagingTemplate messagingTemplate) {
         this.otService = otService;
+        this.messagingTemplate = messagingTemplate;
     }
 
-    @MessageMapping("/otOperation")
-    @SendTo("/topic/ot")
-    public TextOperation handleOtOperation(@Payload TextOperation op) {
-        code = op.getNewText();
-        version++;
-        return new TextOperation(version, code, op.getUserId());
+    /**
+     * Handle incoming operations from clients
+     */
+    @MessageMapping("/operation")
+    public void handleOperation(@Payload TextOperation operation) {
+        // Process the operation (transform if necessary and apply)
+        TextOperation processedOp = otService.processOperation(operation);
+
+        // Broadcast the processed operation to all clients
+        messagingTemplate.convertAndSend("/topic/operations", processedOp);
+
+        // Send acknowledgment back to clients
+        OperationAck ack = new OperationAck(operation.getId(), processedOp.getVersion(), operation.getUserId());
+        messagingTemplate.convertAndSend("/topic/operation-ack", ack);
+    }
+
+    /**
+     * Handle document state requests
+     */
+    @MessageMapping("/get-document-state")
+    public void getDocumentState() {
+        DocumentState state = new DocumentState(
+                otService.getDocumentContent(),
+                otService.getCurrentVersion()
+        );
+
+        messagingTemplate.convertAndSend("/topic/document-state", state);
     }
 }
