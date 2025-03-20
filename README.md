@@ -1,5 +1,6 @@
 # CodeCafé
 ![demo (2)](https://github.com/user-attachments/assets/e3752a5d-492f-4af9-b85e-dbe7b8a11510)
+[Click here to watch the demo video!](https://www.youtube.com/watch?v=yGa2v5KMdXM&ab_channel=MarkoTsymbaliuk)
 
 
 A real-time collaborative development environment that makes coding together as easy as sharing a document. Think VS Code, but multiplayer.
