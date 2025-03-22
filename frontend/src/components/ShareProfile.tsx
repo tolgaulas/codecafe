@@ -32,7 +32,6 @@ interface User {
   };
 }
 
-// Update your ShareProfile component to include these new props and functionality
 interface ShareProfileProps {
   onNameChange: (name: string) => void;
   onColorChange: (color: string) => void;
@@ -43,6 +42,7 @@ interface ShareProfileProps {
   isJoiningSession: boolean;
   sessionCreatorName: string;
   onJoinSession: () => void;
+  isSessionCreator: boolean;
 }
 
 const ShareProfile: React.FC<ShareProfileProps> = ({
@@ -54,7 +54,8 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   sessionId,
   isJoiningSession,
   sessionCreatorName,
-  onJoinSession
+  onJoinSession,
+  isSessionCreator = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -63,8 +64,18 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   const [sessionStarted, setSessionStarted] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
 
+  // Filter out colors that have already been picked by users
+  const getAvailableColors = () => {
+    if (!users || users.length === 0) return COLORS;
+
+    const usedColors = users.map((user) => user.color);
+    return COLORS.filter((color) => !usedColors.includes(color));
+  };
+
+  const availableColors = getAvailableColors();
+
   // Use the sessionId from props instead
-  const shareableLink = sessionId 
+  const shareableLink = sessionId
     ? `${window.location.origin}${window.location.pathname}?session=${sessionId}`
     : "";
 
@@ -177,11 +188,11 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   // Function to copy session link to clipboard
   const copySessionLink = () => {
     if (!sessionId) return;
-    
+
     const url = new URL(window.location.href);
-    url.searchParams.set('session', sessionId);
+    url.searchParams.set("session", sessionId);
     navigator.clipboard.writeText(url.toString());
-    
+
     setLinkCopied(true);
     setTimeout(() => setLinkCopied(false), 2000);
   };
@@ -199,6 +210,28 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
       setSessionStarted(true);
     }
   }, [isSessionActive]);
+
+  // Get the display title based on the current state
+  const getDialogTitle = () => {
+    if (isJoiningSession && !isSessionActive) {
+      return `Join ${sessionCreatorName || "Anonymous"}'s Session`;
+    } else if (isSessionActive) {
+      return "Share Session";
+    } else {
+      return "Create Session";
+    }
+  };
+
+  // Get the subtitle based on the current state
+  const getDialogSubtitle = () => {
+    if (isJoiningSession && !isSessionActive) {
+      return "Enter your name to join this collaborative session";
+    } else if (isSessionActive) {
+      return "Copy this link and send it to anyone you want to collaborate with";
+    } else {
+      return "Customize how others will see you during the collaboration session";
+    }
+  };
 
   return (
     <>
@@ -225,21 +258,15 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                   {/* Title Section */}
                   <div className="mb-10">
                     <h2 className="text-2xl font-semibold text-stone-200">
-                      {isJoiningSession 
-                        ? `Join ${sessionCreatorName || "Shared"}'s Session` 
-                        : (isSessionActive ? "Share Your Session" : "Create Session")}
+                      {getDialogTitle()}
                     </h2>
                     <p className="text-stone-400 text-sm mt-1">
-                      {isJoiningSession
-                        ? "Enter your name to join this collaborative session"
-                        : (isSessionActive 
-                            ? "Copy this link and send it to anyone you want to collaborate with" 
-                            : "Customize how others will see you during the collaboration session")}
+                      {getDialogSubtitle()}
                     </p>
                   </div>
 
-                  {isSessionActive && !isJoiningSession ? (
-                    // Shareable Link UI (for session creator)
+                  {isSessionActive ? (
+                    // Shareable Link UI (for anyone in a session)
                     <motion.div
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -255,10 +282,11 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                           </span>
                         </div>
                         <p className="text-center text-stone-300">
-                          Session started as{" "}
-                          <span className="font-medium text-stone-200">
-                            {name}
-                          </span>
+                          {isSessionCreator
+                            ? `Session started as ${name}`
+                            : `Session started by ${
+                                sessionCreatorName || "Anonymous"
+                              }`}
                         </p>
                       </div>
 
@@ -320,7 +348,11 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                               className="absolute left-1/2 md:left-0 transform -translate-x-1/2 md:translate-x-0 top-[95px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
                             >
                               <div className="flex flex-wrap gap-1 w-24">
-                                {COLORS.map((color) => (
+                                {/* Show only available colors or all colors if filtering results in no options */}
+                                {(availableColors.length > 0
+                                  ? availableColors
+                                  : COLORS
+                                ).map((color) => (
                                   <div
                                     key={color}
                                     className={`w-5 h-5 rounded-full cursor-pointer ${
