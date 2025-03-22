@@ -114,6 +114,7 @@ const App: React.FC = () => {
   const [isEditorLoading, setIsEditorLoading] = useState(true);
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isSessionCreator, setIsSessionCreator] = useState(false);
   const [editorLanguage, setEditorLanguage] =
     useState<keyof typeof languageVersions>("javascript");
 
@@ -529,6 +530,7 @@ const App: React.FC = () => {
 
       const newSessionId = response.data.sessionId;
       setSessionId(newSessionId);
+      setIsSessionCreator(true); // Mark this user as the session creator
 
       // Update URL with session ID without reloading the page
       const url = new URL(window.location.href);
@@ -647,6 +649,7 @@ const App: React.FC = () => {
               isJoiningSession={isJoiningSession}
               sessionCreatorName={sessionCreatorName}
               onJoinSession={joinSession}
+              isSessionCreator={isSessionCreator}
             />
             <button
               onClick={() => {
