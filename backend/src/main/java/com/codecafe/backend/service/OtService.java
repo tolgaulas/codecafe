@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class OtService {
-    private String documentContent = "// Hello there";
+    private String documentContent = "";
     private int currentVersion = 0;
     private final List<TextOperation> operationHistory = new ArrayList<>();
     private final ReentrantLock lock = new ReentrantLock();
