@@ -1,83 +1,83 @@
 import React, { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
-import { GoPersonAdd, GoLink, GoCheck } from "react-icons/go";
 import { motion, AnimatePresence } from "framer-motion";
+import { VscCheck } from "react-icons/vsc";
 
-const COLORS = [
-  "#FF6B6B",
-  "#4ECDC4",
-  "#45B7D1",
-  "#96CEB4",
-  "#FFEEAD",
-  "#D4A5A5",
-  "#9B59B6",
-  "#3498DB",
-  "#E74C3C",
-  "#2ECC71",
+interface SettingsWindowProps {
+  isOpen: boolean;
+  onClose: () => void;
+  // New props for language handling
+  currentLanguage: string;
+  onLanguageChange: (language: string) => void;
+  availableLanguages: Array<{ value: string; label: string }>;
+  currentTheme: "codeCafeTheme" | "transparentTheme"; // Add this
+  onThemeChange: (theme: "codeCafeTheme" | "transparentTheme") => void; // Add this
+  currentFontSize: string;
+  onFontSizeChange: (fontSize: string) => void;
+  currentWordWrap: boolean;
+  onWordWrapChange: (wordWrap: boolean) => void;
+  currentShowLineNumbers: boolean;
+  onShowLineNumbersChange: (showLineNumbers: boolean) => void;
+}
+
+const THEMES = [
+  { value: "codeCafeTheme", label: "CodeCafe" },
+  { value: "transparentTheme", label: "VS Code" },
 ];
 
-interface User {
-  id: string;
-  name: string;
-  color: string;
-  cursorPosition: {
-    lineNumber: number;
-    column: number;
-  };
-  selection?: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  };
-}
+const FONT_SIZES = [
+  { value: "12", label: "Small" },
+  { value: "14", label: "Medium" },
+  { value: "16", label: "Large" },
+  { value: "18", label: "Extra Large" },
+];
 
-interface ShareProfileProps {
-  onNameChange: (name: string) => void;
-  onColorChange: (color: string) => void;
-  users: User[];
-  onStartSession: () => void;
-  isSessionActive: boolean;
-  sessionId: string | null;
-  isJoiningSession: boolean;
-  sessionCreatorName: string;
-  onJoinSession: () => void;
-  isSessionCreator: boolean; // New prop to determine if current user is the creator
-}
-
-const ShareProfile: React.FC<ShareProfileProps> = ({
-  onNameChange,
-  onColorChange,
-  users,
-  onStartSession,
-  isSessionActive,
-  sessionId,
-  isJoiningSession,
-  sessionCreatorName,
-  onJoinSession,
-  isSessionCreator = false, // Default to false
+const SettingsWindow: React.FC<SettingsWindowProps> = ({
+  isOpen,
+  onClose,
+  currentLanguage,
+  onLanguageChange,
+  availableLanguages,
+  currentTheme,
+  onThemeChange,
+  currentFontSize,
+  onFontSizeChange,
+  currentWordWrap,
+  onWordWrapChange,
+  currentShowLineNumbers,
+  onShowLineNumbersChange,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const [selectedColor, setSelectedColor] = useState(COLORS[0]);
-  const [name, setName] = useState("");
-  const [sessionStarted, setSessionStarted] = useState(false);
-  const [linkCopied, setLinkCopied] = useState(false);
+  // Settings state
+  const [theme, setTheme] = useState(currentTheme);
+  const [fontSize, setFontSize] = useState(currentFontSize);
+  // Use the passed currentLanguage for initial state
+  const [language, setLanguage] = useState(currentLanguage);
+  // const [autoSave, setAutoSave] = useState(true);
+  const [wordWrap, setWordWrap] = useState(currentWordWrap);
+  const [showLineNumbers, setShowLineNumbers] = useState(
+    currentShowLineNumbers
+  );
 
-  // Filter out colors that have already been picked by users
-  const getAvailableColors = () => {
-    if (!users || users.length === 0) return COLORS;
+  // Update local state when prop changes
+  useEffect(() => {
+    setLanguage(currentLanguage);
+  }, [currentTheme, isOpen]);
 
-    const usedColors = users.map((user) => user.color);
-    return COLORS.filter((color) => !usedColors.includes(color));
-  };
+  useEffect(() => {
+    setTheme(currentTheme);
+  }, [currentTheme, isOpen]);
 
-  const availableColors = getAvailableColors();
+  useEffect(() => {
+    setFontSize(currentFontSize);
+  }, [currentFontSize, isOpen]);
 
-  // Use the sessionId from props instead
-  const shareableLink = sessionId
-    ? `${window.location.origin}${window.location.pathname}?session=${sessionId}`
-    : "";
+  useEffect(() => {
+    setWordWrap(currentWordWrap);
+  }, [currentWordWrap, isOpen]);
+
+  useEffect(() => {
+    setShowLineNumbers(currentShowLineNumbers);
+  }, [currentShowLineNumbers, isOpen]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -102,326 +102,240 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
     }
   }, [isOpen]);
 
-  const handleStartSession = () => {
-    console.log("Starting session with:", {
-      name,
-      color: selectedColor,
-    });
-    setSessionStarted(true);
-    onStartSession(); // Call parent's handler
-  };
-
-  const handleJoinSession = () => {
-    console.log("Joining session with:", {
-      name,
-      color: selectedColor,
-    });
-    onJoinSession(); // Call parent's handler
-    setSessionStarted(true);
-    handleClose(); // Close the dialog after joining
-  };
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareableLink);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
   const handleClose = () => {
-    setIsOpen(false);
-    // setSessionStarted(false);
-    setIsColorPickerOpen(false);
+    onClose();
   };
 
-  const renderShareButtonOrUserAvatars = () => {
-    if (!sessionStarted) {
-      return (
-        <button
-          className="flex items-center gap-1.5 px-2 text-sm  text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
-          onClick={() => setIsOpen(true)}
-        >
-          <GoPersonAdd className="text-lg" />
-          <span>Share</span>
-        </button>
-      );
+  const handleSaveSettings = () => {
+    // Save settings logic here
+    console.log("Saving settings:", {
+      theme,
+      fontSize,
+      language,
+      // autoSave,
+      wordWrap,
+      showLineNumbers,
+    });
+
+    // Call the parent's onLanguageChange if language was changed
+    if (language !== currentLanguage) {
+      onLanguageChange(language);
+    }
+    if (theme !== currentTheme) {
+      onThemeChange(theme as "codeCafeTheme" | "transparentTheme");
     }
 
+    if (fontSize !== currentFontSize) {
+      onFontSizeChange(fontSize); // Add this line
+    }
+
+    if (wordWrap !== currentWordWrap) {
+      onWordWrapChange(wordWrap);
+    }
+
+    if (showLineNumbers !== currentShowLineNumbers) {
+      onShowLineNumbersChange(showLineNumbers);
+    }
+
+    onClose();
+  };
+
+  // Toggle switch component with consistent styling
+  const ToggleSwitch = ({
+    checked,
+    onChange,
+    label,
+  }: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    label: string;
+  }) => {
     return (
-      <div className="flex items-center gap-1 ml-auto">
-        {/* Display user avatars */}
-        {users.slice(0, 3).map((user) => (
-          <div
-            key={user.id}
-            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shadow-md`}
-            style={{
-              backgroundColor: user.color,
-            }}
-          >
-            <span className="text-white/90">
-              {user.name ? user.name[0].toUpperCase() : ""}
-            </span>
-          </div>
-        ))}
-
-        {/* Additional users count */}
-        {users.length > 3 && (
-          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-stone-700 text-stone-300 shadow-md">
-            +{users.length - 3}
-          </div>
-        )}
-
-        {/* Button to reopen share dialog */}
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-900 hover:bg-stone-700 cursor-pointer transition-colors shadow-md"
-          onClick={() => setIsOpen(true)}
+      <div className="flex items-center justify-between mb-4">
+        <label className="text-sm font-medium text-stone-300">{label}</label>
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          className="relative h-[24px] w-[44px] rounded-full bg-stone-800 border border-stone-700/50 focus:outline-none transition-colors duration-300"
+          style={{
+            backgroundColor: checked ? "rgb(87 83 78)" : "rgb(41 37 36)",
+          }}
         >
-          <div className="flex items-center justify-center gap-[3px]">
-            <div className="w-1 h-1 rounded-full bg-stone-400"></div>
-            <div className="w-1 h-1 rounded-full bg-stone-400"></div>
-            <div className="w-1 h-1 rounded-full bg-stone-400"></div>
-          </div>
-        </div>
+          <div
+            className="absolute rounded-full bg-stone-400"
+            style={{
+              top: "2px",
+              left: "2px",
+              height: "18px",
+              width: "18px",
+              backgroundColor: checked
+                ? "rgb(229 229 229)"
+                : "rgb(168 162 158)",
+              transform: checked ? "translateX(20px)" : "translateX(0px)",
+              transition: "all 300ms cubic-bezier(0.4, 0.0, 0.2, 1)",
+            }}
+          />
+        </button>
       </div>
     );
   };
 
-  // Function to copy session link to clipboard
-  const copySessionLink = () => {
-    if (!sessionId) return;
-
-    const url = new URL(window.location.href);
-    url.searchParams.set("session", sessionId);
-    navigator.clipboard.writeText(url.toString());
-
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
-
-  // Show join session dialog automatically if joining from a link
-  useEffect(() => {
-    if (isJoiningSession && !isSessionActive) {
-      setIsOpen(true);
-    }
-  }, [isJoiningSession, isSessionActive]);
-
-  // Update sessionStarted when isSessionActive changes
-  useEffect(() => {
-    if (isSessionActive) {
-      setSessionStarted(true);
-    }
-  }, [isSessionActive]);
-
-  // Determine who is the session owner for display purposes
-  const sessionOwnerName = isSessionCreator ? name : sessionCreatorName;
+  // Select component with consistent styling
+  const StyledSelect = ({
+    value,
+    onChange,
+    options,
+    label,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    options: Array<{ value: string; label: string }>;
+    label: string;
+  }) => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-stone-300 mb-1.5">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
-    <>
-      {renderShareButtonOrUserAvatars()}
-      <AnimatePresence>
-        {isOpen && (
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-[5px] flex items-center justify-center z-50"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                handleClose();
-              }
-            }}
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-[5px] flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              handleClose();
+            }
+          }}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="w-full max-w-[40rem] mx-4 max-h-[90vh]"
           >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="w-full max-w-[32rem] mx-4 max-h-[90vh]"
-            >
-              <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-hidden">
-                <div className="px-8 py-6 overflow-y-auto max-h-[80vh]">
-                  {/* Title Section */}
-                  <div className="mb-10">
-                    <h2 className="text-2xl font-semibold text-stone-200">
-                      {isJoiningSession
-                        ? `Join ${sessionCreatorName || "Shared"}'s Session`
-                        : isSessionCreator
-                        ? isSessionActive
-                          ? "Share Your Session"
-                          : "Create Session"
-                        : `Share ${sessionCreatorName || "Shared"}'s Session`}
-                    </h2>
-                    <p className="text-stone-400 text-sm mt-1">
-                      {isJoiningSession
-                        ? "Enter your name to join this collaborative session"
-                        : isSessionActive
-                        ? "Copy this link and send it to anyone you want to collaborate with"
-                        : "Customize how others will see you during the collaboration session"}
-                    </p>
+            <Card className="bg-neutral-900/80 backdrop-blur-lg border border-stone-800/50 shadow-2xl rounded-xl overflow-hidden">
+              <div className="px-8 py-6 overflow-y-auto max-h-[80vh]">
+                {/* Title Section */}
+                <div className="mb-8">
+                  <h2 className="text-2xl font-semibold text-stone-200">
+                    Settings
+                  </h2>
+                  <p className="text-stone-400 text-sm mt-1">
+                    Customize your editor experience
+                  </p>
+                </div>
+
+                {/* Settings Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10">
+                  {/* Left Column */}
+                  <div>
+                    {/* Appearance Section */}
+                    <div className="mb-6">
+                      <h3 className="text-md font-medium text-stone-300 border-b border-stone-700/50 pb-2 mb-4">
+                        Appearance
+                      </h3>
+
+                      <StyledSelect
+                        value={theme}
+                        onChange={(value: string) =>
+                          setTheme(
+                            value as "codeCafeTheme" | "transparentTheme"
+                          )
+                        }
+                        options={THEMES}
+                        label="Theme"
+                      />
+
+                      <StyledSelect
+                        value={fontSize}
+                        onChange={setFontSize}
+                        options={FONT_SIZES}
+                        label="Font Size"
+                      />
+                    </div>
+
+                    {/* Language Section */}
+                    <div className="mb-6">
+                      <h3 className="text-md font-medium text-stone-300 border-b border-stone-700/50 pb-2 mb-4">
+                        Language
+                      </h3>
+
+                      <StyledSelect
+                        value={language}
+                        onChange={setLanguage}
+                        options={availableLanguages}
+                        label="Editor Language"
+                      />
+                    </div>
                   </div>
 
-                  {isSessionActive ? (
-                    // Shareable Link UI (for anyone in a session)
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <div className="mb-6">
-                        <div
-                          className="w-24 h-24 rounded-full flex items-center justify-center text-[2.5rem] font-medium mx-auto mb-4"
-                          style={{ backgroundColor: selectedColor }}
-                        >
-                          <span className="text-white/90">
-                            {name ? name[0].toUpperCase() : ""}
-                          </span>
-                        </div>
-                        <p className="text-center text-stone-300">
-                          {isSessionCreator
-                            ? `Session started as ${name}`
-                            : `Session started by ${
-                                sessionCreatorName || "Anonymous"
-                              }`}
-                        </p>
-                      </div>
+                  {/* Right Column */}
+                  <div>
+                    {/* Editor Section */}
+                    <div className="mb-6">
+                      <h3 className="text-md font-medium text-stone-300 border-b border-stone-700/50 pb-2 mb-4">
+                        Editor
+                      </h3>
 
-                      <div className="bg-stone-800/50 border border-stone-700/50 rounded-md p-1 mb-8">
-                        <div className="flex items-center">
-                          <div className="flex-1 truncate px-3 py-2 text-stone-300">
-                            {shareableLink}
-                          </div>
-                          <button
-                            className="flex items-center justify-center bg-stone-700/50 hover:bg-stone-600/50 text-stone-200 rounded px-3 py-2 transition-colors"
-                            onClick={copySessionLink}
-                          >
-                            {linkCopied ? (
-                              <>
-                                <GoCheck className="mr-1" />
-                                <span>Copied</span>
-                              </>
-                            ) : (
-                              <>
-                                <GoLink className="mr-1" />
-                                <span>Copy</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
+                      <ToggleSwitch
+                        checked={wordWrap}
+                        onChange={setWordWrap}
+                        label="Word Wrap"
+                      />
 
-                      <div className="flex gap-3">
-                        <button
-                          className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
-                          onClick={handleClose}
-                        >
-                          Close
-                        </button>
-                      </div>
-                    </motion.div>
-                  ) : (
-                    // Setup Profile UI (for both creating and joining)
-                    <div className="flex flex-col md:flex-row gap-6">
-                      <div className="relative">
-                        <div
-                          className="w-[6.5rem] h-[6.5rem] rounded-full flex items-center justify-center text-5xl font-medium cursor-pointer shadow-lg relative overflow-hidden mx-auto md:mx-0"
-                          style={{ backgroundColor: selectedColor }}
-                          onClick={() =>
-                            setIsColorPickerOpen(!isColorPickerOpen)
-                          }
-                        >
-                          <span className="text-white/90">
-                            {name ? name[0].toUpperCase() : ""}
-                          </span>
-                        </div>
-                        <AnimatePresence>
-                          {isColorPickerOpen && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -12 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, y: -12 }}
-                              transition={{ duration: 0.2 }}
-                              className="absolute left-1/2 md:left-0 transform -translate-x-1/2 md:translate-x-0 top-[95px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
-                            >
-                              <div className="flex flex-wrap gap-1 w-24">
-                                {/* Show only available colors or all colors if filtering results in no options */}
-                                {(availableColors.length > 0
-                                  ? availableColors
-                                  : COLORS
-                                ).map((color) => (
-                                  <div
-                                    key={color}
-                                    className={`w-5 h-5 rounded-full cursor-pointer ${
-                                      selectedColor === color
-                                        ? "ring-2 ring-white/40"
-                                        : ""
-                                    }`}
-                                    style={{ backgroundColor: color }}
-                                    onClick={() => {
-                                      setSelectedColor(color);
-                                      onColorChange(color);
-                                      setIsColorPickerOpen(false);
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      <div className="flex-1 space-y-4">
-                        <div>
-                          <label className="block text-sm font-medium text-stone-300 mb-1.5">
-                            Display Name
-                          </label>
-                          <input
-                            value={name}
-                            onChange={(e) => {
-                              setName(e.target.value);
-                              onNameChange(e.target.value);
-                              console.log("SETTING NAME", e.target.value);
-                            }}
-                            placeholder="Enter your name"
-                            className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 placeholder-stone-500 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"
-                          />
-                          <p className="text-stone-500 text-[12px] mt-1.5">
-                            This name will be visible to other participants in
-                            the session
-                          </p>
-                        </div>
-                        <div className="pt-2">
-                          <div className="flex gap-3 mt-4 md:mt-[54px]">
-                            <button
-                              className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
-                              onClick={handleClose}
-                            >
-                              Cancel
-                            </button>
-                            {isJoiningSession ? (
-                              <button
-                                className="flex-1 px-4 py-2 text-sm font-medium rounded-md bg-stone-200 hover:bg-stone-300 text-stone-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={handleJoinSession}
-                                disabled={!name.trim()}
-                              >
-                                Join Session
-                              </button>
-                            ) : (
-                              <button
-                                className="flex-1 px-4 py-2 text-sm font-medium rounded-md bg-stone-200 hover:bg-stone-300 text-stone-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                onClick={handleStartSession}
-                                disabled={!name.trim()}
-                              >
-                                Start Session
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                      <ToggleSwitch
+                        checked={showLineNumbers}
+                        onChange={setShowLineNumbers}
+                        label="Show Line Numbers"
+                      />
+
+                      {/* <ToggleSwitch
+                        checked={autoSave}
+                        onChange={setAutoSave}
+                        label="Auto Save"
+                      /> */}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </Card>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-    </>
+
+                {/* Footer Buttons */}
+                <div className="flex gap-3 mt-8">
+                  <button
+                    className="flex-1 px-4 py-2 text-sm font-medium rounded-md border border-stone-700/50 text-stone-300 hover:bg-stone-800/50 hover:text-stone-200 transition-colors"
+                    onClick={handleClose}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="flex-1 px-4 py-2 text-sm font-medium rounded-md bg-stone-200 hover:bg-stone-300 text-stone-900 transition-colors flex items-center justify-center gap-1.5"
+                    onClick={handleSaveSettings}
+                  >
+                    <VscCheck className="text-lg" />
+                    <span>Save Changes</span>
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 };
 
-export default ShareProfile;
+export default SettingsWindow;

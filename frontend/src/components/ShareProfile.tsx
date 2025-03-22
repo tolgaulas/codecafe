@@ -43,6 +43,8 @@ interface ShareProfileProps {
   sessionCreatorName: string;
   onJoinSession: () => void;
   isSessionCreator: boolean;
+  currentUserName: string; // Add current user's name
+  currentUserColor: string; // Add current user's color
 }
 
 const ShareProfile: React.FC<ShareProfileProps> = ({
@@ -56,23 +58,41 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   sessionCreatorName,
   onJoinSession,
   isSessionCreator = false,
+  currentUserName, // Use this for the current user's name
+  currentUserColor, // Use this for the current user's color
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const [selectedColor, setSelectedColor] = useState(COLORS[0]);
-  const [name, setName] = useState("");
+  const [selectedColor, setSelectedColor] = useState(
+    currentUserColor || COLORS[0]
+  );
+  const [name, setName] = useState(currentUserName || "");
   const [sessionStarted, setSessionStarted] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [availableColors, setAvailableColors] = useState<string[]>(COLORS);
+
+  // Update internal state when props change
+  useEffect(() => {
+    setSelectedColor(currentUserColor || COLORS[0]);
+  }, [currentUserColor]);
+
+  useEffect(() => {
+    setName(currentUserName || "");
+  }, [currentUserName]);
 
   // Filter out colors that have already been picked by users
-  const getAvailableColors = () => {
-    if (!users || users.length === 0) return COLORS;
+  useEffect(() => {
+    const getAvailableColors = () => {
+      if (!users || users.length === 0) return COLORS;
 
-    const usedColors = users.map((user) => user.color);
-    return COLORS.filter((color) => !usedColors.includes(color));
-  };
+      const usedColors = users.map((user) => user.color);
+      return COLORS.filter(
+        (color) => !usedColors.includes(color) || color === currentUserColor
+      );
+    };
 
-  const availableColors = getAvailableColors();
+    setAvailableColors(getAvailableColors());
+  }, [users, currentUserColor]);
 
   // Use the sessionId from props instead
   const shareableLink = sessionId
@@ -108,6 +128,8 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
       color: selectedColor,
     });
     setSessionStarted(true);
+    onNameChange(name); // Update parent component with name
+    onColorChange(selectedColor); // Update parent component with color
     onStartSession(); // Call parent's handler
   };
 
@@ -116,6 +138,8 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
       name,
       color: selectedColor,
     });
+    onNameChange(name); // Update parent component with name
+    onColorChange(selectedColor); // Update parent component with color
     onJoinSession(); // Call parent's handler
     setSessionStarted(true);
     handleClose(); // Close the dialog after joining
@@ -134,7 +158,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   };
 
   const renderShareButtonOrUserAvatars = () => {
-    if (!sessionStarted) {
+    if (!sessionStarted && !isSessionActive) {
       return (
         <button
           className="flex items-center gap-1.5 px-2 text-sm  text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
@@ -233,6 +257,33 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
     }
   };
 
+  // Determine which name and color to display in the avatar when in active session
+  const getActiveSessionAvatarInfo = () => {
+    if (isSessionCreator) {
+      // If you're the creator, show your info
+      return {
+        name: name || currentUserName,
+        color: selectedColor || currentUserColor,
+      };
+    } else {
+      // If you're not the creator, find the creator in users or use session creator info
+      const creator = users.find((user) => user.name === sessionCreatorName);
+      if (creator) {
+        return {
+          name: creator.name,
+          color: creator.color,
+        };
+      }
+      // Fallback to session creator name and a default color
+      return {
+        name: sessionCreatorName,
+        color: "#4ECDC4", // Default color for session creator if not found
+      };
+    }
+  };
+
+  const activeSessionAvatar = getActiveSessionAvatarInfo();
+
   return (
     <>
       {renderShareButtonOrUserAvatars()}
@@ -275,15 +326,17 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                       <div className="mb-6">
                         <div
                           className="w-24 h-24 rounded-full flex items-center justify-center text-[2.5rem] font-medium mx-auto mb-4"
-                          style={{ backgroundColor: selectedColor }}
+                          style={{ backgroundColor: activeSessionAvatar.color }}
                         >
                           <span className="text-white/90">
-                            {name ? name[0].toUpperCase() : ""}
+                            {activeSessionAvatar.name
+                              ? activeSessionAvatar.name[0].toUpperCase()
+                              : ""}
                           </span>
                         </div>
                         <p className="text-center text-stone-300">
                           {isSessionCreator
-                            ? `Session started as ${name}`
+                            ? `Session started as ${name || currentUserName}`
                             : `Session started by ${
                                 sessionCreatorName || "Anonymous"
                               }`}
@@ -348,7 +401,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                               className="absolute left-1/2 md:left-0 transform -translate-x-1/2 md:translate-x-0 top-[95px] bg-neutral-800/90 backdrop-blur-md p-2 rounded-xl border border-stone-700/50 shadow-xl z-50"
                             >
                               <div className="flex flex-wrap gap-1 w-24">
-                                {/* Show only available colors or all colors if filtering results in no options */}
+                                {/* Show available colors or fallback to all colors if none available */}
                                 {(availableColors.length > 0
                                   ? availableColors
                                   : COLORS
@@ -363,7 +416,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                                     style={{ backgroundColor: color }}
                                     onClick={() => {
                                       setSelectedColor(color);
-                                      onColorChange(color);
+                                      onColorChange(color); // Sync with parent component immediately
                                       setIsColorPickerOpen(false);
                                     }}
                                   />
@@ -382,8 +435,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
                             value={name}
                             onChange={(e) => {
                               setName(e.target.value);
-                              onNameChange(e.target.value);
-                              console.log("SETTING NAME", e.target.value);
+                              onNameChange(e.target.value); // Sync with parent component immediately
                             }}
                             placeholder="Enter your name"
                             className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 placeholder-stone-500 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"

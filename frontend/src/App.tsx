@@ -640,8 +640,13 @@ const App: React.FC = () => {
               <span className="text-xs">Share</span>
             </button> */}
             <ShareProfile
-              onNameChange={(newName: string) => setName(newName)}
-              onColorChange={(color: string) => setColor(color)}
+              onNameChange={(newName) => {
+                setName(newName);
+                setDisplayName(newName);
+              }}
+              onColorChange={(newColor) => {
+                setColor(newColor);
+              }}
               users={users}
               onStartSession={startSession}
               isSessionActive={isSessionActive}
@@ -650,6 +655,8 @@ const App: React.FC = () => {
               sessionCreatorName={sessionCreatorName}
               onJoinSession={joinSession}
               isSessionCreator={isSessionCreator}
+              currentUserName={displayName || name} // Pass current user name
+              currentUserColor={color} // Pass current user color
             />
             <button
               onClick={() => {
