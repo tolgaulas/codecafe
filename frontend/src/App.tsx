@@ -410,8 +410,10 @@ const App: React.FC = () => {
         ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
         : response.data.run.stdout;
       // Write directly to terminal
-      console.log(executionOutput);
-      terminalRef.current?.writeToTerminal(executionOutput);
+      if (executionOutput !== "") {
+        console.log(executionOutput);
+        terminalRef.current?.writeToTerminal(executionOutput);
+      }
     } catch (error) {
       const errorOutput = `Error: ${
         error instanceof Error ? error.message : "Unknown error occurred"
