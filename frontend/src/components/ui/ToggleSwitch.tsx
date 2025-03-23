@@ -35,7 +35,7 @@ export default function ToggleSwitch({
             isOn ? "bg-stone-200" : "bg-stone-400"
           }`}
           style={{
-            transform: isOn ? "translateX(20px)" : "translateX(0px)",
+            transform: isOn ? "translateX(20.5px)" : "translateX(0px)",
             transition: shouldAnimate ? "all 300ms ease-in-out" : "none",
           }}
         />
