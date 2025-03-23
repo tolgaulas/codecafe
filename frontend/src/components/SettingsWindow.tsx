@@ -206,7 +206,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
     <AnimatePresence>
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-[5px] flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black/40 backdrop-blur-[5px] flex items-center justify-center z-[100]"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               handleClose();
