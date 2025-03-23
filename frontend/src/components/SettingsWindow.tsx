@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { VscCheck } from "react-icons/vsc";
+import ToggleSwitch from "./ui/ToggleSwitch";
 
 interface SettingsWindowProps {
   isOpen: boolean;
@@ -141,45 +142,36 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   };
 
   // Toggle switch component with consistent styling
-  const ToggleSwitch = ({
-    checked,
-    onChange,
-    label,
-  }: {
-    checked: boolean;
-    onChange: (checked: boolean) => void;
-    label: string;
-  }) => {
-    return (
-      <div className="flex items-center justify-between mb-4">
-        <label className="text-sm font-medium text-stone-300">{label}</label>
-        <button
-          type="button"
-          onClick={() => onChange(!checked)}
-          className="relative h-[24px] w-[44px] rounded-full bg-stone-800 border border-stone-700/50 focus:outline-none transition-colors duration-300"
-          style={{
-            backgroundColor: checked ? "rgb(87 83 78)" : "rgb(41 37 36)",
-          }}
-        >
-          <div
-            className="absolute rounded-full bg-stone-400"
-            style={{
-              top: "2px",
-              left: "2px",
-              height: "18px",
-              width: "18px",
-              backgroundColor: checked
-                ? "rgb(229 229 229)"
-                : "rgb(168 162 158)",
-              transform: checked ? "translateX(20px)" : "translateX(0px)",
-              transition: "all 300ms cubic-bezier(0.4, 0.0, 0.2, 1)",
-            }}
-          />
-        </button>
-      </div>
-    );
-  };
-
+  // const ToggleSwitch = ({
+  //   checked,
+  //   onChange,
+  //   label,
+  // }: {
+  //   checked: boolean;
+  //   onChange: (checked: boolean) => void;
+  //   label: string;
+  // }) => {
+  //   return (
+  //     <div className="flex items-center justify-between mb-4">
+  //       <label className="text-sm font-medium text-stone-300">{label}</label>
+  //       <button
+  //         type="button"
+  //         onClick={() => onChange(!checked)}
+  //         className={`relative h-6 w-11 rounded-full focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-opacity-50 transition-colors duration-300 ${
+  //           checked ? "bg-stone-600" : "bg-stone-800"
+  //         } border border-stone-700/50`}
+  //       >
+  //         <span
+  //           className={`absolute inset-y-0.5 left-0.5 flex items-center justify-center h-5 w-5 rounded-full bg-stone-400 transform transition-transform duration-300 ease-in-out ${
+  //             checked
+  //               ? "translate-x-5 bg-stone-200"
+  //               : "translate-x-0 bg-stone-400"
+  //           }`}
+  //         />
+  //       </button>
+  //     </div>
+  //   );
+  // };
   // Select component with consistent styling
   const StyledSelect = ({
     value,
@@ -293,14 +285,14 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
                       </h3>
 
                       <ToggleSwitch
-                        checked={wordWrap}
-                        onChange={setWordWrap}
+                        isOn={wordWrap}
+                        handleToggle={setWordWrap}
                         label="Word Wrap"
                       />
 
                       <ToggleSwitch
-                        checked={showLineNumbers}
-                        onChange={setShowLineNumbers}
+                        isOn={showLineNumbers}
+                        handleToggle={setShowLineNumbers}
                         label="Show Line Numbers"
                       />
 

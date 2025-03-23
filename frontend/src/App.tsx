@@ -137,7 +137,6 @@ const App: React.FC = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isJoiningSession, setIsJoiningSession] = useState<boolean>(false);
   const [sessionCreatorName, setSessionCreatorName] = useState<string>("");
-  const [serverDocState, setServerDocState] = useState<string>("");
   const operationManagerRef = useRef<TextOperationManager | null>(null);
   const editorRef = useRef<any>(null);
 
