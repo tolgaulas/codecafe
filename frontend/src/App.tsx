@@ -21,72 +21,9 @@ import {
   TextOperationManager,
   OperationAck,
 } from "./TextOperationSystem";
-
-interface CodeExecutionRequest {
-  language: string;
-  version: string;
-  files: { content: string }[];
-}
-
-interface CursorData {
-  cursorPosition: {
-    lineNumber: number;
-    column: number;
-  };
-  selection: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  } | null;
-}
-
-interface CodeExecutionResponse {
-  language: string;
-  version: string;
-  run: {
-    stdout: string;
-    stderr: string;
-    code: number;
-    signal: string | null;
-    output: string;
-  };
-}
-
-interface User {
-  id: string;
-  name: string;
-  color: string;
-  cursorPosition: {
-    lineNumber: number;
-    column: number;
-  };
-  selection: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  };
-}
-
-// interface TextOperation {
-//   baseVersion: number; // The doc version the operation is based on
-//   newText: string; // The entire updated text or just the diff, depending on your strategy
-//   userId: string;
-//   version?: number; // The new version after applying the operation
-// }
-
-// const transformOperation = (
-//   _localOp: TextOperation,
-//   incomingOp: TextOperation
-// ): TextOperation => {
-//   // localOp is replaced with incomingOp's text. More advanced logic
-//   return {
-//     baseVersion: incomingOp.baseVersion + 1,
-//     newText: incomingOp.newText,
-//     userId: incomingOp.userId,
-//   };
-// };
+import { User } from "./types/user";
+import { CodeExecutionRequest, CodeExecutionResponse } from "./types/code";
+import { CursorData } from "./types/cursorData";
 
 const languageVersions = {
   typescript: { version: "1.32.3", name: "TypeScript" },
@@ -100,7 +37,7 @@ const languageVersions = {
   ruby: { version: "3.0.1", name: "Ruby" },
 };
 
-const App: React.FC = () => {
+const App = () => {
   const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [height, setHeight] = useState(window.innerHeight * 0.25);
