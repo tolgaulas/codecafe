@@ -24,7 +24,7 @@ import {
 import { User } from "./types/user";
 import { CodeExecutionRequest, CodeExecutionResponse } from "./types/code";
 import { CursorData } from "./types/cursorData";
-import { languageVersions } from "./types/languages";
+import { languageVersions } from "./constants/languageVersions";
 
 const App = () => {
   const [code, setCode] = useState<string>("// Hello there");

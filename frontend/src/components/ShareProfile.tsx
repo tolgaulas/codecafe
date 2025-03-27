@@ -2,52 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
 import { GoPersonAdd, GoLink, GoCheck } from "react-icons/go";
 import { motion, AnimatePresence } from "framer-motion";
+import { COLORS } from "../constants/colors";
+import { ShareProfileProps } from "../types/props";
 
-const COLORS = [
-  "#FF6B6B",
-  "#4ECDC4",
-  "#45B7D1",
-  "#96CEB4",
-  "#FFEEAD",
-  "#D4A5A5",
-  "#9B59B6",
-  "#3498DB",
-  "#E74C3C",
-  "#2ECC71",
-];
-
-interface User {
-  id: string;
-  name: string;
-  color: string;
-  cursorPosition: {
-    lineNumber: number;
-    column: number;
-  };
-  selection?: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  };
-}
-
-interface ShareProfileProps {
-  onNameChange: (name: string) => void;
-  onColorChange: (color: string) => void;
-  users: User[];
-  onStartSession: () => void;
-  isSessionActive: boolean;
-  sessionId: string | null;
-  isJoiningSession: boolean;
-  sessionCreatorName: string;
-  onJoinSession: () => void;
-  isSessionCreator: boolean;
-  currentUserName: string; // Add current user's name
-  currentUserColor: string; // Add current user's color
-}
-
-const ShareProfile: React.FC<ShareProfileProps> = ({
+const ShareProfile = ({
   onNameChange,
   onColorChange,
   users,
@@ -60,7 +18,7 @@ const ShareProfile: React.FC<ShareProfileProps> = ({
   isSessionCreator = false,
   currentUserName, // Use this for the current user's name
   currentUserColor, // Use this for the current user's color
-}) => {
+}: ShareProfileProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState(
