@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
 import { GoPersonAdd, GoLink, GoCheck } from "react-icons/go";
 import { motion, AnimatePresence } from "framer-motion";

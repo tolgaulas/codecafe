@@ -24,7 +24,7 @@ import {
 import { User } from "./types/user";
 import { CodeExecutionRequest, CodeExecutionResponse } from "./types/code";
 import { CursorData } from "./types/cursorData";
-import { languageVersions } from "./constants/languageVersions";
+import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 
 const App = () => {
   const [code, setCode] = useState<string>("// Hello there");
@@ -42,7 +42,7 @@ const App = () => {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isSessionCreator, setIsSessionCreator] = useState(false);
   const [editorLanguage, setEditorLanguage] =
-    useState<keyof typeof languageVersions>("javascript");
+    useState<keyof typeof LANGUAGE_VERSIONS>("javascript");
 
   const [id] = useState<string>(
     () => Date.now().toString() + Math.random().toString(36).substring(2)
@@ -317,7 +317,7 @@ const App = () => {
     try {
       const requestBody: CodeExecutionRequest = {
         language: editorLanguage,
-        version: languageVersions[editorLanguage].version,
+        version: LANGUAGE_VERSIONS[editorLanguage].version,
         files: [{ content: code }],
       };
 
@@ -515,12 +515,12 @@ const App = () => {
         currentLanguage={editorLanguage}
         onLanguageChange={(editorLanguage) => {
           // Cast is needed since TypeScript doesn't know that newLanguage is a valid key
-          setEditorLanguage(editorLanguage as keyof typeof languageVersions);
+          setEditorLanguage(editorLanguage as keyof typeof LANGUAGE_VERSIONS);
         }}
-        availableLanguages={Object.entries(languageVersions).map(
+        availableLanguages={Object.entries(LANGUAGE_VERSIONS).map(
           ([key, value]) => ({
             value: key,
-            label: value.name, // Using the name property from languageVersions
+            label: value.name,
           })
         )}
         currentTheme={theme}

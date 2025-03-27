@@ -1,50 +1,7 @@
 import { useRef, useEffect } from "react";
 import { Editor, loader } from "@monaco-editor/react";
+import { CodeEditorProps } from "../types/props";
 import * as monaco from "monaco-editor";
-
-interface User {
-  id: string;
-  name: string;
-  color: string;
-  cursorPosition: {
-    lineNumber: number;
-    column: number;
-  };
-  selection?: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  };
-}
-
-interface CursorData {
-  cursorPosition: {
-    lineNumber: number;
-    column: number;
-  };
-  selection: {
-    startLineNumber: number;
-    startColumn: number;
-    endLineNumber: number;
-    endColumn: number;
-  } | null;
-}
-
-interface CodeEditorProps {
-  onCodeChange: (code: string) => void;
-  users?: User[];
-  onCursorPositionChange?: (lineNumber: number) => void;
-  code?: string;
-  sendCursorData?: (cursorData: CursorData) => void;
-  onLoadingChange?: (loading: boolean) => void;
-  language?: string;
-  theme?: "codeCafeTheme" | "transparentTheme";
-  fontSize?: string;
-  wordWrap?: boolean;
-  showLineNumbers?: boolean;
-  onEditorDidMount?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
-}
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   onCodeChange,

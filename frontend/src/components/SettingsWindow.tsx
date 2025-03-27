@@ -1,39 +1,14 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@radix-ui/themes";
 import { motion, AnimatePresence } from "framer-motion";
 import { VscCheck } from "react-icons/vsc";
 import ToggleSwitch from "./ui/ToggleSwitch";
+import { SettingsWindowProps } from "../types/props";
+import { THEMES } from "../constants/themes";
+import { FONT_SIZES } from "../constants/fontSizes";
+import Select from "./ui/Select";
 
-interface SettingsWindowProps {
-  isOpen: boolean;
-  onClose: () => void;
-  // New props for language handling
-  currentLanguage: string;
-  onLanguageChange: (language: string) => void;
-  availableLanguages: Array<{ value: string; label: string }>;
-  currentTheme: "codeCafeTheme" | "transparentTheme"; // Add this
-  onThemeChange: (theme: "codeCafeTheme" | "transparentTheme") => void; // Add this
-  currentFontSize: string;
-  onFontSizeChange: (fontSize: string) => void;
-  currentWordWrap: boolean;
-  onWordWrapChange: (wordWrap: boolean) => void;
-  currentShowLineNumbers: boolean;
-  onShowLineNumbersChange: (showLineNumbers: boolean) => void;
-}
-
-const THEMES = [
-  { value: "codeCafeTheme", label: "CodeCafe" },
-  { value: "transparentTheme", label: "VS Code" },
-];
-
-const FONT_SIZES = [
-  { value: "12", label: "Small" },
-  { value: "14", label: "Medium" },
-  { value: "16", label: "Large" },
-  { value: "18", label: "Extra Large" },
-];
-
-const SettingsWindow: React.FC<SettingsWindowProps> = ({
+const SettingsWindow = ({
   isOpen,
   onClose,
   currentLanguage,
@@ -47,7 +22,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
   onWordWrapChange,
   currentShowLineNumbers,
   onShowLineNumbersChange,
-}) => {
+}: SettingsWindowProps) => {
   // Settings state
   const [theme, setTheme] = useState(currentTheme);
   const [fontSize, setFontSize] = useState(currentFontSize);
@@ -141,67 +116,6 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
     onClose();
   };
 
-  // Toggle switch component with consistent styling
-  // const ToggleSwitch = ({
-  //   checked,
-  //   onChange,
-  //   label,
-  // }: {
-  //   checked: boolean;
-  //   onChange: (checked: boolean) => void;
-  //   label: string;
-  // }) => {
-  //   return (
-  //     <div className="flex items-center justify-between mb-4">
-  //       <label className="text-sm font-medium text-stone-300">{label}</label>
-  //       <button
-  //         type="button"
-  //         onClick={() => onChange(!checked)}
-  //         className={`relative h-6 w-11 rounded-full focus:outline-none focus:ring-2 focus:ring-stone-400 focus:ring-opacity-50 transition-colors duration-300 ${
-  //           checked ? "bg-stone-600" : "bg-stone-800"
-  //         } border border-stone-700/50`}
-  //       >
-  //         <span
-  //           className={`absolute inset-y-0.5 left-0.5 flex items-center justify-center h-5 w-5 rounded-full bg-stone-400 transform transition-transform duration-300 ease-in-out ${
-  //             checked
-  //               ? "translate-x-5 bg-stone-200"
-  //               : "translate-x-0 bg-stone-400"
-  //           }`}
-  //         />
-  //       </button>
-  //     </div>
-  //   );
-  // };
-  // Select component with consistent styling
-  const StyledSelect = ({
-    value,
-    onChange,
-    options,
-    label,
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-    options: Array<{ value: string; label: string }>;
-    label: string;
-  }) => (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-stone-300 mb-1.5">
-        {label}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full bg-stone-800/50 border border-stone-700/50 text-stone-200 rounded-md px-3 py-2 focus:outline-none focus:border-stone-500 transition-colors"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-
   return (
     <AnimatePresence>
       {isOpen && (
@@ -242,7 +156,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
                         Appearance
                       </h3>
 
-                      <StyledSelect
+                      <Select
                         value={theme}
                         onChange={(value: string) =>
                           setTheme(
@@ -253,7 +167,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
                         label="Theme"
                       />
 
-                      <StyledSelect
+                      <Select
                         value={fontSize}
                         onChange={setFontSize}
                         options={FONT_SIZES}
@@ -267,7 +181,7 @@ const SettingsWindow: React.FC<SettingsWindowProps> = ({
                         Language
                       </h3>
 
-                      <StyledSelect
+                      <Select
                         value={language}
                         onChange={setLanguage}
                         options={availableLanguages}

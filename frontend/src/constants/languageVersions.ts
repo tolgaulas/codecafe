@@ -1,4 +1,4 @@
-export const languageVersions = {
+export const LANGUAGE_VERSIONS = {
   typescript: { version: "1.32.3", name: "TypeScript" },
   javascript: { version: "1.32.3", name: "JavaScript" },
   python: { version: "3.10.0", name: "Python" },
