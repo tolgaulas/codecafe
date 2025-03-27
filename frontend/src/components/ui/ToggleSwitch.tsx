@@ -15,7 +15,7 @@ export default function ToggleSwitch({
 
   useEffect(() => {
     // Set a delay before enabling animation to avoid initial load animation
-    const timeoutId = setTimeout(() => setShouldAnimate(true), 300);
+    const timeoutId = setTimeout(() => setShouldAnimate(true), 150);
     return () => clearTimeout(timeoutId);
   }, []);
 
@@ -36,7 +36,7 @@ export default function ToggleSwitch({
           }`}
           style={{
             transform: isOn ? "translateX(20.5px)" : "translateX(0px)",
-            transition: shouldAnimate ? "all 300ms ease-in-out" : "none",
+            transition: shouldAnimate ? "all 150ms ease-in-out" : "none",
           }}
         />
       </div>

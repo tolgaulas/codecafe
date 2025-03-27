@@ -3,7 +3,7 @@ import { Editor, loader } from "@monaco-editor/react";
 import { CodeEditorProps } from "../types/props";
 import * as monaco from "monaco-editor";
 
-const CodeEditor: React.FC<CodeEditorProps> = ({
+const CodeEditor = ({
   onCodeChange,
   users = [],
   onCursorPositionChange,
@@ -16,7 +16,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
   wordWrap,
   showLineNumbers,
   onEditorDidMount,
-}) => {
+}: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
   const decorationsRef = useRef<string[]>([]);
   const isUpdatingRef = useRef(false);
