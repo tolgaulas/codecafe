@@ -103,11 +103,11 @@ const ShareProfile = ({
     handleClose(); // Close the dialog after joining
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(shareableLink);
-    setLinkCopied(true);
-    setTimeout(() => setLinkCopied(false), 2000);
-  };
+  // const handleCopyLink = () => {
+  //   navigator.clipboard.writeText(shareableLink);
+  //   setLinkCopied(true);
+  //   setTimeout(() => setLinkCopied(false), 2000);
+  // };
 
   const handleClose = () => {
     setIsOpen(false);

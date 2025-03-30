@@ -31,10 +31,10 @@ const App = () => {
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [users, setUsers] = useState<User[]>([]);
   const [localVersion, setLocalVersion] = useState<number>(0); // track our local doc version
-  const [pendingLocalChanges, setPendingLocalChanges] = useState<string | null>(
-    null
-  );
-  const pendingLocalChangesRef = useRef<string | null>(null);
+  // const [pendingLocalChanges, setPendingLocalChanges] = useState<string | null>(
+  //   null
+  // );
+  // const pendingLocalChangesRef = useRef<string | null>(null);
   const [isEditorLoading, setIsEditorLoading] = useState(true);
   const codeCafeRef = useRef<HTMLDivElement | null>(null);
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -148,14 +148,14 @@ const App = () => {
     setCode(newCode);
   };
 
-  useEffect(() => {
-    pendingLocalChangesRef.current = pendingLocalChanges;
-  }, [pendingLocalChanges]);
+  // useEffect(() => {
+  //   pendingLocalChangesRef.current = pendingLocalChanges;
+  // }, [pendingLocalChanges]);
 
   // Update debouncedSendCursor to maintain previous selection
   // Add this state to track the local selection
-  const [currentSelection, setCurrentSelection] =
-    useState<CursorData["selection"]>(null);
+  // const [currentSelection, setCurrentSelection] =
+  //   useState<CursorData["selection"]>(null);
 
   // Then modify the debouncedSendCursor function
   const debouncedSendCursor = useCallback(
@@ -312,7 +312,13 @@ const App = () => {
 
   let isScrolling = false; // Flag to track if a scroll action is in progress
 
-  const handleCursorPositionChange = (lineNumber: number) => {
+  const handleCursorPositionChange = (
+    lineNumber: number,
+    event?: KeyboardEvent | null
+  ) => {
+    // Only proceed if Enter key was pressed
+    if (!event || event.key !== "Enter") return;
+
     const editorElement = document.querySelector(".monaco-editor");
     if (!editorElement) return;
 

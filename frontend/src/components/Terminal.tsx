@@ -72,7 +72,7 @@ const TerminalComponent = forwardRef((_, ref) => {
 
       term.write("Welcome to CodeCafe!\r\n$ ");
 
-      // Handle user input - simple approach
+      // Handle user input
       term.onData((data) => {
         // Handle Enter key
         if (data === "\r") {
@@ -81,7 +81,7 @@ const TerminalComponent = forwardRef((_, ref) => {
 
           term.write("\r\n");
 
-          // Process command (simple example)
+          // Process command
           if (command === "clear") {
             term.clear();
           } else if (command === "help") {
@@ -206,7 +206,7 @@ const TerminalComponent = forwardRef((_, ref) => {
           window.innerHeight * 0.35 + screenSixteenth.height
         ),
       ]}
-      onResize={(e, { size }) => {
+      onResize={(_, { size }) => {
         setWidth(size.width);
         setHeight(size.height);
         // Trigger terminal fit after resize
