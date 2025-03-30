@@ -4,9 +4,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { VscCheck } from "react-icons/vsc";
 import ToggleSwitch from "./ui/ToggleSwitch";
 import { SettingsWindowProps } from "../types/props";
-import { THEMES } from "../constants/themes";
+import { THEMES, ThemeKey } from "../constants/themes";
 import { FONT_SIZES } from "../constants/fontSizes";
 import Select from "./ui/Select";
+
+// Define theme type based on the keys of THEMES
 
 const SettingsWindow = ({
   isOpen,
@@ -24,7 +26,7 @@ const SettingsWindow = ({
   onShowLineNumbersChange,
 }: SettingsWindowProps) => {
   // Settings state
-  const [theme, setTheme] = useState(currentTheme);
+  const [theme, setTheme] = useState<ThemeKey>(currentTheme);
   const [fontSize, setFontSize] = useState(currentFontSize);
   // Use the passed currentLanguage for initial state
   const [language, setLanguage] = useState(currentLanguage);
@@ -98,11 +100,11 @@ const SettingsWindow = ({
       onLanguageChange(language);
     }
     if (theme !== currentTheme) {
-      onThemeChange(theme as "codeCafeTheme" | "transparentTheme");
+      onThemeChange(theme as ThemeKey);
     }
 
     if (fontSize !== currentFontSize) {
-      onFontSizeChange(fontSize); // Add this line
+      onFontSizeChange(fontSize);
     }
 
     if (wordWrap !== currentWordWrap) {
@@ -115,6 +117,12 @@ const SettingsWindow = ({
 
     onClose();
   };
+
+  // Create theme options from the THEMES object
+  const themeOptions = Object.entries(THEMES).map(([key, themeData]) => ({
+    value: key,
+    label: themeData.label,
+  }));
 
   return (
     <AnimatePresence>
@@ -159,11 +167,9 @@ const SettingsWindow = ({
                       <Select
                         value={theme}
                         onChange={(value: string) =>
-                          setTheme(
-                            value as "codeCafeTheme" | "transparentTheme"
-                          )
+                          setTheme(value as ThemeKey)
                         }
-                        options={THEMES}
+                        options={themeOptions}
                         label="Theme"
                       />
 

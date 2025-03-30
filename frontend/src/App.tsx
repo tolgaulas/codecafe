@@ -24,6 +24,7 @@ import { User } from "./types/user";
 import { CodeExecutionRequest, CodeExecutionResponse } from "./types/code";
 import { CursorData } from "./types/cursorData";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
+import { THEMES } from "./constants/themes";
 
 const App = () => {
   const [code, setCode] = useState<string>("// Hello there");
@@ -49,14 +50,12 @@ const App = () => {
   const [color, setColor] = useState<string>(getRandomColor());
   const [starredEnabled, setStarredEnabled] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [theme, setTheme] = useState<"codeCafeTheme" | "transparentTheme">(
-    "codeCafeTheme"
-  );
+  const [theme, setTheme] = useState<keyof typeof THEMES>("codeCafeTheme");
+
   const [fontSize, setFontSize] = useState<string>("16");
   const [wordWrap, setWordWrap] = useState<boolean>(true);
   const [showLineNumbers, setShowLineNumbers] = useState(true);
 
-  // Add these new state variables
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isJoiningSession, setIsJoiningSession] = useState<boolean>(false);
   const [sessionCreatorName, setSessionCreatorName] = useState<string>("");
@@ -105,23 +104,6 @@ const App = () => {
   useEffect(() => {
     codeRef.current = code;
   }, [code]);
-
-  // useEffect(() => console.log("User state: ", users), [users]);
-  // const debouncedSendUpdate = useCallback(
-  //   debounce((newText: string) => {
-  //     if (isSessionActive && stompClientRef.current?.connected) {
-  //       const op: TextOperation = {
-  //         baseVersion: localVersion,
-  //         newText: newText,
-  //         userId: id,
-  //       };
-
-  //       stompClientRef.current.send("/app/ot", {}, JSON.stringify(op));
-  //       // Don't clear pending changes here - wait for server acknowledgment
-  //     }
-  //   }, 50), // Slightly increased debounce time
-  //   [isSessionActive, localVersion, id]
-  // );
 
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
@@ -201,21 +183,6 @@ const App = () => {
   const sendCursorData = (cursorData: CursorData) => {
     debouncedSendCursor(cursorData); // Use debounced update for server communication
   };
-
-  // useEffect(() => {
-  //   const handleResize = () => {
-  //     if (editorHeight < window.innerHeight) {
-  //       setEditorHeight(window.innerHeight);
-  //     }
-  //     setHeight(window.innerHeight * 0.25);
-  //     setWidth(window.innerWidth * 0.75);
-  //   };
-
-  //   window.addEventListener("resize", handleResize);
-  //   return () => {
-  //     window.removeEventListener("resize", handleResize);
-  //   };
-  // }, []);
 
   useEffect(() => {
     if (isSessionActive) {

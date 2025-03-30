@@ -41,7 +41,7 @@ export interface CodeEditorProps {
   sendCursorData?: (cursorData: CursorData) => void;
   onLoadingChange?: (loading: boolean) => void;
   language?: string;
-  theme?: "codeCafeTheme" | "transparentTheme";
+  theme?: string;
   fontSize?: string;
   wordWrap?: boolean;
   showLineNumbers?: boolean;

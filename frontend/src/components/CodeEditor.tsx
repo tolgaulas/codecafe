@@ -2,6 +2,7 @@ import { useRef, useEffect } from "react";
 import { Editor, loader } from "@monaco-editor/react";
 import { CodeEditorProps } from "../types/props";
 import * as monaco from "monaco-editor";
+import { THEMES } from "../constants/themes";
 
 const CodeEditor = ({
   onCodeChange,
@@ -32,172 +33,18 @@ const CodeEditor = ({
 
   // Initialize Monaco theme
   useEffect(() => {
+    // Ensure loader.init runs only once or handle potential race conditions if needed
     loader.init().then((monaco) => {
-      monaco.editor.defineTheme("codeCafeTheme", {
-        base: "vs-dark",
-        inherit: true,
-        rules: [
-          {
-            background: "1e1e1e",
-            token: "",
-          },
-          {
-            foreground: "d4d4d4",
-            token: "text",
-          },
-          {
-            foreground: "d4d4d4",
-            background: "1e1e1e",
-            token: "source",
-          },
-          {
-            foreground: "6a9955",
-            fontStyle: "italic",
-            token: "comment",
-          },
-          {
-            foreground: "569cd6",
-            token: "meta.tag",
-          },
-          {
-            foreground: "569cd6",
-            token: "declaration.tag",
-          },
-          {
-            foreground: "569cd6",
-            token: "meta.doctype",
-          },
-          {
-            foreground: "dcdcaa",
-            token: "entity.name",
-          },
-          {
-            foreground: "dcdcaa",
-            token: "source.ruby entity.name",
-          },
-          {
-            foreground: "9cdcfe",
-            token: "variable.other",
-          },
-          {
-            foreground: "4ec9b0",
-            token: "support.class.ruby",
-          },
-          {
-            foreground: "4fc1ff",
-            token: "constant",
-          },
-          {
-            foreground: "4fc1ff",
-            token: "support.constant",
-          },
-          {
-            foreground: "c586c0",
-            token: "keyword",
-          },
-          {
-            foreground: "9cdcfe",
-            token: "other.preprocessor.c",
-          },
-          {
-            fontStyle: "italic",
-            token: "variable.parameter",
-          },
-          {
-            foreground: "d4d4d4",
-            background: "2d2d2d",
-            token: "source comment.block",
-          },
-          {
-            foreground: "ce9178",
-            token: "string",
-          },
-          {
-            foreground: "d7ba7d",
-            token: "string constant.character.escape",
-          },
-          {
-            foreground: "1e1e1e",
-            background: "4ec9b0",
-            token: "string.interpolated",
-          },
-          {
-            foreground: "d16969",
-            token: "string.regexp",
-          },
-          {
-            foreground: "d16969",
-            token: "string.literal",
-          },
-          {
-            foreground: "5a5a5a",
-            token: "string.interpolated constant.character.escape",
-          },
-          {
-            fontStyle: "underline",
-            token: "entity.name.class",
-          },
-          {
-            fontStyle: "italic underline",
-            token: "entity.other.inherited-class",
-          },
-          {
-            foreground: "dcdcaa",
-            token: "support.function",
-          },
-          {
-            foreground: "608b4e",
-            token: "markup.list.unnumbered.textile",
-          },
-          {
-            foreground: "608b4e",
-            token: "markup.list.numbered.textile",
-          },
-          {
-            foreground: "d4d4d4",
-            fontStyle: "bold",
-            token: "markup.bold.textile",
-          },
-          {
-            foreground: "ffffff",
-            background: "ff0000",
-            token: "invalid",
-          },
-          {
-            foreground: "1e1e1e",
-            background: "4fc1ff",
-            token: "collab.user1",
-          },
-        ],
-        colors: {
-          "editor.background": "#00000000",
-          "editor.foreground": "#d4d4d4",
-          "editorLineNumber.foreground": "#6b6b6b",
-          "editorGutter.background": "#00000000",
-          "minimap.background": "#00000000",
-          "editor.selectionBackground": "#264f78",
-          "editor.inactiveSelectionBackground": "#3a3d41",
-          "editorIndentGuide.background": "#404040",
-          "editor.lineHighlightBackground": "#00000000",
-          "editor.lineHighlightBorder": "#454545",
-        },
+      // Register themes
+      Object.entries(THEMES).forEach(([themeName, themeConfig]) => {
+        // Pass the actual config object, not the object containing {label, config}
+        monaco.editor.defineTheme(themeName, themeConfig.config);
       });
 
-      monaco.editor.defineTheme("transparentTheme", {
-        base: "vs-dark",
-        inherit: true,
-        rules: [],
-        colors: {
-          "editor.background": "#00000000",
-          "editorGutter.background": "#00000000",
-          "minimap.background": "#00000000",
-        },
-      });
-
-      // // Don't forget to set the theme after defining it
-      // monaco.editor.setTheme("codeCafeTheme");
+      // Apply the currently selected theme using the theme prop's value (string name)
+      monaco.editor.setTheme(theme || "");
     });
-  }, []);
+  }, [theme]); // Re-run when the theme prop changes
 
   // Store cursor state before any updates
   const saveCursorState = () => {
