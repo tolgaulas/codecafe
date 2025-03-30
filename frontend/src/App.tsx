@@ -2,9 +2,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import Terminal from "./components/Terminal";
-import { Card, Theme } from "@radix-ui/themes";
+import { Theme } from "@radix-ui/themes";
 import "react-resizable/css/styles.css";
-import { ResizableBox, ResizeHandle } from "react-resizable";
 import SockJS from "sockjs-client";
 import Stomp from "stompjs";
 import { VscRunAll } from "react-icons/vsc";
@@ -29,8 +28,6 @@ import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 const App = () => {
   const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
-  const [height, setHeight] = useState(window.innerHeight * 0.25);
-  const [width, setWidth] = useState(window.innerWidth * 0.75);
   const [users, setUsers] = useState<User[]>([]);
   const [localVersion, setLocalVersion] = useState<number>(0); // track our local doc version
   const [pendingLocalChanges, setPendingLocalChanges] = useState<string | null>(
@@ -98,11 +95,6 @@ const App = () => {
   // const name = Date.now().toString();
 
   const stompClientRef = useRef<Stomp.Client | null>(null);
-
-  const screenSixteenth = {
-    width: window.innerWidth * (1 / 16),
-    height: window.innerHeight * (1 / 16),
-  };
 
   // const socket = new SockJS("http://localhost:8080/ws");
   // const stompClient = Stomp.over(socket);
@@ -210,20 +202,20 @@ const App = () => {
     debouncedSendCursor(cursorData); // Use debounced update for server communication
   };
 
-  useEffect(() => {
-    const handleResize = () => {
-      if (editorHeight < window.innerHeight) {
-        setEditorHeight(window.innerHeight);
-      }
-      setHeight(window.innerHeight * 0.25);
-      setWidth(window.innerWidth * 0.75);
-    };
+  // useEffect(() => {
+  //   const handleResize = () => {
+  //     if (editorHeight < window.innerHeight) {
+  //       setEditorHeight(window.innerHeight);
+  //     }
+  //     setHeight(window.innerHeight * 0.25);
+  //     setWidth(window.innerWidth * 0.75);
+  //   };
 
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, []);
+  //   window.addEventListener("resize", handleResize);
+  //   return () => {
+  //     window.removeEventListener("resize", handleResize);
+  //   };
+  // }, []);
 
   useEffect(() => {
     if (isSessionActive) {
@@ -642,114 +634,7 @@ const App = () => {
               }}
             />
 
-            {/* <div
-              className="absolute bg-neutral-900/70 border-l border-r border-b border-neutral-800/50 w-[120%]"
-              style={{
-                left: "50%",
-                transform: "translateX(-50%)",
-                bottom: "0", // Attach to bottom instead of using top
-                height: "200px", // Give it some height beyond the screen
-                zIndex: 50,
-              }}
-            /> */}
-
-            {/* Terminal */}
-            {/* <Card className="bg-neutral-900/90 backdrop-blur-md rounded-t-xl border border-neutral-800/50 shadow-xl fixed bottom-0 left-0 ml-[25%] w-[300%]">
-        <div className="p-4 h-64 font-mono text-green-400/80 overflow-auto">
-          <Terminal />
-        </div>
-      </Card> */}
-
-            <ResizableBox
-              className="overflow-hidden overscroll-none"
-              width={width}
-              height={height}
-              minConstraints={[
-                Math.max(300, window.innerWidth * 0.7 - screenSixteenth.width),
-                Math.max(
-                  100,
-                  window.innerHeight * 0.1 - screenSixteenth.height
-                ),
-              ]}
-              maxConstraints={[
-                Math.min(
-                  window.innerWidth,
-                  window.innerWidth * 0.75 + screenSixteenth.width
-                ),
-                Math.min(
-                  window.innerHeight,
-                  window.innerHeight * 0.35 + screenSixteenth.height
-                ),
-              ]}
-              onResize={(e, { size }) => {
-                setWidth(size.width);
-                setHeight(size.height);
-              }}
-              resizeHandles={["w", "nw", "n"]}
-              handle={(handleAxis, ref) => {
-                const baseStyle = {
-                  // position: "absolute",
-                  background: "transparent",
-                  // border: "2px solid rgba(200, 200, 200, 0.3)",
-                  transform: "translate(-50%, -50%)",
-                };
-
-                // Custom styles for each handle
-                const styles: Record<
-                  ResizeHandle,
-                  React.CSSProperties | undefined
-                > = {
-                  nw: {
-                    ...baseStyle,
-                    width: "5px",
-                    height: "5px",
-                    padding: "5px",
-                  },
-                  n: {
-                    ...baseStyle,
-                    width: `${width}px`,
-                    height: "5px",
-                    padding: "5px",
-                    transform: "translate(-50%, -50%) translateX(15px)",
-                  },
-                  w: {
-                    ...baseStyle,
-                    width: "5px",
-                    height: `${height}px`,
-                    padding: "5px",
-                    transform: "translate(-50%, -50%) translateY(15px)",
-                  },
-                  s: undefined,
-                  e: undefined,
-                  sw: undefined,
-                  se: undefined,
-                  ne: undefined,
-                };
-
-                return (
-                  <div
-                    ref={ref}
-                    className={`react-resizable-handle react-resizable-handle-${handleAxis}`}
-                    style={styles[handleAxis]}
-                  />
-                );
-              }}
-              style={{
-                position: "fixed",
-                bottom: 0,
-                left: `calc(100vw - ${width}px)`,
-                zIndex: 10,
-              }}
-            >
-              <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-2xl border border-neutral-800/50 shadow-xl overflow-auto overscroll-none">
-                <div
-                  className="p-4 font-mono text-green-400/80"
-                  style={{ height, width }}
-                >
-                  <Terminal ref={terminalRef} />
-                </div>
-              </Card>
-            </ResizableBox>
+            <Terminal ref={terminalRef} />
           </div>
         </div>
       </div>
