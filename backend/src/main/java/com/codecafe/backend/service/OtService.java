@@ -49,14 +49,26 @@ public class OtService {
         lock.lock();
         try {
             System.out.println("Processing operation: " + operation);
-            // If the operation's base version is outdated
+
+            // If operation is too old, transform it against all operations since its base version
             if (operation.getVersion() < currentVersion) {
-                // Transform the operation against all operations since its base version
-                for (int i = 0; i < operationHistory.size(); i++) {
-                    TextOperation historyOp = operationHistory.get(i);
-                    if (historyOp.getVersion() >= operation.getVersion()) {
-                        operation = transformOperation(operation, historyOp);
+                List<TextOperation> operationsToTransformAgainst = new ArrayList<>();
+
+                // Collect all operations that need to be considered for transformation
+                for (TextOperation historyOp : operationHistory) {
+                    if (historyOp.getVersion() >= operation.getVersion() &&
+                            !historyOp.getUserId().equals(operation.getUserId())) {
+                        operationsToTransformAgainst.add(historyOp);
                     }
+                }
+
+                // Sort operations by version to transform in the correct order
+                operationsToTransformAgainst.sort((a, b) ->
+                        Integer.compare(a.getVersion(), b.getVersion()));
+
+                // Transform against each operation
+                for (TextOperation historyOp : operationsToTransformAgainst) {
+                    operation = transformOperation(operation, historyOp);
                 }
             }
 
@@ -118,89 +130,151 @@ public class OtService {
      * @param b Operation to transform against
      * @return Transformed operation
      */
-    private TextOperation transformOperation(TextOperation a, TextOperation b) {
-        // Clone operation A to avoid modifying the original
-        TextOperation transformed = new TextOperation();
-        transformed.setId(a.getId());
-        transformed.setType(a.getType());
-        transformed.setPosition(a.getPosition());
-        transformed.setText(a.getText());
-        transformed.setLength(a.getLength());
-        transformed.setVersion(a.getVersion());
-        transformed.setUserId(a.getUserId());
+    private TextOperation transformOperation(TextOperation clientOp, TextOperation serverOp) {
+        // Clone the client operation to avoid modifying the original
+        TextOperation transformed = cloneOperation(clientOp);
 
-        // If operations are from the same user or B happens after A, no transform needed
-        if (a.getUserId().equals(b.getUserId()) || b.getVersion() <= a.getVersion()) {
+        // If operations are from the same user, no transform needed
+        if (clientOp.getUserId().equals(serverOp.getUserId())) {
             return transformed;
         }
 
-        // Transform based on operation types
-        switch (b.getType()) {
+        // Transform position based on operation types
+        switch (serverOp.getType()) {
             case INSERT:
-                // If B inserts before A's position, shift A's position
-                if (b.getPosition() <= transformed.getPosition()) {
-                    transformed.setPosition(transformed.getPosition() + b.getText().length());
+                transformed.setPosition(transformPosition(
+                        transformed.getPosition(),
+                        serverOp.getPosition(),
+                        serverOp.getText().length(),
+                        true
+                ));
+
+                // If client op is DELETE or REPLACE, we may need to adjust length too
+                if ((transformed.getType() == OperationType.DELETE ||
+                        transformed.getType() == OperationType.REPLACE) &&
+                        transformed.getLength() != null) {
+
+                    // Check if server insert is inside client's deletion range
+                    int clientOpEnd = transformed.getPosition() + transformed.getLength();
+                    if (serverOp.getPosition() > transformed.getPosition() &&
+                            serverOp.getPosition() < clientOpEnd) {
+                        transformed.setLength(transformed.getLength() + serverOp.getText().length());
+                    }
                 }
                 break;
 
             case DELETE:
-                int bEnd = b.getPosition() + b.getLength();
+                int serverOpEnd = serverOp.getPosition() + serverOp.getLength();
 
-                // B deletes entirely before A's position
-                if (bEnd <= transformed.getPosition()) {
-                    transformed.setPosition(transformed.getPosition() - b.getLength());
-                }
-                // B deletes a range that includes A's position
-                else if (b.getPosition() <= transformed.getPosition() && transformed.getPosition() < bEnd) {
-                    transformed.setPosition(b.getPosition());
+                // Transform the position
+                transformed.setPosition(transformPositionAgainstDelete(
+                        transformed.getPosition(),
+                        serverOp.getPosition(),
+                        serverOp.getLength()
+                ));
 
-                    // If A is also a delete/replace, adjust its length if it overlaps with B
-                    if ((transformed.getType() == OperationType.DELETE || transformed.getType() == OperationType.REPLACE)
-                            && transformed.getLength() != null) {
-                        int aEnd = transformed.getPosition() + transformed.getLength();
-                        if (aEnd > bEnd) {
-                            transformed.setLength(aEnd - bEnd);
-                        } else {
-                            // A is completely within B's deletion range
-                            transformed.setLength(0);
-                        }
-                    }
-                }
-                // B deletes a range that overlaps with A's range (for DELETE/REPLACE operations)
-                else if ((transformed.getType() == OperationType.DELETE || transformed.getType() == OperationType.REPLACE)
-                        && transformed.getLength() != null) {
-                    int aEnd = transformed.getPosition() + transformed.getLength();
-                    if (transformed.getPosition() < b.getPosition() && b.getPosition() < aEnd) {
-                        // B deletes part of A's range
-                        transformed.setLength(Math.min(b.getPosition() - transformed.getPosition(), transformed.getLength()));
-                    }
+                // If client op is DELETE or REPLACE, handle length adjustment
+                if ((transformed.getType() == OperationType.DELETE ||
+                        transformed.getType() == OperationType.REPLACE) &&
+                        transformed.getLength() != null) {
+
+                    // Calculate deletion overlap and adjust length accordingly
+                    transformed.setLength(transformLengthAgainstDelete(
+                            transformed.getPosition(),
+                            transformed.getLength(),
+                            serverOp.getPosition(),
+                            serverOp.getLength()
+                    ));
                 }
                 break;
 
             case REPLACE:
-                // For simplicity, treat REPLACE as DELETE followed by INSERT
-                // First transform against the delete part
+                // Handle REPLACE as DELETE followed by INSERT
                 TextOperation deleteOp = new TextOperation();
                 deleteOp.setType(OperationType.DELETE);
-                deleteOp.setPosition(b.getPosition());
-                deleteOp.setLength(b.getLength());
-                deleteOp.setVersion(b.getVersion());
-                deleteOp.setUserId(b.getUserId());
+                deleteOp.setPosition(serverOp.getPosition());
+                deleteOp.setLength(serverOp.getLength());
+                deleteOp.setVersion(serverOp.getVersion());
+                deleteOp.setUserId(serverOp.getUserId());
 
-                transformed = transformOperation(transformed, deleteOp);
-
-                // Then transform against the insert part
                 TextOperation insertOp = new TextOperation();
                 insertOp.setType(OperationType.INSERT);
-                insertOp.setPosition(b.getPosition());
-                insertOp.setText(b.getText());
-                insertOp.setVersion(b.getVersion());
-                insertOp.setUserId(b.getUserId());
+                insertOp.setPosition(serverOp.getPosition());
+                insertOp.setText(serverOp.getText());
+                insertOp.setVersion(serverOp.getVersion());
+                insertOp.setUserId(serverOp.getUserId());
 
+                // Transform against delete and then insert
+                transformed = transformOperation(transformed, deleteOp);
                 transformed = transformOperation(transformed, insertOp);
                 break;
         }
 
         return transformed;
+    }
+
+    // Helper methods for transformations
+    private int transformPosition(int position, int otherPosition, int otherLength, boolean isInsert) {
+        if (position <= otherPosition) {
+            return position; // Position before the other operation is unchanged
+        } else {
+            // Position after the other operation is shifted
+            return isInsert ? position + otherLength : Math.max(otherPosition, position - otherLength);
+        }
+    }
+
+    private int transformPositionAgainstDelete(int position, int deletePos, int deleteLen) {
+        if (position <= deletePos) {
+            return position; // Before deletion point - unaffected
+        } else if (position >= deletePos + deleteLen) {
+            return position - deleteLen; // After deletion - shift left
+        } else {
+            return deletePos; // Inside deletion range - move to deletion start
+        }
+    }
+
+    private int transformLengthAgainstDelete(int pos, int len, int deletePos, int deleteLen) {
+        int endPos = pos + len;
+        int deleteEndPos = deletePos + deleteLen;
+
+        // No overlap
+        if (endPos <= deletePos || pos >= deleteEndPos) {
+            return len;
+        }
+
+        // Client deletion is completely inside server deletion
+        if (pos >= deletePos && endPos <= deleteEndPos) {
+            return 0;
+        }
+
+        // Server deletion is completely inside client deletion
+        if (deletePos >= pos && deleteEndPos <= endPos) {
+            return len - deleteLen;
+        }
+
+        // Partial overlap, server deletion overlaps start of client deletion
+        if (deletePos <= pos && deleteEndPos > pos) {
+            return endPos - deleteEndPos;
+        }
+
+        // Partial overlap, server deletion overlaps end of client deletion
+        if (deletePos < endPos && deleteEndPos >= endPos) {
+            return deletePos - pos;
+        }
+
+        // Should never reach here
+        return len;
+    }
+
+    private TextOperation cloneOperation(TextOperation operation) {
+        TextOperation clone = new TextOperation();
+        clone.setId(operation.getId());
+        clone.setType(operation.getType());
+        clone.setPosition(operation.getPosition());
+        clone.setText(operation.getText());
+        clone.setLength(operation.getLength());
+        clone.setVersion(operation.getVersion());
+        clone.setUserId(operation.getUserId());
+        return clone;
     }
 }
