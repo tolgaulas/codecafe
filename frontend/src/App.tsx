@@ -19,18 +19,22 @@ import {
   TextOperation,
   TextOperationManager,
   OperationAck,
+  VersionVector,
 } from "./TextOperationSystem";
 import { User } from "./types/user";
 import { CodeExecutionRequest, CodeExecutionResponse } from "./types/code";
 import { CursorData } from "./types/cursorData";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import { THEMES } from "./constants/themes";
+import { simulateRapidTyping } from "./simulateRapidTyping";
 
 const App = () => {
   const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [users, setUsers] = useState<User[]>([]);
-  const [localVersion, setLocalVersion] = useState<number>(0); // track our local doc version
+  const [localVersionVector, setLocalVersionVector] = useState<VersionVector>(
+    {}
+  ); // track our local doc version
   // const [pendingLocalChanges, setPendingLocalChanges] = useState<string | null>(
   //   null
   // );
@@ -108,12 +112,14 @@ const App = () => {
   const handleEditorDidMount = (editor: any) => {
     editorRef.current = editor;
     // Initialize the TextOperationManager
-    operationManagerRef.current = new TextOperationManager(
-      editor,
-      id,
-      localVersion,
-      sendOperation
-    );
+    if (!operationManagerRef.current && editorRef.current) {
+      operationManagerRef.current = new TextOperationManager(
+        editorRef.current,
+        id,
+        localVersionVector,
+        sendOperation
+      );
+    }
   };
 
   const sendOperation = useCallback(
@@ -207,17 +213,14 @@ const App = () => {
         // Subscribe to operation acknowledgments
         stompClient.subscribe("/topic/operation-ack", function (message: any) {
           const ack = JSON.parse(message.body) as OperationAck;
-
           console.log("Received operation acknowledgment:", ack);
-
           // Handle operation acknowledgment
           if (operationManagerRef.current) {
             operationManagerRef.current.acknowledgeOperation(ack);
           }
-
           // Update local version
           if (ack.userId === id) {
-            setLocalVersion(ack.version);
+            setLocalVersionVector(ack.baseVersionVector);
           }
         });
 
@@ -235,10 +238,22 @@ const App = () => {
           setCode(documentState.content);
 
           // Update local version
-          setLocalVersion(documentState.version);
+          setLocalVersionVector(documentState.versionVector);
 
           if (operationManagerRef.current) {
-            operationManagerRef.current.setVersion(documentState.version);
+            // Check if the version vector has a nested 'versions' property
+            if (
+              documentState.versionVector &&
+              documentState.versionVector.versions
+            ) {
+              operationManagerRef.current.setVersionVector(
+                documentState.versionVector.versions
+              );
+            } else {
+              operationManagerRef.current.setVersionVector(
+                documentState.versionVector
+              );
+            }
           }
         });
 
@@ -454,6 +469,17 @@ const App = () => {
     }, 500);
   };
 
+  const handleSimulateTyping = () => {
+    if (editorRef.current && operationManagerRef.current) {
+      simulateRapidTyping(
+        editorRef.current,
+        operationManagerRef.current,
+        "Debugging CodeCafe is like playing whack-a-mole—fix one bug, and three more pop up, mocking your existence. The error messages are either cryptic riddles or flat-out lies, leaving me wondering if the code is broken or if reality itself is glitching. Sometimes, a bug magically disappears when I add a print statement, only to return the moment I remove it, as if it enjoys taunting me. The console log is basically my therapist now, except it only responds with 'Undefined is not a function' instead of useful advice. At this point, I’m not sure if I’m building CodeCafe or if CodeCafe is slowly breaking me. 😵‍💫",
+        50 // Adjust typing speed as needed
+      );
+    }
+  };
+
   return (
     <Theme appearance="dark" accentColor="bronze" radius="large">
       <div className="bg-gradient-to-b from-stone-800 to-stone-600 fixed top-0 left-0 right-0 h-screen z-0" />
@@ -562,6 +588,12 @@ const App = () => {
               onClick={() => setIsSettingsOpen(true)}
             >
               <VscSettings />
+            </button>
+            <button
+              className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1"
+              onClick={handleSimulateTyping}
+            >
+              Simulate Typing
             </button>
           </div>
           <div className="relative flex flex-col items-center w-full md:w-[950px] sm:w-[85%]">

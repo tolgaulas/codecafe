@@ -1,11 +1,16 @@
 import { editor, IRange } from "monaco-editor";
-import { v4 as uuidv4 } from "uuid"; // You'll need to add this package
+import { v4 as uuidv4 } from "uuid";
 
 // Define operation types
 export enum OperationType {
   INSERT = "INSERT",
   DELETE = "DELETE",
   REPLACE = "REPLACE",
+}
+
+// A version vector tracks operations from each client
+export interface VersionVector {
+  [userId: string]: number; // Maps each user ID to their operation count
 }
 
 // Define the structure of an operation
@@ -15,25 +20,23 @@ export interface TextOperation {
   position: number; // Position in the document
   text?: string; // Text to insert or replacement text
   length?: number; // Length of text to delete or replace
-  version: number; // Document version this operation is based on
+  baseVersionVector: VersionVector; // Vector when operation was created
   userId: string; // User who created this operation
 
-  // Add a clone method for operational transformation
   clone?: () => TextOperation;
 }
 
 // Define the structure of an operation acknowledgment from server
 export interface OperationAck {
   operationId: string;
-  version: number; // New document version after applying the operation
+  baseVersionVector: VersionVector; // Updated version vector after applying the operation
   userId: string;
 }
 
 export class TextOperationManager {
   private editor: editor.IStandaloneCodeEditor;
   private model: editor.ITextModel;
-  private localVersion: number = 0;
-  private baseContent: string = "";
+  private localVersionVector: VersionVector = {}; // Track versions from all clients
   private pendingOperations: Map<string, TextOperation> = new Map();
   private operationHistory: TextOperation[] = [];
   private userId: string;
@@ -43,15 +46,19 @@ export class TextOperationManager {
   constructor(
     editor: editor.IStandaloneCodeEditor,
     userId: string,
-    initialVersion: number = 0,
+    initialVersionVector: VersionVector = {},
     operationCallback: (op: TextOperation) => void
   ) {
     this.editor = editor;
     this.model = editor.getModel()!;
     this.userId = userId;
-    this.localVersion = initialVersion;
-    this.baseContent = this.model.getValue();
+    this.localVersionVector = { ...initialVersionVector };
     this.operationCallback = operationCallback;
+
+    // Initialize user's version count if not already present
+    if (!this.localVersionVector[userId]) {
+      this.localVersionVector[userId] = 0;
+    }
 
     // Listen for model content changes
     this.model.onDidChangeContent((e) => {
@@ -61,8 +68,8 @@ export class TextOperationManager {
     });
 
     console.log(
-      "TextOperationManager initialized with version:",
-      initialVersion
+      "TextOperationManager initialized with version vector:",
+      initialVersionVector
     );
   }
 
@@ -81,6 +88,9 @@ export class TextOperationManager {
       if (operation) {
         // Generate a unique ID for the operation
         operation.id = uuidv4();
+
+        // Set the operation's base version vector (copy current state)
+        operation.baseVersionVector = { ...this.localVersionVector };
 
         // Add the operation to pending operations
         this.pendingOperations.set(operation.id, operation);
@@ -120,10 +130,11 @@ export class TextOperationManager {
       position,
       text: text.length > 0 ? text : undefined,
       length: length > 0 ? length : undefined,
-      version: this.localVersion,
+      baseVersionVector: {}, // Will be filled in handleModelContentChange
       userId: this.userId,
       clone: function () {
         const clone = { ...this };
+        clone.baseVersionVector = { ...this.baseVersionVector };
         clone.clone = this.clone;
         return clone;
       },
@@ -145,29 +156,41 @@ export class TextOperationManager {
         this.pendingOperations.delete(operation.id);
       }
 
-      // Update local version
-      this.localVersion = operation.version;
+      // Update our version vector with the server's updated vector
+      this.updateVersionVector(operation.baseVersionVector);
 
-      // Add to operation history
-      this.operationHistory.push(operation);
-
-      // Trim history if it gets too large
-      if (this.operationHistory.length > 100) {
-        this.operationHistory.shift();
-      }
-
+      console.log("Updated local version vector:", this.localVersionVector);
       return;
     }
 
-    // Transform the operation against any pending operations
-    const transformedOperation =
-      this.transformAgainstPendingOperations(operation);
+    // Update our local version vector to include this operation
+    this.updateVersionVector(operation.baseVersionVector);
 
-    // Flag that we're applying an external operation
+    // Find concurrent operations - those not caused by or causing the incoming operation
+    const concurrentOps = this.findConcurrentOperations(operation);
+
+    // Sort for consistent transformation order
+    concurrentOps.sort((a, b) => {
+      const versionA = a.baseVersionVector?.version || 0; // Access version from vector
+      const versionB = b.baseVersionVector?.version || 0;
+      return versionB - versionA;
+    });
+
+    // Transform operation against concurrent operations
+    let transformedOperation = operation.clone
+      ? operation.clone()
+      : { ...operation };
+
+    for (const concurrentOp of concurrentOps) {
+      transformedOperation = this.transformOperation(
+        transformedOperation,
+        concurrentOp
+      );
+    }
+
+    // Apply the transformed operation
     this.isApplyingExternalOperation = true;
-
     try {
-      // Apply the operation to the model
       const edits: editor.IIdentifiedSingleEditOperation[] = [];
       const range = this.getOperationRange(transformedOperation);
 
@@ -198,9 +221,6 @@ export class TextOperationManager {
         () => null
       );
 
-      // Update local version
-      this.localVersion = transformedOperation.version;
-
       // Add to operation history
       this.operationHistory.push(transformedOperation);
 
@@ -209,7 +229,10 @@ export class TextOperationManager {
         this.operationHistory.shift();
       }
 
-      console.log("Editor updated, new version:", this.localVersion);
+      console.log(
+        "Editor updated, new version vector:",
+        this.localVersionVector
+      );
     } finally {
       // Reset the flag
       this.isApplyingExternalOperation = false;
@@ -249,56 +272,91 @@ export class TextOperationManager {
       this.pendingOperations.delete(ack.operationId);
     }
 
-    // Update local version
-    if (ack.userId === this.userId) {
-      this.localVersion = ack.version;
-      console.log("Updated local version to:", this.localVersion);
-    }
+    // Update local version vector with the server's version vector
+    this.updateVersionVector(ack.baseVersionVector);
+    console.log("Updated local version vector:", this.localVersionVector);
   }
 
   /**
-   * Gets the current document version
+   * Gets the current document version vector
    */
-  public getVersion(): number {
-    return this.localVersion;
+  public getVersionVector(): VersionVector {
+    return { ...this.localVersionVector };
   }
 
   /**
-   * Sets the document version
+   * Sets the document version vector
    */
-  public setVersion(version: number): void {
-    this.localVersion = version;
-    console.log("Version set to:", version);
+  public setVersionVector(vector: VersionVector): void {
+    this.localVersionVector = { ...vector };
+    console.log("Version vector set to:", this.localVersionVector);
   }
 
   /**
-   * Transform an incoming operation against all pending operations
+   * Find operations that happened concurrently with the given operation
    */
-  private transformAgainstPendingOperations(
-    operation: TextOperation
-  ): TextOperation {
-    let transformedOperation = operation.clone
-      ? operation.clone()
-      : { ...operation };
+  private findConcurrentOperations(operation: TextOperation): TextOperation[] {
+    // Operations that happened concurrently with the incoming operation
+    const concurrent: TextOperation[] = [];
 
-    // Add clone method if it doesn't exist
-    if (!transformedOperation.clone) {
-      transformedOperation.clone = function () {
-        const clone = { ...this };
-        clone.clone = this.clone;
-        return clone;
-      };
+    // From pending operations (our operations not yet acknowledged)
+    for (const [_, pendingOp] of this.pendingOperations) {
+      if (this.isConcurrent(operation, pendingOp)) {
+        concurrent.push(pendingOp);
+      }
     }
 
-    // Transform against all pending operations in order
-    for (const pendingOp of this.pendingOperations.values()) {
-      transformedOperation = this.transformOperation(
-        transformedOperation,
-        pendingOp
-      );
+    return concurrent;
+  }
+
+  /**
+   * Determine if two operations are concurrent
+   */
+  private isConcurrent(a: TextOperation, b: TextOperation): boolean {
+    // a and b are concurrent if neither happened before the other
+    return !this.happenedBefore(a, b) && !this.happenedBefore(b, a);
+  }
+
+  /**
+   * Determine if operation a happened before operation b
+   */
+  private happenedBefore(a: TextOperation, b: TextOperation): boolean {
+    // a happened before b if all a's operations are included in b's history
+    for (const userId in a.baseVersionVector) {
+      const aVersion = a.baseVersionVector[userId] || 0;
+      const bVersion = b.baseVersionVector[userId] || 0;
+
+      if (aVersion > bVersion) {
+        return false; // a includes operations that b doesn't know about
+      }
     }
 
-    return transformedOperation;
+    // Check that at least one of a's operations is strictly before b's
+    // (otherwise they're the same version vector)
+    for (const userId in a.baseVersionVector) {
+      const aVersion = a.baseVersionVector[userId] || 0;
+      const bVersion = b.baseVersionVector[userId] || 0;
+
+      if (aVersion < bVersion) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Update local version vector with new information
+   */
+  private updateVersionVector(newVector: VersionVector): void {
+    // Update local version vector with new information
+    for (const userId in newVector) {
+      const newVersion = newVector[userId];
+      const currentVersion = this.localVersionVector[userId] || 0;
+
+      // Take the max value for each user
+      this.localVersionVector[userId] = Math.max(currentVersion, newVersion);
+    }
   }
 
   /**
@@ -318,6 +376,7 @@ export class TextOperationManager {
     if (!transformedA.clone) {
       transformedA.clone = function () {
         const clone = { ...this };
+        clone.baseVersionVector = { ...this.baseVersionVector };
         clone.clone = this.clone;
         return clone;
       };
@@ -325,11 +384,6 @@ export class TextOperationManager {
 
     // If operations are identical, no transform needed
     if (a.id === b.id) {
-      return transformedA;
-    }
-
-    // No transformation needed if operations are from same user or if 'b' is effectively in the past
-    if (b.version < transformedA.version || transformedA.userId === b.userId) {
       return transformedA;
     }
 
@@ -349,10 +403,11 @@ export class TextOperationManager {
           type: OperationType.DELETE,
           position: b.position,
           length: b.length,
-          version: b.version,
+          baseVersionVector: { ...b.baseVersionVector },
           userId: b.userId,
           clone: function () {
             const clone = { ...this };
+            clone.baseVersionVector = { ...this.baseVersionVector };
             clone.clone = this.clone;
             return clone;
           },
@@ -362,10 +417,11 @@ export class TextOperationManager {
           type: OperationType.INSERT,
           position: b.position,
           text: b.text,
-          version: b.version,
+          baseVersionVector: { ...b.baseVersionVector },
           userId: b.userId,
           clone: function () {
             const clone = { ...this };
+            clone.baseVersionVector = { ...this.baseVersionVector };
             clone.clone = this.clone;
             return clone;
           },
