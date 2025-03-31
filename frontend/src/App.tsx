@@ -569,7 +569,7 @@ const App = () => {
                 willChange: "transform",
               }}
             >
-              <div className="p-6 h-full text-neutral-300">
+              <div className="py-6 px-4 h-full text-neutral-300">
                 <CodeEditor
                   onCodeChange={handleCodeChange}
                   users={users}
