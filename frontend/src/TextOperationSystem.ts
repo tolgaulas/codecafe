@@ -1,4 +1,5 @@
 import { editor, IRange } from "monaco-editor";
+import { v4 as uuidv4 } from "uuid"; // You'll need to add this package
 
 // Define operation types
 export enum OperationType {
@@ -16,6 +17,9 @@ export interface TextOperation {
   length?: number; // Length of text to delete or replace
   version: number; // Document version this operation is based on
   userId: string; // User who created this operation
+
+  // Add a clone method for operational transformation
+  clone?: () => TextOperation;
 }
 
 // Define the structure of an operation acknowledgment from server
@@ -30,11 +34,11 @@ export class TextOperationManager {
   private model: editor.ITextModel;
   private localVersion: number = 0;
   private baseContent: string = "";
-  private pendingOperations: TextOperation[] = [];
+  private pendingOperations: Map<string, TextOperation> = new Map();
+  private operationHistory: TextOperation[] = [];
   private userId: string;
   private operationCallback: (op: TextOperation) => void;
   private isApplyingExternalOperation: boolean = false;
-  private operationIdCounter: number = 0;
 
   constructor(
     editor: editor.IStandaloneCodeEditor,
@@ -75,15 +79,13 @@ export class TextOperationManager {
     for (const change of changes) {
       const operation = this.createOperationFromChange(change);
       if (operation) {
-        // Generate a unique ID for this operation
-        const operationId = `${this.userId}-${++this.operationIdCounter}`;
-        operation.id = operationId;
+        // Generate a unique ID for the operation
+        operation.id = uuidv4();
 
-        // Add to pending operations
-        this.pendingOperations.push(operation);
+        // Add the operation to pending operations
+        this.pendingOperations.set(operation.id, operation);
 
-        console.log("Local operation created:", operation);
-
+        console.log("Created operation:", operation);
         // Send the operation to the server
         this.operationCallback(operation);
       }
@@ -113,93 +115,80 @@ export class TextOperationManager {
       return null;
     }
 
-    return {
+    const operation: TextOperation = {
       type,
       position,
       text: text.length > 0 ? text : undefined,
       length: length > 0 ? length : undefined,
       version: this.localVersion,
       userId: this.userId,
+      clone: function () {
+        const clone = { ...this };
+        clone.clone = this.clone;
+        return clone;
+      },
     };
+
+    return operation;
   }
 
   /**
    * Applies a received operation from the server
    */
   public applyOperation(operation: TextOperation): void {
-    console.log("Received operation from server:", operation);
+    console.log("Applying operation:", operation);
 
-    // If this is our own operation coming back from the server, update version and remove from pending
+    // If this is our own operation coming back from the server
     if (operation.userId === this.userId) {
-      this.handleOwnOperation(operation);
-      return;
-    }
+      if (operation.id && this.pendingOperations.has(operation.id)) {
+        // Remove the operation from pending operations
+        this.pendingOperations.delete(operation.id);
+      }
 
-    // For other users' operations, apply them to the document
-    this.applyExternalOperation(operation);
-  }
-
-  /**
-   * Handle our own operation coming back from the server
-   */
-  private handleOwnOperation(operation: TextOperation): void {
-    if (!operation.id) {
-      console.warn("Received own operation without ID:", operation);
-      return;
-    }
-
-    // Find and remove the operation from pending operations
-    const index = this.pendingOperations.findIndex(
-      (op) => op.id === operation.id
-    );
-    if (index !== -1) {
-      this.pendingOperations.splice(index, 1);
-      console.log("Removed acknowledged operation from pending:", operation.id);
-    }
-
-    // Update local version
-    if (operation.version > this.localVersion) {
+      // Update local version
       this.localVersion = operation.version;
-      console.log("Updated local version to:", this.localVersion);
+
+      // Add to operation history
+      this.operationHistory.push(operation);
+
+      // Trim history if it gets too large
+      if (this.operationHistory.length > 100) {
+        this.operationHistory.shift();
+      }
+
+      return;
     }
-  }
 
-  /**
-   * Apply an operation from another user
-   */
-  private applyExternalOperation(operation: TextOperation): void {
-    console.log("Applying external operation:", operation);
+    // Transform the operation against any pending operations
+    const transformedOperation =
+      this.transformAgainstPendingOperations(operation);
 
-    // Set flag to prevent triggering our own change handler
+    // Flag that we're applying an external operation
     this.isApplyingExternalOperation = true;
 
     try {
-      // Convert operation to Monaco editor edit
+      // Apply the operation to the model
       const edits: editor.IIdentifiedSingleEditOperation[] = [];
-      const range = this.getOperationRange(operation);
+      const range = this.getOperationRange(transformedOperation);
 
-      switch (operation.type) {
-        case OperationType.INSERT:
-          edits.push({
-            range,
-            text: operation.text || "",
-            forceMoveMarkers: true,
-          });
-          break;
-        case OperationType.DELETE:
-          edits.push({
-            range,
-            text: "",
-            forceMoveMarkers: true,
-          });
-          break;
-        case OperationType.REPLACE:
-          edits.push({
-            range,
-            text: operation.text || "",
-            forceMoveMarkers: true,
-          });
-          break;
+      if (transformedOperation.type === OperationType.INSERT) {
+        edits.push({
+          range,
+          text: transformedOperation.text || "",
+          forceMoveMarkers: true,
+        });
+      } else if (transformedOperation.type === OperationType.DELETE) {
+        edits.push({
+          range,
+          text: "",
+          forceMoveMarkers: true,
+        });
+      } else if (transformedOperation.type === OperationType.REPLACE) {
+        edits.push({
+          range,
+          text: transformedOperation.text || "",
+          forceMoveMarkers: true,
+        });
       }
 
       // Apply the edits
@@ -209,16 +198,18 @@ export class TextOperationManager {
         () => null
       );
 
-      // Update local version if needed
-      if (operation.version > this.localVersion) {
-        this.localVersion = operation.version;
-        console.log(
-          "Updated local version after external operation:",
-          this.localVersion
-        );
+      // Update local version
+      this.localVersion = transformedOperation.version;
+
+      // Add to operation history
+      this.operationHistory.push(transformedOperation);
+
+      // Trim history if it gets too large
+      if (this.operationHistory.length > 100) {
+        this.operationHistory.shift();
       }
-    } catch (error) {
-      console.error("Failed to apply operation:", error, operation);
+
+      console.log("Editor updated, new version:", this.localVersion);
     } finally {
       // Reset the flag
       this.isApplyingExternalOperation = false;
@@ -229,43 +220,23 @@ export class TextOperationManager {
    * Gets the range for an operation based on its position and length
    */
   private getOperationRange(operation: TextOperation): IRange {
-    try {
-      // Safety check for position
-      const position = Math.min(
-        operation.position,
-        this.model.getValueLength()
+    const startPosition = this.model.getPositionAt(operation.position);
+
+    let endPosition;
+    if (operation.length && operation.length > 0) {
+      endPosition = this.model.getPositionAt(
+        operation.position + operation.length
       );
-      const startPosition = this.model.getPositionAt(position);
-
-      let endPosition;
-      if (operation.length && operation.length > 0) {
-        // Safety check for end position
-        const endPos = Math.min(
-          position + operation.length,
-          this.model.getValueLength()
-        );
-        endPosition = this.model.getPositionAt(endPos);
-      } else {
-        endPosition = startPosition;
-      }
-
-      return {
-        startLineNumber: startPosition.lineNumber,
-        startColumn: startPosition.column,
-        endLineNumber: endPosition.lineNumber,
-        endColumn: endPosition.column,
-      };
-    } catch (error) {
-      console.error("Error calculating operation range:", error, operation);
-
-      // Fallback to first position in document
-      return {
-        startLineNumber: 1,
-        startColumn: 1,
-        endLineNumber: 1,
-        endColumn: 1,
-      };
+    } else {
+      endPosition = startPosition;
     }
+
+    return {
+      startLineNumber: startPosition.lineNumber,
+      startColumn: startPosition.column,
+      endLineNumber: endPosition.lineNumber,
+      endColumn: endPosition.column,
+    };
   }
 
   /**
@@ -273,21 +244,13 @@ export class TextOperationManager {
    */
   public acknowledgeOperation(ack: OperationAck): void {
     console.log("Operation acknowledged:", ack);
-
-    // Find and remove the operation from pending operations
-    const index = this.pendingOperations.findIndex(
-      (op) => op.id === ack.operationId
-    );
-    if (index !== -1) {
-      this.pendingOperations.splice(index, 1);
-      console.log(
-        "Removed acknowledged operation from pending:",
-        ack.operationId
-      );
+    // Remove the operation from pending operations if it exists
+    if (this.pendingOperations.has(ack.operationId)) {
+      this.pendingOperations.delete(ack.operationId);
     }
 
-    // Update local version if this is our operation
-    if (ack.userId === this.userId && ack.version > this.localVersion) {
+    // Update local version
+    if (ack.userId === this.userId) {
       this.localVersion = ack.version;
       console.log("Updated local version to:", this.localVersion);
     }
@@ -309,25 +272,207 @@ export class TextOperationManager {
   }
 
   /**
-   * Reset the manager state
+   * Transform an incoming operation against all pending operations
    */
-  public reset(initialContent: string, initialVersion: number): void {
-    // Set flags to prevent event handlers from triggering
-    this.isApplyingExternalOperation = true;
+  private transformAgainstPendingOperations(
+    operation: TextOperation
+  ): TextOperation {
+    let transformedOperation = operation.clone
+      ? operation.clone()
+      : { ...operation };
 
-    try {
-      // Reset all state variables
-      this.localVersion = initialVersion;
-      this.baseContent = initialContent;
-      this.pendingOperations = [];
-      this.operationIdCounter = 0;
+    // Add clone method if it doesn't exist
+    if (!transformedOperation.clone) {
+      transformedOperation.clone = function () {
+        const clone = { ...this };
+        clone.clone = this.clone;
+        return clone;
+      };
+    }
 
-      // Set model content
-      this.model.setValue(initialContent);
+    // Transform against all pending operations in order
+    for (const pendingOp of this.pendingOperations.values()) {
+      transformedOperation = this.transformOperation(
+        transformedOperation,
+        pendingOp
+      );
+    }
 
-      console.log("TextOperationManager reset to version:", initialVersion);
-    } finally {
-      this.isApplyingExternalOperation = false;
+    return transformedOperation;
+  }
+
+  /**
+   * Transforms operation 'a' against operation 'b'.
+   * This function assumes 'b' has already been applied to the document state
+   * that 'a' was based on. It modifies 'a' so it can be applied to the document
+   * state *after* 'b' has been applied.
+   */
+  private transformOperation(
+    a: TextOperation,
+    b: TextOperation
+  ): TextOperation {
+    // Clone operation 'a' to avoid modifying the original
+    const transformedA = a.clone ? a.clone() : { ...a };
+
+    // Add clone method if it doesn't exist
+    if (!transformedA.clone) {
+      transformedA.clone = function () {
+        const clone = { ...this };
+        clone.clone = this.clone;
+        return clone;
+      };
+    }
+
+    // If operations are identical, no transform needed
+    if (a.id === b.id) {
+      return transformedA;
+    }
+
+    // No transformation needed if operations are from same user or if 'b' is effectively in the past
+    if (b.version < transformedA.version || transformedA.userId === b.userId) {
+      return transformedA;
+    }
+
+    // Core transformation logic based on operation types
+    switch (b.type) {
+      case OperationType.INSERT:
+        this.transformAgainstInsert(transformedA, b);
+        break;
+
+      case OperationType.DELETE:
+        this.transformAgainstDelete(transformedA, b);
+        break;
+
+      case OperationType.REPLACE:
+        // Treat REPLACE as DELETE followed by INSERT
+        const deletePartOfB: TextOperation = {
+          type: OperationType.DELETE,
+          position: b.position,
+          length: b.length,
+          version: b.version,
+          userId: b.userId,
+          clone: function () {
+            const clone = { ...this };
+            clone.clone = this.clone;
+            return clone;
+          },
+        };
+
+        const insertPartOfB: TextOperation = {
+          type: OperationType.INSERT,
+          position: b.position,
+          text: b.text,
+          version: b.version,
+          userId: b.userId,
+          clone: function () {
+            const clone = { ...this };
+            clone.clone = this.clone;
+            return clone;
+          },
+        };
+
+        // Transform against DELETE then INSERT
+        const tempTransformedA = this.transformOperation(
+          transformedA,
+          deletePartOfB
+        );
+        return this.transformOperation(tempTransformedA, insertPartOfB);
+    }
+
+    return transformedA;
+  }
+
+  /**
+   * Helper method to transform an operation against an INSERT operation
+   */
+  private transformAgainstInsert(
+    transformedA: TextOperation,
+    opB_Insert: TextOperation
+  ): void {
+    const aPos = transformedA.position;
+    const bPos = opB_Insert.position;
+    const bLen = opB_Insert.text ? opB_Insert.text.length : 0;
+
+    if (bLen === 0) return; // Nothing to transform against
+
+    // If 'b' inserts at or before 'a's position, shift 'a' forward
+    if (bPos < aPos) {
+      transformedA.position = aPos + bLen;
+    }
+    // If 'b' inserts exactly at 'a's position, apply tie-breaking
+    else if (bPos === aPos) {
+      // Tie-breaking rule: operation from user with lexicographically smaller ID comes first
+      if (transformedA.type === OperationType.INSERT) {
+        const aUserId = transformedA.userId || "";
+        const bUserId = opB_Insert.userId || "";
+        if (aUserId.localeCompare(bUserId) > 0) {
+          // If 'a's user ID is "greater", assume 'a' comes after 'b's insert
+          transformedA.position = aPos + bLen;
+        }
+        // else 'a' comes first, position unchanged
+      } else {
+        // If 'a' is DELETE/REPLACE starting at bPos, b's insert happens before it
+        transformedA.position = aPos + bLen;
+      }
+    }
+    // If 'b' inserts after 'a's position, 'a' is unaffected
+  }
+
+  /**
+   * Helper method to transform an operation against a DELETE operation
+   */
+  private transformAgainstDelete(
+    transformedA: TextOperation,
+    opB_Delete: TextOperation
+  ): void {
+    const aPos = transformedA.position;
+    const aLen = transformedA.length || 0;
+    const aEnd = aPos + aLen;
+
+    const bPos = opB_Delete.position;
+    const bLen = opB_Delete.length || 0;
+    const bEnd = bPos + bLen;
+
+    if (bLen === 0) return; // Nothing to transform against
+
+    // Case 1: 'b' deletes entirely before 'a' starts
+    if (bEnd <= aPos) {
+      transformedA.position = aPos - bLen;
+    }
+    // Case 2: 'b' deletes entirely after 'a' ends
+    else if (bPos >= aEnd) {
+      // Position and length of 'a' remain unchanged
+    }
+    // Case 3: 'b' deletes a range that completely contains 'a'
+    else if (bPos <= aPos && bEnd >= aEnd) {
+      transformedA.position = bPos;
+      if (transformedA.type === OperationType.INSERT) {
+        // Insert is contained within deletion, nothing changes about the insert text
+      } else {
+        transformedA.length = 0; // Delete/Replace becomes zero length
+      }
+    }
+    // Case 4: 'b' deletes a range that starts before 'a' and overlaps with the beginning of 'a'
+    else if (bPos < aPos && bEnd > aPos && bEnd < aEnd) {
+      const deletedLength = bEnd - aPos;
+      transformedA.position = bPos; // 'a' now starts where 'b' started deleting
+      if (transformedA.type !== OperationType.INSERT) {
+        transformedA.length = aLen - deletedLength; // Reduce length of 'a'
+      }
+    }
+    // Case 5: 'b' deletes a range that starts within 'a' and ends after 'a'
+    else if (bPos >= aPos && bPos < aEnd && bEnd >= aEnd) {
+      // 'a's position is unchanged
+      if (transformedA.type !== OperationType.INSERT) {
+        transformedA.length = bPos - aPos; // 'a' is truncated
+      }
+    }
+    // Case 6: 'b' deletes a range that is completely within 'a'
+    else if (bPos > aPos && bEnd < aEnd) {
+      // 'a's position is unchanged
+      if (transformedA.type !== OperationType.INSERT) {
+        transformedA.length = aLen - bLen; // 'a' becomes shorter
+      }
     }
   }
 }

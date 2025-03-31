@@ -1,16 +1,20 @@
 package com.codecafe.backend.dto;
-import com.codecafe.backend.dto.OperationType;
+
+import java.util.Objects;
 
 public class TextOperation {
-    private String id;           // Unique operation ID
-    private OperationType type;  // Operation type (INSERT, DELETE, REPLACE)
-    private int position;        // Position in the document
-    private String text;         // Text to insert or replacement text
-    private Integer length;      // Length of text to delete or replace
-    private int version;         // Document version this operation is based on
-    private String userId;       // User who created this operation
+    private String id;
+    private OperationType type;
+    private int position;
+    private String text;
+    private Integer length;
+    private int version;
+    private String userId;
 
-    // Getters and setters
+    public TextOperation() {
+        // Default constructor
+    }
+
     public String getId() {
         return id;
     }
@@ -65,5 +69,52 @@ public class TextOperation {
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TextOperation that = (TextOperation) o;
+        return position == that.position &&
+                version == that.version &&
+                Objects.equals(id, that.id) &&
+                type == that.type &&
+                Objects.equals(text, that.text) &&
+                Objects.equals(length, that.length) &&
+                Objects.equals(userId, that.userId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, type, position, text, length, version, userId);
+    }
+
+    @Override
+    public String toString() {
+        return "TextOperation{" +
+                "id='" + id + '\'' +
+                ", type=" + type +
+                ", position=" + position +
+                ", text='" + text + '\'' +
+                ", length=" + length +
+                ", version=" + version +
+                ", userId='" + userId + '\'' +
+                '}';
+    }
+
+    /**
+     * Creates a deep copy of this TextOperation
+     */
+    public TextOperation clone() {
+        TextOperation clone = new TextOperation();
+        clone.setId(this.id);
+        clone.setType(this.type);
+        clone.setPosition(this.position);
+        clone.setText(this.text);
+        clone.setLength(this.length);
+        clone.setVersion(this.version);
+        clone.setUserId(this.userId);
+        return clone;
     }
 }
