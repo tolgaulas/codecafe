@@ -192,7 +192,7 @@ const App = () => {
 
   useEffect(() => {
     if (isSessionActive) {
-      const socket = new SockJS("http://157.230.83.211:8080/ws");
+      const socket = new SockJS("http://localhost:8080/ws");
       const stompClient = Stomp.over(socket);
 
       stompClient.connect({}, function (frame: any) {
@@ -296,7 +296,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://157.230.83.211:8080/api/execute",
+        "http://localhost:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -406,7 +406,7 @@ const App = () => {
 
       // Fetch session info
       axios
-        .get(`http://157.230.83.211:8080/api/sessions/${sessionIdFromUrl}`)
+        .get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
         .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
@@ -423,7 +423,7 @@ const App = () => {
     try {
       // Create a new session on the server
       const response = await axios.post(
-        "http://157.230.83.211:8080/api/sessions/create",
+        "http://localhost:8080/api/sessions/create",
         {
           creatorName: name || displayName || "Anonymous",
         }

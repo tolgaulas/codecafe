@@ -31,7 +31,7 @@ public class OtController {
         messagingTemplate.convertAndSend("/topic/operations", processedOp);
 
         // Send acknowledgment back to clients
-        OperationAck ack = new OperationAck(operation.getId(), processedOp.getVersion(), operation.getUserId());
+        OperationAck ack = new OperationAck(operation.getId(), processedOp.getBaseVersionVector(), operation.getUserId());
         messagingTemplate.convertAndSend("/topic/operation-ack", ack);
     }
 
@@ -42,7 +42,7 @@ public class OtController {
     public void getDocumentState() {
         DocumentState state = new DocumentState(
                 otService.getDocumentContent(),
-                otService.getCurrentVersion()
+                otService.getServerVersionVector()
         );
 
         messagingTemplate.convertAndSend("/topic/document-state", state);

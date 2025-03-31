@@ -2,17 +2,19 @@ package com.codecafe.backend.service;
 
 import com.codecafe.backend.dto.TextOperation;
 import com.codecafe.backend.dto.OperationType;
+import com.codecafe.backend.dto.VersionVector;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.Objects;
 
 @Service
 public class OtService {
     private String documentContent = "";
-    private int currentVersion = 0;
+    private VersionVector serverVersionVector = new VersionVector();
     private final List<TextOperation> operationHistory = new ArrayList<>();
     private final ReentrantLock lock = new ReentrantLock();
 
@@ -29,12 +31,12 @@ public class OtService {
     }
 
     /**
-     * Gets the current document version
+     * Gets the current server version vector
      */
-    public int getCurrentVersion() {
+    public VersionVector getServerVersionVector() {
         lock.lock();
         try {
-            return currentVersion;
+            return new VersionVector(serverVersionVector.getVersions());
         } finally {
             lock.unlock();
         }
@@ -44,59 +46,99 @@ public class OtService {
      * Process an incoming operation, transform if necessary, and apply to document
      *
      * @param operation The operation to process
-     * @return The operation with updated version
+     * @return The operation with updated version vector
      */
     public TextOperation processOperation(TextOperation operation) {
         lock.lock();
         try {
             System.out.println("Processing operation: " + operation);
+            String userId = operation.getUserId();
 
-            // If operation is too old, transform it against all operations since its base version
-            if (operation.getVersion() < currentVersion) {
-                List<TextOperation> operationsToTransformAgainst = new ArrayList<>();
+            // Find concurrent operations not known to the client when it created this operation
+            List<TextOperation> concurrentOps = findConcurrentOperations(operation);
 
-                // Collect all operations that need to be considered for transformation
-                for (TextOperation historyOp : operationHistory) {
-                    if (historyOp.getVersion() >= operation.getVersion() &&
-                            !historyOp.getUserId().equals(operation.getUserId())) {
-                        operationsToTransformAgainst.add(historyOp);
-                    }
+            // Sort operations to ensure consistent transformation across all clients
+            concurrentOps.sort((a, b) -> {
+                // First compare by user ID for consistent ordering
+                int userCompare = a.getUserId().compareTo(b.getUserId());
+                if (userCompare != 0) {
+                    return userCompare;
                 }
+                // Then by version number if from same user
+                int versionA = a.getBaseVersionVector().getVersions().getOrDefault(a.getUserId(), 0);
+                int versionB = b.getBaseVersionVector().getVersions().getOrDefault(b.getUserId(), 0);
+                return Integer.compare(versionA, versionB);
+            });
 
-                // Sort operations by version to transform in the correct order
-                operationsToTransformAgainst.sort((a, b) ->
-                        Integer.compare(a.getVersion(), b.getVersion()));
-
-                // Transform against each operation
-                for (TextOperation historyOp : operationsToTransformAgainst) {
-                    operation = transformOperation(operation, historyOp);
-                }
+            // Transform the operation against all concurrent operations
+            TextOperation transformedOp = operation;
+            for (TextOperation concurrentOp : concurrentOps) {
+                transformedOp = transformOperation(transformedOp, concurrentOp);
             }
 
+            // Validate transformed operation
+            validateOperation(transformedOp);
+
             // Apply the operation to the document
-            applyOperation(operation);
+            applyOperation(transformedOp);
 
-            // Update the version and add to history
-            currentVersion++;
-            operation.setVersion(currentVersion);
-            operationHistory.add(operation);
+            // Update the server's version vector to include this operation
+            VersionVector newBaseVector = new VersionVector(serverVersionVector.getVersions());
+            if (transformedOp.getBaseVersionVector() != null && transformedOp.getBaseVersionVector().getVersions() != null) {
+                Map<String, Integer> userVersions = transformedOp.getBaseVersionVector().getVersions();
+                int userVersion = serverVersionVector.getVersions().getOrDefault(userId, 0) + 1;
+                newBaseVector.update(userId, userVersion);
+            } else {
+                Map<String, Integer> initialVector = new HashMap<>();
+                initialVector.put(userId, 1);
+                newBaseVector = new VersionVector(initialVector);
+            }
 
-            // Trim history if it gets too large
+            // Update the server's vector and operation
+            serverVersionVector = newBaseVector;
+            transformedOp.setBaseVersionVector(newBaseVector);
+
+            // Add to history
+            operationHistory.add(transformedOp);
+
+            // Trim history if it gets too large (consider a more efficient structure like TreeMap for large histories)
             if (operationHistory.size() > 100) {
                 operationHistory.remove(0);
             }
 
-            System.out.println("New document state: " + documentContent + ", version: " + currentVersion);
-            return operation;
+            System.out.println("New document state: " + documentContent);
+            System.out.println("New server version vector: " + serverVersionVector);
+            return transformedOp;
         } finally {
             lock.unlock();
         }
     }
 
     /**
+     * Find operations that are concurrent with the given operation
+     */
+    private List<TextOperation> findConcurrentOperations(TextOperation operation) {
+        List<TextOperation> concurrent = new ArrayList<>();
+        VersionVector clientVector = operation.getBaseVersionVector();
+
+        if (clientVector == null || clientVector.getVersions() == null) {
+            return new ArrayList<>(operationHistory);
+        }
+
+        for (TextOperation historyOp : operationHistory) {
+            if (historyOp.getUserId().equals(operation.getUserId())) {
+                continue;
+            }
+            VersionVector historyVector = historyOp.getBaseVersionVector();
+            if (historyVector != null && historyVector.getVersions() != null && clientVector.concurrent(historyVector)) {
+                concurrent.add(historyOp);
+            }
+        }
+        return concurrent;
+    }
+
+    /**
      * Apply an operation to the document
-     *
-     * @param operation The operation to apply
      */
     private void applyOperation(TextOperation operation) {
         StringBuilder sb = new StringBuilder(documentContent);
@@ -107,167 +149,182 @@ public class OtService {
                     sb.insert(operation.getPosition(), operation.getText());
                 }
                 break;
-
             case DELETE:
                 if (operation.getPosition() + operation.getLength() <= sb.length()) {
                     sb.delete(operation.getPosition(), operation.getPosition() + operation.getLength());
                 }
                 break;
-
             case REPLACE:
                 if (operation.getPosition() + operation.getLength() <= sb.length()) {
                     sb.replace(operation.getPosition(), operation.getPosition() + operation.getLength(), operation.getText());
                 }
                 break;
         }
-
         documentContent = sb.toString();
     }
 
     /**
-     * Transforms operation 'a' against operation 'b'.
-     * This function assumes 'b' has already been applied to the document state
-     * that 'a' was based on. It modifies 'a' so it can be applied to the document
-     * state *after* 'b' has been applied.
-     *
-     * @param a The operation to transform.
-     * @param b The operation to transform against (considered to happen concurrently/before a).
-     * @return The transformed operation 'a'.
+     * Transform operation A against operation B
      */
-    private TextOperation transformOperation(TextOperation a, TextOperation b) {
-        // Clone operation 'a' to avoid modifying the original
-        TextOperation transformedA = a.clone();
+    private TextOperation transformOperation(TextOperation clientOp, TextOperation serverOp) {
+        TextOperation transformed = cloneOperation(clientOp);
+        TextOperation originalClientOp = clientOp; // For tie-breaking reference
 
-        // If operations are identical, no transform needed
-        if (transformedA.equals(b)) {
-            return transformedA;
+        if (clientOp.getUserId().equals(serverOp.getUserId())) {
+            return transformed;
         }
 
-        // No transformation needed if operations are from same user or if 'b' is effectively in the past
-        if (b.getVersion() < transformedA.getVersion() || Objects.equals(transformedA.getUserId(), b.getUserId())) {
-            return transformedA;
-        }
-
-        // Core transformation logic based on operation types
-        switch (b.getType()) {
+        switch (serverOp.getType()) {
             case INSERT:
-                transformAgainstInsert(transformedA, b);
+                transformed.setPosition(transformPosition(
+                        transformed.getPosition(),
+                        serverOp.getPosition(),
+                        serverOp.getText().length(),
+                        true,
+                        originalClientOp.getUserId(),
+                        serverOp.getUserId()
+                ));
+
+                if ((transformed.getType() == OperationType.DELETE ||
+                        transformed.getType() == OperationType.REPLACE) &&
+                        transformed.getLength() != null) {
+                    int clientOpEnd = transformed.getPosition() + transformed.getLength();
+                    if (serverOp.getPosition() > transformed.getPosition() &&
+                            serverOp.getPosition() < clientOpEnd) {
+                        transformed.setLength(transformed.getLength() + serverOp.getText().length());
+                    }
+                }
                 break;
 
             case DELETE:
-                transformAgainstDelete(transformedA, b);
+                int serverOpEnd = serverOp.getPosition() + serverOp.getLength();
+                transformed.setPosition(transformPositionAgainstDelete(
+                        transformed.getPosition(),
+                        serverOp.getPosition(),
+                        serverOp.getLength()
+                ));
+
+                if ((transformed.getType() == OperationType.DELETE ||
+                        transformed.getType() == OperationType.REPLACE) &&
+                        transformed.getLength() != null) {
+                    transformed.setLength(transformLengthAgainstDelete(
+                            transformed.getPosition(),
+                            transformed.getLength(),
+                            serverOp.getPosition(),
+                            serverOp.getLength()
+                    ));
+                }
                 break;
 
             case REPLACE:
-                // Treat REPLACE as DELETE followed by INSERT
-                TextOperation deletePartOfB = new TextOperation();
-                deletePartOfB.setType(OperationType.DELETE);
-                deletePartOfB.setPosition(b.getPosition());
-                deletePartOfB.setLength(b.getLength());
-                deletePartOfB.setVersion(b.getVersion());
-                deletePartOfB.setUserId(b.getUserId());
+                TextOperation deleteOp = new TextOperation();
+                deleteOp.setType(OperationType.DELETE);
+                deleteOp.setPosition(serverOp.getPosition());
+                deleteOp.setLength(serverOp.getLength());
+                deleteOp.setBaseVersionVector(serverOp.getBaseVersionVector());
+                deleteOp.setUserId(serverOp.getUserId());
 
-                TextOperation insertPartOfB = new TextOperation();
-                insertPartOfB.setType(OperationType.INSERT);
-                insertPartOfB.setPosition(b.getPosition());
-                insertPartOfB.setText(b.getText());
-                insertPartOfB.setVersion(b.getVersion());
-                insertPartOfB.setUserId(b.getUserId());
+                TextOperation insertOp = new TextOperation();
+                insertOp.setType(OperationType.INSERT);
+                insertOp.setPosition(serverOp.getPosition());
+                insertOp.setText(serverOp.getText());
+                insertOp.setBaseVersionVector(serverOp.getBaseVersionVector());
+                insertOp.setUserId(serverOp.getUserId());
 
-                // Transform against DELETE then INSERT
-                TextOperation tempTransformedA = transformOperation(transformedA, deletePartOfB);
-                transformedA = transformOperation(tempTransformedA, insertPartOfB);
+                transformed = transformOperation(transformed, deleteOp);
+                transformed = transformOperation(transformed, insertOp);
                 break;
         }
-
-        return transformedA;
+        return transformed;
     }
 
     /**
-     * Helper method to transform an operation against an INSERT operation
+     * Transform position considering tie-breaking for inserts
      */
-    private void transformAgainstInsert(TextOperation transformedA, TextOperation opB_Insert) {
-        int aPos = transformedA.getPosition();
-        int bPos = opB_Insert.getPosition();
-        int bLen = opB_Insert.getText() != null ? opB_Insert.getText().length() : 0;
-
-        if (bLen == 0) return; // Nothing to transform against
-
-        // If 'b' inserts at or before 'a's position, shift 'a' forward
-        if (bPos < aPos) {
-            transformedA.setPosition(aPos + bLen);
-        }
-        // If 'b' inserts exactly at 'a's position, apply tie-breaking
-        else if (bPos == aPos) {
-            // Tie-breaking rule: operation from user with lexicographically smaller ID comes first
-            if (transformedA.getType() == OperationType.INSERT) {
-                String aUserId = transformedA.getUserId() != null ? transformedA.getUserId() : "";
-                String bUserId = opB_Insert.getUserId() != null ? opB_Insert.getUserId() : "";
-                if (aUserId.compareTo(bUserId) > 0) {
-                    // If 'a's user ID is "greater", assume 'a' comes after 'b's insert
-                    transformedA.setPosition(aPos + bLen);
-                }
-                // else 'a' comes first, position unchanged
+    private int transformPosition(int position, int otherPosition, int otherLength, boolean isInsert,
+                                  String clientUserId, String serverUserId) {
+        if (position < otherPosition) {
+            return position;
+        } else if (position == otherPosition && isInsert) {
+            // Tie-breaking: if clientUserId > serverUserId lexicographically, shift position
+            if (clientUserId.compareTo(serverUserId) > 0) {
+                return position + otherLength;
             } else {
-                // If 'a' is DELETE/REPLACE starting at bPos, b's insert happens before it
-                transformedA.setPosition(aPos + bLen);
+                return position;
             }
+        } else {
+            return isInsert ? position + otherLength : Math.max(otherPosition, position - otherLength);
         }
-        // If 'b' inserts after 'a's position, 'a' is unaffected
     }
 
     /**
-     * Helper method to transform an operation against a DELETE operation
+     * Transform position against a delete operation
      */
-    private void transformAgainstDelete(TextOperation transformedA, TextOperation opB_Delete) {
-        int aPos = transformedA.getPosition();
-        int aLen = transformedA.getLength() != null ? transformedA.getLength() : 0;
-        int aEnd = aPos + aLen;
+    private int transformPositionAgainstDelete(int position, int deletePos, int deleteLen) {
+        if (position <= deletePos) {
+            return position;
+        } else if (position >= deletePos + deleteLen) {
+            return position - deleteLen;
+        } else {
+            return deletePos;
+        }
+    }
 
-        int bPos = opB_Delete.getPosition();
-        int bLen = opB_Delete.getLength() != null ? opB_Delete.getLength() : 0;
-        int bEnd = bPos + bLen;
+    /**
+     * Transform length against a delete operation with improved overlap handling
+     */
+    private int transformLengthAgainstDelete(int pos, int len, int deletePos, int deleteLen) {
+        int endPos = pos + len;
+        int deleteEndPos = deletePos + deleteLen;
 
-        if (bLen == 0) return; // Nothing to transform against
+        if (endPos <= deletePos || pos >= deleteEndPos) {
+            return len; // No overlap
+        }
+        if (pos < deletePos) {
+            // Server delete overlaps client delete's end
+            return deletePos - pos + Math.max(0, endPos - deleteEndPos);
+        }
+        if (endPos > deleteEndPos) {
+            // Server delete overlaps client delete's start
+            return endPos - deleteEndPos;
+        }
+        // Client delete fully contained in server delete
+        return 0;
+    }
 
-        // Case 1: 'b' deletes entirely before 'a' starts
-        if (bEnd <= aPos) {
-            transformedA.setPosition(aPos - bLen);
+    /**
+     * Validate the transformed operation to ensure it’s within bounds
+     */
+    private void validateOperation(TextOperation operation) {
+        if (operation.getPosition() < 0) {
+            operation.setPosition(0);
         }
-        // Case 2: 'b' deletes entirely after 'a' ends
-        else if (bPos >= aEnd) {
-            // Position and length of 'a' remain unchanged
+        if (operation.getLength() != null && operation.getLength() < 0) {
+            operation.setLength(0);
         }
-        // Case 3: 'b' deletes a range that completely contains 'a'
-        else if (bPos <= aPos && bEnd >= aEnd) {
-            transformedA.setPosition(bPos);
-            if (transformedA.getType() == OperationType.INSERT) {
-                // Insert is contained within deletion, nothing changes about the insert text
-            } else {
-                transformedA.setLength(0); // Delete/Replace becomes zero length
-            }
+        int maxPos = documentContent.length();
+        if (operation.getPosition() > maxPos) {
+            operation.setPosition(maxPos);
         }
-        // Case 4: 'b' deletes a range that starts before 'a' and overlaps with the beginning of 'a'
-        else if (bPos < aPos && bEnd > aPos && bEnd < aEnd) {
-            int deletedLength = bEnd - aPos;
-            transformedA.setPosition(bPos); // 'a' now starts where 'b' started deleting
-            if (transformedA.getType() != OperationType.INSERT) {
-                transformedA.setLength(aLen - deletedLength); // Reduce length of 'a'
-            }
+        if (operation.getLength() != null && operation.getPosition() + operation.getLength() > maxPos) {
+            operation.setLength(maxPos - operation.getPosition());
         }
-        // Case 5: 'b' deletes a range that starts within 'a' and ends after 'a'
-        else if (bPos >= aPos && bPos < aEnd && bEnd >= aEnd) {
-            // 'a's position is unchanged
-            if (transformedA.getType() != OperationType.INSERT) {
-                transformedA.setLength(bPos - aPos); // 'a' is truncated
-            }
+    }
+
+    /**
+     * Clone an operation
+     */
+    private TextOperation cloneOperation(TextOperation operation) {
+        TextOperation clone = new TextOperation();
+        clone.setId(operation.getId());
+        clone.setType(operation.getType());
+        clone.setPosition(operation.getPosition());
+        clone.setText(operation.getText());
+        clone.setLength(operation.getLength());
+        if (operation.getBaseVersionVector() != null) {
+            clone.setBaseVersionVector(new VersionVector(operation.getBaseVersionVector().getVersions()));
         }
-        // Case 6: 'b' deletes a range that is completely within 'a'
-        else if (bPos > aPos && bEnd < aEnd) {
-            // 'a's position is unchanged
-            if (transformedA.getType() != OperationType.INSERT) {
-                transformedA.setLength(aLen - bLen); // 'a' becomes shorter
-            }
-        }
+        clone.setUserId(operation.getUserId());
+        return clone;
     }
 }

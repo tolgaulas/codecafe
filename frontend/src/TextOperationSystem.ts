@@ -1,42 +1,37 @@
-import { editor, IRange } from "monaco-editor";
+import { editor, IRange, Selection } from "monaco-editor";
 import { v4 as uuidv4 } from "uuid";
 
-// Define operation types
 export enum OperationType {
   INSERT = "INSERT",
   DELETE = "DELETE",
   REPLACE = "REPLACE",
 }
 
-// A version vector tracks operations from each client
 export interface VersionVector {
-  [userId: string]: number; // Maps each user ID to their operation count
+  [userId: string]: number;
 }
 
-// Define the structure of an operation
 export interface TextOperation {
   id?: string;
   type: OperationType;
-  position: number; // Position in the document
-  text?: string; // Text to insert or replacement text
-  length?: number; // Length of text to delete or replace
-  baseVersionVector: VersionVector; // Vector when operation was created
-  userId: string; // User who created this operation
-
+  position: number;
+  text?: string;
+  length?: number;
+  baseVersionVector: VersionVector;
+  userId: string;
   clone?: () => TextOperation;
 }
 
-// Define the structure of an operation acknowledgment from server
 export interface OperationAck {
   operationId: string;
-  baseVersionVector: VersionVector; // Updated version vector after applying the operation
+  baseVersionVector: VersionVector;
   userId: string;
 }
 
 export class TextOperationManager {
   private editor: editor.IStandaloneCodeEditor;
   private model: editor.ITextModel;
-  private localVersionVector: VersionVector = {}; // Track versions from all clients
+  private localVersionVector: VersionVector = {};
   private pendingOperations: Map<string, TextOperation> = new Map();
   private operationHistory: TextOperation[] = [];
   private userId: string;
@@ -55,12 +50,10 @@ export class TextOperationManager {
     this.localVersionVector = { ...initialVersionVector };
     this.operationCallback = operationCallback;
 
-    // Initialize user's version count if not already present
     if (!this.localVersionVector[userId]) {
       this.localVersionVector[userId] = 0;
     }
 
-    // Listen for model content changes
     this.model.onDidChangeContent((e) => {
       if (!this.isApplyingExternalOperation) {
         this.handleModelContentChange(e);
@@ -73,38 +66,22 @@ export class TextOperationManager {
     );
   }
 
-  /**
-   * Handles model content changes and creates operations
-   */
   private handleModelContentChange(e: editor.IModelContentChangedEvent): void {
     const changes = e.changes;
-
-    // Sort changes to process them in the right order
-    // (from the end of the document to the beginning)
     changes.sort((a, b) => b.rangeOffset - a.rangeOffset);
 
     for (const change of changes) {
       const operation = this.createOperationFromChange(change);
       if (operation) {
-        // Generate a unique ID for the operation
         operation.id = uuidv4();
-
-        // Set the operation's base version vector (copy current state)
         operation.baseVersionVector = { ...this.localVersionVector };
-
-        // Add the operation to pending operations
         this.pendingOperations.set(operation.id, operation);
-
         console.log("Created operation:", operation);
-        // Send the operation to the server
         this.operationCallback(operation);
       }
     }
   }
 
-  /**
-   * Creates a TextOperation from a Monaco content change
-   */
   private createOperationFromChange(
     change: editor.IModelContentChange
   ): TextOperation | null {
@@ -112,7 +89,6 @@ export class TextOperationManager {
     const length = change.rangeLength;
     const text = change.text;
 
-    // Determine operation type
     let type: OperationType;
     if (length === 0 && text.length > 0) {
       type = OperationType.INSERT;
@@ -121,7 +97,6 @@ export class TextOperationManager {
     } else if (length > 0 && text.length > 0) {
       type = OperationType.REPLACE;
     } else {
-      // No actual change
       return null;
     }
 
@@ -130,7 +105,7 @@ export class TextOperationManager {
       position,
       text: text.length > 0 ? text : undefined,
       length: length > 0 ? length : undefined,
-      baseVersionVector: {}, // Will be filled in handleModelContentChange
+      baseVersionVector: {},
       userId: this.userId,
       clone: function () {
         const clone = { ...this };
@@ -139,48 +114,33 @@ export class TextOperationManager {
         return clone;
       },
     };
-
     return operation;
   }
 
-  /**
-   * Applies a received operation from the server
-   */
   public applyOperation(operation: TextOperation): void {
     console.log("Applying operation:", operation);
 
-    // If this is our own operation coming back from the server
     if (operation.userId === this.userId) {
       if (operation.id && this.pendingOperations.has(operation.id)) {
-        // Remove the operation from pending operations
         this.pendingOperations.delete(operation.id);
       }
-
-      // Update our version vector with the server's updated vector
       this.updateVersionVector(operation.baseVersionVector);
-
       console.log("Updated local version vector:", this.localVersionVector);
       return;
     }
 
-    // Update our local version vector to include this operation
     this.updateVersionVector(operation.baseVersionVector);
-
-    // Find concurrent operations - those not caused by or causing the incoming operation
     const concurrentOps = this.findConcurrentOperations(operation);
 
-    // Sort for consistent transformation order
     concurrentOps.sort((a, b) => {
-      const versionA = a.baseVersionVector?.version || 0; // Access version from vector
-      const versionB = b.baseVersionVector?.version || 0;
-      return versionB - versionA;
+      const versionA = a.baseVersionVector[a.userId] || 0;
+      const versionB = b.baseVersionVector[b.userId] || 0;
+      return versionA - versionB; // Ascending order
     });
 
-    // Transform operation against concurrent operations
     let transformedOperation = operation.clone
       ? operation.clone()
       : { ...operation };
-
     for (const concurrentOp of concurrentOps) {
       transformedOperation = this.transformOperation(
         transformedOperation,
@@ -188,9 +148,11 @@ export class TextOperationManager {
       );
     }
 
-    // Apply the transformed operation
+    this.validateOperation(transformedOperation);
+
     this.isApplyingExternalOperation = true;
     try {
+      const currentPosition = this.editor.getPosition();
       const edits: editor.IIdentifiedSingleEditOperation[] = [];
       const range = this.getOperationRange(transformedOperation);
 
@@ -198,35 +160,74 @@ export class TextOperationManager {
         edits.push({
           range,
           text: transformedOperation.text || "",
-          forceMoveMarkers: true,
+          forceMoveMarkers: false,
         });
       } else if (transformedOperation.type === OperationType.DELETE) {
-        edits.push({
-          range,
-          text: "",
-          forceMoveMarkers: true,
-        });
+        edits.push({ range, text: "", forceMoveMarkers: false });
       } else if (transformedOperation.type === OperationType.REPLACE) {
         edits.push({
           range,
           text: transformedOperation.text || "",
-          forceMoveMarkers: true,
+          forceMoveMarkers: false,
         });
       }
 
-      // Apply the edits
-      this.model.pushEditOperations(
-        this.editor.getSelections(),
-        edits,
-        () => null
-      );
+      this.model.pushEditOperations([], edits, (_inverseEdits) => {
+        if (currentPosition) {
+          let newOffset = this.model.getOffsetAt(currentPosition);
+          if (transformedOperation.position <= newOffset) {
+            if (transformedOperation.type === OperationType.INSERT) {
+              newOffset += transformedOperation.text?.length || 0;
+            } else if (transformedOperation.type === OperationType.DELETE) {
+              newOffset -= Math.min(
+                transformedOperation.length || 0,
+                newOffset - transformedOperation.position
+              );
+            } else if (transformedOperation.type === OperationType.REPLACE) {
+              newOffset +=
+                (transformedOperation.text?.length || 0) -
+                (transformedOperation.length || 0);
+            }
+          }
+          const newPosition = this.model.getPositionAt(Math.max(0, newOffset));
+          return [
+            new Selection(
+              newPosition.lineNumber,
+              newPosition.column,
+              newPosition.lineNumber,
+              newPosition.column
+            ),
+          ];
+        }
+        return null;
+      });
 
-      // Add to operation history
+      if (currentPosition) {
+        const newOffset = this.model.getOffsetAt(currentPosition);
+        let adjustedOffset = newOffset;
+        if (transformedOperation.position <= newOffset) {
+          if (transformedOperation.type === OperationType.INSERT) {
+            adjustedOffset += transformedOperation.text?.length || 0;
+          } else if (transformedOperation.type === OperationType.DELETE) {
+            adjustedOffset -= Math.min(
+              transformedOperation.length || 0,
+              newOffset - transformedOperation.position
+            );
+          } else if (transformedOperation.type === OperationType.REPLACE) {
+            adjustedOffset +=
+              (transformedOperation.text?.length || 0) -
+              (transformedOperation.length || 0);
+          }
+        }
+        const newPosition = this.model.getPositionAt(
+          Math.max(0, adjustedOffset)
+        );
+        this.editor.setPosition(newPosition);
+      }
+
       this.operationHistory.push(transformedOperation);
-
-      // Trim history if it gets too large
       if (this.operationHistory.length > 100) {
-        this.operationHistory.shift();
+        this.operationHistory.shift(); // Consider a TreeMap for large histories
       }
 
       console.log(
@@ -234,25 +235,16 @@ export class TextOperationManager {
         this.localVersionVector
       );
     } finally {
-      // Reset the flag
       this.isApplyingExternalOperation = false;
     }
   }
 
-  /**
-   * Gets the range for an operation based on its position and length
-   */
   private getOperationRange(operation: TextOperation): IRange {
     const startPosition = this.model.getPositionAt(operation.position);
-
-    let endPosition;
-    if (operation.length && operation.length > 0) {
-      endPosition = this.model.getPositionAt(
-        operation.position + operation.length
-      );
-    } else {
-      endPosition = startPosition;
-    }
+    let endPosition =
+      operation.length && operation.length > 0
+        ? this.model.getPositionAt(operation.position + operation.length)
+        : startPosition;
 
     return {
       startLineNumber: startPosition.lineNumber,
@@ -262,117 +254,67 @@ export class TextOperationManager {
     };
   }
 
-  /**
-   * Acknowledge an operation from the server
-   */
   public acknowledgeOperation(ack: OperationAck): void {
     console.log("Operation acknowledged:", ack);
-    // Remove the operation from pending operations if it exists
     if (this.pendingOperations.has(ack.operationId)) {
       this.pendingOperations.delete(ack.operationId);
     }
-
-    // Update local version vector with the server's version vector
     this.updateVersionVector(ack.baseVersionVector);
     console.log("Updated local version vector:", this.localVersionVector);
   }
 
-  /**
-   * Gets the current document version vector
-   */
   public getVersionVector(): VersionVector {
     return { ...this.localVersionVector };
   }
 
-  /**
-   * Sets the document version vector
-   */
   public setVersionVector(vector: VersionVector): void {
     this.localVersionVector = { ...vector };
     console.log("Version vector set to:", this.localVersionVector);
   }
 
-  /**
-   * Find operations that happened concurrently with the given operation
-   */
   private findConcurrentOperations(operation: TextOperation): TextOperation[] {
-    // Operations that happened concurrently with the incoming operation
     const concurrent: TextOperation[] = [];
-
-    // From pending operations (our operations not yet acknowledged)
     for (const [_, pendingOp] of this.pendingOperations) {
       if (this.isConcurrent(operation, pendingOp)) {
         concurrent.push(pendingOp);
       }
     }
-
     return concurrent;
   }
 
-  /**
-   * Determine if two operations are concurrent
-   */
   private isConcurrent(a: TextOperation, b: TextOperation): boolean {
-    // a and b are concurrent if neither happened before the other
     return !this.happenedBefore(a, b) && !this.happenedBefore(b, a);
   }
 
-  /**
-   * Determine if operation a happened before operation b
-   */
   private happenedBefore(a: TextOperation, b: TextOperation): boolean {
-    // a happened before b if all a's operations are included in b's history
     for (const userId in a.baseVersionVector) {
       const aVersion = a.baseVersionVector[userId] || 0;
       const bVersion = b.baseVersionVector[userId] || 0;
-
-      if (aVersion > bVersion) {
-        return false; // a includes operations that b doesn't know about
-      }
+      if (aVersion > bVersion) return false;
     }
-
-    // Check that at least one of a's operations is strictly before b's
-    // (otherwise they're the same version vector)
     for (const userId in a.baseVersionVector) {
       const aVersion = a.baseVersionVector[userId] || 0;
       const bVersion = b.baseVersionVector[userId] || 0;
-
-      if (aVersion < bVersion) {
-        return true;
-      }
+      if (aVersion < bVersion) return true;
     }
-
     return false;
   }
 
-  /**
-   * Update local version vector with new information
-   */
   private updateVersionVector(newVector: VersionVector): void {
-    // Update local version vector with new information
     for (const userId in newVector) {
       const newVersion = newVector[userId];
       const currentVersion = this.localVersionVector[userId] || 0;
-
-      // Take the max value for each user
       this.localVersionVector[userId] = Math.max(currentVersion, newVersion);
     }
   }
 
-  /**
-   * Transforms operation 'a' against operation 'b'.
-   * This function assumes 'b' has already been applied to the document state
-   * that 'a' was based on. It modifies 'a' so it can be applied to the document
-   * state *after* 'b' has been applied.
-   */
   private transformOperation(
     a: TextOperation,
     b: TextOperation
   ): TextOperation {
-    // Clone operation 'a' to avoid modifying the original
-    const transformedA = a.clone ? a.clone() : { ...a };
+    let transformedA = a.clone ? a.clone() : { ...a };
+    const originalA = a;
 
-    // Add clone method if it doesn't exist
     if (!transformedA.clone) {
       transformedA.clone = function () {
         const clone = { ...this };
@@ -382,23 +324,51 @@ export class TextOperationManager {
       };
     }
 
-    // If operations are identical, no transform needed
-    if (a.id === b.id) {
-      return transformedA;
-    }
+    if (a.id === b.id) return transformedA;
 
-    // Core transformation logic based on operation types
     switch (b.type) {
       case OperationType.INSERT:
-        this.transformAgainstInsert(transformedA, b);
+        transformedA.position = this.transformPosition(
+          transformedA.position,
+          b.position,
+          b.text?.length || 0,
+          true,
+          originalA.userId,
+          b.userId
+        );
+        if (
+          (transformedA.type === OperationType.DELETE ||
+            transformedA.type === OperationType.REPLACE) &&
+          transformedA.length !== undefined
+        ) {
+          const aEnd = transformedA.position + transformedA.length;
+          if (b.position > transformedA.position && b.position < aEnd) {
+            transformedA.length += b.text?.length || 0;
+          }
+        }
         break;
 
       case OperationType.DELETE:
-        this.transformAgainstDelete(transformedA, b);
+        transformedA.position = this.transformPositionAgainstDelete(
+          transformedA.position,
+          b.position,
+          b.length || 0
+        );
+        if (
+          (transformedA.type === OperationType.DELETE ||
+            transformedA.type === OperationType.REPLACE) &&
+          transformedA.length !== undefined
+        ) {
+          transformedA.length = this.transformLengthAgainstDelete(
+            transformedA.position,
+            transformedA.length,
+            b.position,
+            b.length || 0
+          );
+        }
         break;
 
       case OperationType.REPLACE:
-        // Treat REPLACE as DELETE followed by INSERT
         const deletePartOfB: TextOperation = {
           type: OperationType.DELETE,
           position: b.position,
@@ -412,7 +382,6 @@ export class TextOperationManager {
             return clone;
           },
         };
-
         const insertPartOfB: TextOperation = {
           type: OperationType.INSERT,
           position: b.position,
@@ -426,109 +395,90 @@ export class TextOperationManager {
             return clone;
           },
         };
-
-        // Transform against DELETE then INSERT
         const tempTransformedA = this.transformOperation(
           transformedA,
           deletePartOfB
         );
-        return this.transformOperation(tempTransformedA, insertPartOfB);
+        transformedA = this.transformOperation(tempTransformedA, insertPartOfB);
+        break;
     }
-
     return transformedA;
   }
 
-  /**
-   * Helper method to transform an operation against an INSERT operation
-   */
-  private transformAgainstInsert(
-    transformedA: TextOperation,
-    opB_Insert: TextOperation
-  ): void {
-    const aPos = transformedA.position;
-    const bPos = opB_Insert.position;
-    const bLen = opB_Insert.text ? opB_Insert.text.length : 0;
-
-    if (bLen === 0) return; // Nothing to transform against
-
-    // If 'b' inserts at or before 'a's position, shift 'a' forward
-    if (bPos < aPos) {
-      transformedA.position = aPos + bLen;
-    }
-    // If 'b' inserts exactly at 'a's position, apply tie-breaking
-    else if (bPos === aPos) {
-      // Tie-breaking rule: operation from user with lexicographically smaller ID comes first
-      if (transformedA.type === OperationType.INSERT) {
-        const aUserId = transformedA.userId || "";
-        const bUserId = opB_Insert.userId || "";
-        if (aUserId.localeCompare(bUserId) > 0) {
-          // If 'a's user ID is "greater", assume 'a' comes after 'b's insert
-          transformedA.position = aPos + bLen;
-        }
-        // else 'a' comes first, position unchanged
+  private transformPosition(
+    position: number,
+    otherPosition: number,
+    otherLength: number,
+    isInsert: boolean,
+    clientUserId: string,
+    serverUserId: string
+  ): number {
+    if (position < otherPosition) {
+      return position;
+    } else if (position === otherPosition && isInsert) {
+      if (clientUserId.localeCompare(serverUserId) > 0) {
+        return position + otherLength;
       } else {
-        // If 'a' is DELETE/REPLACE starting at bPos, b's insert happens before it
-        transformedA.position = aPos + bLen;
+        return position;
       }
+    } else {
+      return isInsert
+        ? position + otherLength
+        : Math.max(otherPosition, position - otherLength);
     }
-    // If 'b' inserts after 'a's position, 'a' is unaffected
   }
 
-  /**
-   * Helper method to transform an operation against a DELETE operation
-   */
-  private transformAgainstDelete(
-    transformedA: TextOperation,
-    opB_Delete: TextOperation
-  ): void {
-    const aPos = transformedA.position;
-    const aLen = transformedA.length || 0;
-    const aEnd = aPos + aLen;
+  private transformPositionAgainstDelete(
+    position: number,
+    deletePos: number,
+    deleteLen: number
+  ): number {
+    if (position <= deletePos) {
+      return position;
+    } else if (position >= deletePos + deleteLen) {
+      return position - deleteLen;
+    } else {
+      return deletePos;
+    }
+  }
 
-    const bPos = opB_Delete.position;
-    const bLen = opB_Delete.length || 0;
-    const bEnd = bPos + bLen;
+  private transformLengthAgainstDelete(
+    pos: number,
+    len: number,
+    deletePos: number,
+    deleteLen: number
+  ): number {
+    const endPos = pos + len;
+    const deleteEndPos = deletePos + deleteLen;
 
-    if (bLen === 0) return; // Nothing to transform against
+    if (endPos <= deletePos || pos >= deleteEndPos) {
+      return len;
+    }
+    if (pos < deletePos) {
+      return deletePos - pos + Math.max(0, endPos - deleteEndPos);
+    }
+    if (endPos > deleteEndPos) {
+      return endPos - deleteEndPos;
+    }
+    return 0;
+  }
 
-    // Case 1: 'b' deletes entirely before 'a' starts
-    if (bEnd <= aPos) {
-      transformedA.position = aPos - bLen;
+  private validateOperation(operation: TextOperation): void {
+    const maxPos = this.model.getValueLength();
+    if (operation.position < 0) {
+      operation.position = 0;
     }
-    // Case 2: 'b' deletes entirely after 'a' ends
-    else if (bPos >= aEnd) {
-      // Position and length of 'a' remain unchanged
+    if (operation.length !== undefined && operation.length < 0) {
+      operation.length = 0;
     }
-    // Case 3: 'b' deletes a range that completely contains 'a'
-    else if (bPos <= aPos && bEnd >= aEnd) {
-      transformedA.position = bPos;
-      if (transformedA.type === OperationType.INSERT) {
-        // Insert is contained within deletion, nothing changes about the insert text
-      } else {
-        transformedA.length = 0; // Delete/Replace becomes zero length
-      }
+    if (operation.position > maxPos) {
+      operation.position = maxPos;
     }
-    // Case 4: 'b' deletes a range that starts before 'a' and overlaps with the beginning of 'a'
-    else if (bPos < aPos && bEnd > aPos && bEnd < aEnd) {
-      const deletedLength = bEnd - aPos;
-      transformedA.position = bPos; // 'a' now starts where 'b' started deleting
-      if (transformedA.type !== OperationType.INSERT) {
-        transformedA.length = aLen - deletedLength; // Reduce length of 'a'
-      }
-    }
-    // Case 5: 'b' deletes a range that starts within 'a' and ends after 'a'
-    else if (bPos >= aPos && bPos < aEnd && bEnd >= aEnd) {
-      // 'a's position is unchanged
-      if (transformedA.type !== OperationType.INSERT) {
-        transformedA.length = bPos - aPos; // 'a' is truncated
-      }
-    }
-    // Case 6: 'b' deletes a range that is completely within 'a'
-    else if (bPos > aPos && bEnd < aEnd) {
-      // 'a's position is unchanged
-      if (transformedA.type !== OperationType.INSERT) {
-        transformedA.length = aLen - bLen; // 'a' becomes shorter
-      }
+    if (
+      operation.length !== undefined &&
+      operation.position + operation.length > maxPos
+    ) {
+      operation.length = maxPos - operation.position;
     }
   }
 }

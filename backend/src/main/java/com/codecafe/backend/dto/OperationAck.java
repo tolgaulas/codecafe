@@ -2,15 +2,15 @@ package com.codecafe.backend.dto;
 
 public class OperationAck {
     private String operationId;
-    private int version;
+    private VersionVector versionVector;
     private String userId;
 
     public OperationAck() {
     }
 
-    public OperationAck(String operationId, int version, String userId) {
+    public OperationAck(String operationId, VersionVector versionVector, String userId) {
         this.operationId = operationId;
-        this.version = version;
+        this.versionVector = versionVector;
         this.userId = userId;
     }
 
@@ -22,12 +22,12 @@ public class OperationAck {
         this.operationId = operationId;
     }
 
-    public int getVersion() {
-        return version;
+    public VersionVector getVersionVector() {
+        return versionVector;
     }
 
-    public void setVersion(int version) {
-        this.version = version;
+    public void setVersionVector(VersionVector versionVector) {
+        this.versionVector = versionVector;
     }
 
     public String getUserId() {

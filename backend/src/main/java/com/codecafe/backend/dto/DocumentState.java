@@ -2,14 +2,14 @@ package com.codecafe.backend.dto;
 
 public class DocumentState {
     private String content;
-    private int version;
+    private VersionVector versionVector;
 
     public DocumentState() {
     }
 
-    public DocumentState(String content, int version) {
+    public DocumentState(String content, VersionVector versionVector) {
         this.content = content;
-        this.version = version;
+        this.versionVector = versionVector;
     }
 
     public String getContent() {
@@ -20,11 +20,11 @@ public class DocumentState {
         this.content = content;
     }
 
-    public int getVersion() {
-        return version;
+    public VersionVector getVersionVector() {
+        return versionVector;
     }
 
-    public void setVersion(int version) {
-        this.version = version;
+    public void setVersionVector(VersionVector versionVector) {
+        this.versionVector = versionVector;
     }
 }

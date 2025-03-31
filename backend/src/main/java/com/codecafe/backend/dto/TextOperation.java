@@ -1,19 +1,15 @@
 package com.codecafe.backend.dto;
 
-import java.util.Objects;
-
 public class TextOperation {
     private String id;
     private OperationType type;
     private int position;
     private String text;
     private Integer length;
-    private int version;
+    private VersionVector baseVersionVector; // Changed from version to baseVersionVector
     private String userId;
 
-    public TextOperation() {
-        // Default constructor
-    }
+    // Getters and setters
 
     public String getId() {
         return id;
@@ -55,12 +51,12 @@ public class TextOperation {
         this.length = length;
     }
 
-    public int getVersion() {
-        return version;
+    public VersionVector getBaseVersionVector() {
+        return baseVersionVector;
     }
 
-    public void setVersion(int version) {
-        this.version = version;
+    public void setBaseVersionVector(VersionVector baseVersionVector) {
+        this.baseVersionVector = baseVersionVector != null ? baseVersionVector : new VersionVector();
     }
 
     public String getUserId() {
@@ -72,25 +68,6 @@ public class TextOperation {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        TextOperation that = (TextOperation) o;
-        return position == that.position &&
-                version == that.version &&
-                Objects.equals(id, that.id) &&
-                type == that.type &&
-                Objects.equals(text, that.text) &&
-                Objects.equals(length, that.length) &&
-                Objects.equals(userId, that.userId);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id, type, position, text, length, version, userId);
-    }
-
-    @Override
     public String toString() {
         return "TextOperation{" +
                 "id='" + id + '\'' +
@@ -98,23 +75,8 @@ public class TextOperation {
                 ", position=" + position +
                 ", text='" + text + '\'' +
                 ", length=" + length +
-                ", version=" + version +
+                ", baseVersionVector=" + baseVersionVector +
                 ", userId='" + userId + '\'' +
                 '}';
-    }
-
-    /**
-     * Creates a deep copy of this TextOperation
-     */
-    public TextOperation clone() {
-        TextOperation clone = new TextOperation();
-        clone.setId(this.id);
-        clone.setType(this.type);
-        clone.setPosition(this.position);
-        clone.setText(this.text);
-        clone.setLength(this.length);
-        clone.setVersion(this.version);
-        clone.setUserId(this.userId);
-        return clone;
     }
 }
