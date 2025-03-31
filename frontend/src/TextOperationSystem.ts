@@ -16,6 +16,7 @@ export interface TextOperation {
   length?: number; // Length of text to delete or replace
   version: number; // Document version this operation is based on
   userId: string; // User who created this operation
+  timestamp?: number; // Timestamp when the operation was created
 }
 
 // Define the structure of an operation acknowledgment from server
@@ -30,10 +31,12 @@ export class TextOperationManager {
   private model: editor.ITextModel;
   private localVersion: number = 0;
   private baseContent: string = "";
-  private pendingOperations: Map<string, TextOperation> = new Map();
+  private pendingLocalOperations: Map<string, TextOperation> = new Map();
+  private pendingRemoteOperations: Map<number, TextOperation[]> = new Map();
   private userId: string;
   private operationCallback: (op: TextOperation) => void;
   private isApplyingExternalOperation: boolean = false;
+  private isProcessingQueue: boolean = false;
 
   constructor(
     editor: editor.IStandaloneCodeEditor,
@@ -74,6 +77,17 @@ export class TextOperationManager {
     for (const change of changes) {
       const operation = this.createOperationFromChange(change);
       if (operation) {
+        // Generate a unique ID for this operation
+        const operationId = `${this.userId}-${Date.now()}-${Math.random()
+          .toString(36)
+          .substring(2, 9)}`;
+
+        operation.id = operationId;
+        operation.timestamp = Date.now();
+
+        // Add to pending local operations
+        this.pendingLocalOperations.set(operationId, operation);
+
         console.log("Created operation:", operation);
         // Send the operation to the server
         this.operationCallback(operation);
@@ -115,23 +129,56 @@ export class TextOperationManager {
   }
 
   /**
-   * Applies a received operation from the server
+   * Processes an incoming operation from the server
    */
   public applyOperation(operation: TextOperation): void {
-    console.log("Applying operation:", operation);
-    // If this is our own operation coming back from the server, just update version
+    console.log(
+      `Received operation: ${operation.type} at version ${operation.version}, current version is ${this.localVersion}`
+    );
+
+    // If this is our own operation coming back from the server, just update tracking
     if (operation.userId === this.userId) {
+      // Make sure we're not reprocessing something we've already seen
+      if (this.pendingLocalOperations.has(operation.id!)) {
+        this.pendingLocalOperations.delete(operation.id!);
+        console.log(`Acknowledged our operation: ${operation.id}`);
+      }
+      return;
+    }
+
+    // If the operation is for exactly the next version we expect, apply it immediately
+    if (operation.version === this.localVersion + 1) {
+      this.applyOperationDirectly(operation);
       this.localVersion = operation.version;
-      return;
-    }
 
-    // Ignore operations if they're for an older version than our current version
-    if (operation.version < this.localVersion) {
-      console.warn("Ignoring outdated operation:", operation);
-      return;
+      // See if we can process any queued operations now
+      this.processRemoteOperationQueue();
     }
+    // If the operation is for a future version, queue it
+    else if (operation.version > this.localVersion + 1) {
+      console.log(`Queueing operation for future version ${operation.version}`);
+      const pendingList =
+        this.pendingRemoteOperations.get(operation.version) || [];
+      pendingList.push(operation);
+      this.pendingRemoteOperations.set(operation.version, pendingList);
+    }
+    // If the operation is for a past version, it's already outdated
+    else {
+      console.warn(
+        `Ignoring outdated operation for version ${operation.version}, current version is ${this.localVersion}`
+      );
+    }
+  }
 
-    // Flag that we're applying an external operation
+  /**
+   * Apply a remote operation directly to the editor
+   */
+  private applyOperationDirectly(operation: TextOperation): void {
+    console.log(
+      `Applying operation directly: ${operation.type} at position ${operation.position}`
+    );
+
+    // Flag that we're applying an external operation to prevent feedback loops
     this.isApplyingExternalOperation = true;
 
     try {
@@ -166,13 +213,52 @@ export class TextOperationManager {
         () => null
       );
 
-      // Update local version
-      this.localVersion = operation.version;
-
-      console.log("Editor updated, new version:", this.localVersion);
+      console.log(`Editor updated for operation ${operation.id}`);
+    } catch (error) {
+      console.error("Error applying operation:", error);
     } finally {
       // Reset the flag
       this.isApplyingExternalOperation = false;
+    }
+  }
+
+  /**
+   * Process any pending operations that are now ready
+   */
+  private processRemoteOperationQueue(): void {
+    // Guard against recursive calls
+    if (this.isProcessingQueue) return;
+
+    this.isProcessingQueue = true;
+
+    try {
+      let nextVersion = this.localVersion + 1;
+      let processed = false;
+
+      do {
+        processed = false;
+
+        // Check if we have any operations for the next expected version
+        if (this.pendingRemoteOperations.has(nextVersion)) {
+          const operations = this.pendingRemoteOperations.get(nextVersion)!;
+
+          // Sort operations by timestamp if available to ensure consistent ordering
+          operations.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+          // Apply each operation
+          for (const op of operations) {
+            this.applyOperationDirectly(op);
+          }
+
+          // Clean up and advance version
+          this.pendingRemoteOperations.delete(nextVersion);
+          this.localVersion = nextVersion;
+          nextVersion++;
+          processed = true;
+        }
+      } while (processed);
+    } finally {
+      this.isProcessingQueue = false;
     }
   }
 
@@ -203,16 +289,18 @@ export class TextOperationManager {
    * Acknowledge an operation from the server
    */
   public acknowledgeOperation(ack: OperationAck): void {
-    console.log("Operation acknowledged:", ack);
-    // Remove the operation from pending operations if it exists
-    if (this.pendingOperations.has(ack.operationId)) {
-      this.pendingOperations.delete(ack.operationId);
-    }
+    console.log(
+      `Operation acknowledged: ${ack.operationId} at version ${ack.version}`
+    );
 
-    // Update local version
+    // If this is our operation, remove it from pending and update version
     if (ack.userId === this.userId) {
+      // Our local version is now the acknowledged version
       this.localVersion = ack.version;
-      console.log("Updated local version to:", this.localVersion);
+      console.log(`Updated local version to: ${this.localVersion}`);
+
+      // Process any pending operations that might now be ready
+      this.processRemoteOperationQueue();
     }
   }
 
@@ -224,10 +312,53 @@ export class TextOperationManager {
   }
 
   /**
-   * Sets the document version
+   * Sets the document version (used for initial sync)
    */
   public setVersion(version: number): void {
     this.localVersion = version;
-    console.log("Version set to:", version);
+    console.log(`Version set to: ${version}`);
+
+    // Check if there are any queued operations we can now process
+    this.processRemoteOperationQueue();
+  }
+
+  /**
+   * Gets the number of pending local operations
+   * (Useful for debugging or UI feedback)
+   */
+  public getPendingLocalOperationsCount(): number {
+    return this.pendingLocalOperations.size;
+  }
+
+  /**
+   * Gets the number of pending remote operations
+   * (Useful for debugging or UI feedback)
+   */
+  public getPendingRemoteOperationsCount(): number {
+    let count = 0;
+    this.pendingRemoteOperations.forEach((ops) => {
+      count += ops.length;
+    });
+    return count;
+  }
+
+  /**
+   * For debugging: dump the state of pending operations
+   */
+  public dumpOperationState(): {
+    localVersion: number;
+    pendingLocalOps: number;
+    pendingRemoteOps: { [version: number]: number };
+  } {
+    const remoteOps: { [version: number]: number } = {};
+    this.pendingRemoteOperations.forEach((ops, version) => {
+      remoteOps[version] = ops.length;
+    });
+
+    return {
+      localVersion: this.localVersion,
+      pendingLocalOps: this.pendingLocalOperations.size,
+      pendingRemoteOps: remoteOps,
+    };
   }
 }
