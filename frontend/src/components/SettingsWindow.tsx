@@ -8,8 +8,6 @@ import { THEMES, ThemeKey } from "../constants/themes";
 import { FONT_SIZES } from "../constants/fontSizes";
 import Select from "./ui/Select";
 
-// Define theme type based on the keys of THEMES
-
 const SettingsWindow = ({
   isOpen,
   onClose,

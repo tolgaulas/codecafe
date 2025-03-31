@@ -119,7 +119,7 @@ const ShareProfile = ({
     if (!sessionStarted && !isSessionActive) {
       return (
         <button
-          className="flex items-center gap-1.5 px-2 text-sm  text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
+          className="flex items-center gap-1.5 px-2 text-md  text-stone-500 hover:bg-neutral-900 bg-transparent active:scale-95 active:bg-stone-950 hover:text-stone-400 rounded-md transition-all duration-200 ml-auto"
           onClick={() => setIsOpen(true)}
         >
           <GoPersonAdd className="text-lg" />

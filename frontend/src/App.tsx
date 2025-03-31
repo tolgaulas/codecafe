@@ -176,7 +176,7 @@ const App = () => {
         // console.log("Sending cursor data", message);
         stompClientRef.current.send("/app/cursor", {}, JSON.stringify(message));
       }
-    }, 50),
+    }, 25),
     [isSessionActive, name, displayName, color]
   );
 
@@ -312,13 +312,7 @@ const App = () => {
 
   let isScrolling = false; // Flag to track if a scroll action is in progress
 
-  const handleCursorPositionChange = (
-    lineNumber: number,
-    event?: KeyboardEvent | null
-  ) => {
-    // Only proceed if Enter key was pressed
-    if (!event || event.key !== "Enter") return;
-
+  const handleCursorPositionChange = (lineNumber: number) => {
     const editorElement = document.querySelector(".monaco-editor");
     if (!editorElement) return;
 
@@ -504,18 +498,18 @@ const App = () => {
           ref={codeCafeRef}
         >
           <div className="fixed top-0 left-0 w-full h-12 bg-gradient-to-b from-stone-800 via-stone-800 to-transparent py-2 px-4 z-40 outline-none flex flex-row" />
-          <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row">
+          <div className="fixed top-0 left-0 w-full py-2 px-4 z-50 outline-none flex flex-row mt-[1px]">
             <div
               className="relative h-8 w-auto cursor-pointer -ml-2"
               onClick={scrollToTop}
             >
               <img
                 src="image-1.png"
-                className="top-0 left-0 p-1 h-[33px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0"
+                className="top-0 left-0 p-1 h-[35px] transition-opacity duration-300 ease-in-out opacity-100 hover:opacity-0 -mt-[1px] ml-[1px]"
               />
               <img
                 src="image-light.png"
-                className="absolute top-0 left-0 p-1 h-[33px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100"
+                className="absolute top-0 left-0 p-1 h-[35px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100 -mt-[1px] ml-[1px]"
               />
             </div>
 
@@ -566,10 +560,10 @@ const App = () => {
               <VscSettings />
             </button>
           </div>
-          <div className="relative flex flex-col items-center w-full max-w-4xl">
+          <div className="relative flex flex-col items-center lg:w-[67%] sm:w-[80%]">
             {/* Code Area - Added z-index to ensure hints are visible */}
             <div
-              className=" absolute bg-neutral-900/70 rounded-t-xl border border-neutral-800/50 mt-32 w-[120%]"
+              className=" absolute bg-neutral-900/70 rounded-t-lg border border-neutral-800/50 mt-32 w-[120%]"
               style={{
                 height: `${editorHeight}px`,
                 willChange: "transform",

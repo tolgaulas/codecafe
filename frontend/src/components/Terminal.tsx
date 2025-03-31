@@ -267,7 +267,7 @@ const TerminalComponent = forwardRef((_, ref) => {
         zIndex: 10,
       }}
     >
-      <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-2xl border border-neutral-800/50 shadow-xl overflow-auto overscroll-none">
+      <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-lg border border-neutral-800/50 shadow-xl overflow-auto overscroll-none">
         <div
           className="p-4 font-mono text-green-400/80"
           style={{ height, width }}
