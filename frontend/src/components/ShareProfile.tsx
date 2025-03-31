@@ -154,7 +154,7 @@ const ShareProfile = ({
 
         {/* Button to reopen share dialog */}
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-900 hover:bg-stone-700 cursor-pointer transition-colors shadow-md"
+          className="w-8 h-8 rounded-full flex items-center justify-center bg-stone-900 hover:bg-stone-700 cursor-pointer transition-colors shadow-md mr-1"
           onClick={() => setIsOpen(true)}
         >
           <div className="flex items-center justify-center gap-[3px]">

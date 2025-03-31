@@ -511,6 +511,10 @@ const App = () => {
                 src="image-light.png"
                 className="absolute top-0 left-0 p-1 h-[35px] transition-opacity duration-300 ease-in-out opacity-0 hover:opacity-100 -mt-[1px] ml-[1px]"
               />
+              {/* <span className="text-stone-500 text-lg font-georgia">
+                {" "}
+                CodeCafe{" "}
+              </span> */}
             </div>
 
             <button
@@ -560,7 +564,7 @@ const App = () => {
               <VscSettings />
             </button>
           </div>
-          <div className="relative flex flex-col items-center lg:w-[67%] sm:w-[80%]">
+          <div className="relative flex flex-col items-center w-full md:w-[950px] sm:w-[85%]">
             {/* Code Area - Added z-index to ensure hints are visible */}
             <div
               className=" absolute bg-neutral-900/70 rounded-t-lg border border-neutral-800/50 mt-32 w-[120%]"
