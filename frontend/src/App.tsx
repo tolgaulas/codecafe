@@ -27,14 +27,16 @@ import { CursorData } from "./types/cursorData";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import { THEMES } from "./constants/themes";
 import { simulateRapidTyping } from "./simulateRapidTyping";
+import { v4 as uuidv4 } from "uuid";
 
 const App = () => {
   const [code, setCode] = useState<string>("// Hello there");
   const [editorHeight, setEditorHeight] = useState(window.innerHeight);
   const [users, setUsers] = useState<User[]>([]);
-  const [localVersionVector, setLocalVersionVector] = useState<VersionVector>(
-    {}
-  ); // track our local doc version
+  // In App.js
+  const [localVersionVector, setLocalVersionVector] = useState<{
+    [userId: string]: number;
+  }>({});
   // const [pendingLocalChanges, setPendingLocalChanges] = useState<string | null>(
   //   null
   // );
@@ -190,21 +192,97 @@ const App = () => {
     debouncedSendCursor(cursorData); // Use debounced update for server communication
   };
 
+  // Store sendOperation in a ref to make it accessible
+  const sendOperationRef = useRef<(operation: TextOperation) => void>(() => {
+    console.error("sendOperation not initialized yet");
+  });
+
+  const pendingOperationsRef = useRef<
+    Record<
+      string,
+      {
+        operation: TextOperation;
+        timestamp: number;
+        retries: number;
+      }
+    >
+  >({});
+
+  // Enhanced version of your client-side WebSocket setup
   useEffect(() => {
     if (isSessionActive) {
       const socket = new SockJS("http://localhost:8080/ws");
       const stompClient = Stomp.over(socket);
 
+      // Create retry mechanism for pending operations
+      const retryInterval = setInterval(() => {
+        const now = Date.now();
+        const pendingOps = pendingOperationsRef.current;
+
+        Object.entries(pendingOps).forEach(([id, data]) => {
+          if (now - data.timestamp > 3000 && data.retries < 3) {
+            console.log(
+              `Retrying operation ${id}, attempt ${data.retries + 1}`
+            );
+            if (stompClientRef.current?.connected) {
+              stompClientRef.current.send(
+                "/app/operation",
+                {},
+                JSON.stringify(data.operation)
+              );
+              pendingOperationsRef.current[id] = {
+                ...data,
+                retries: data.retries + 1,
+                timestamp: now,
+              };
+            }
+          } else if (data.retries >= 3) {
+            if (stompClientRef.current?.connected) {
+              stompClientRef.current.send(
+                "/app/operation-status",
+                {},
+                JSON.stringify({
+                  operationId: id,
+                  userId: id,
+                })
+              );
+            }
+          }
+        });
+      }, 5000);
+
       stompClient.connect({}, function (frame: any) {
         console.log("Connected: " + frame);
         stompClientRef.current = stompClient;
+
+        // Define sendOperation and assign it to the ref
+        const sendOperation = (operation: TextOperation) => {
+          if (stompClientRef.current?.connected) {
+            if (!operation.id) {
+              console.error("Operation missing ID, generating one:", operation);
+              operation.id = uuidv4(); // Ensure every operation has an ID
+            }
+            pendingOperationsRef.current[operation.id] = {
+              operation,
+              timestamp: Date.now(),
+              retries: 0,
+            };
+            stompClientRef.current.send(
+              "/app/operation",
+              {},
+              JSON.stringify(operation)
+            );
+          } else {
+            console.error("Cannot send operation - not connected");
+            // Queue for when connection is restored (TODO: implement queue)
+          }
+        };
+        sendOperationRef.current = sendOperation;
 
         // Subscribe to operations
         stompClient.subscribe("/topic/operations", function (message: any) {
           const operation = JSON.parse(message.body) as TextOperation;
           console.log("Received operation:", operation);
-
-          // Apply the operation to the editor
           if (operationManagerRef.current) {
             operationManagerRef.current.applyOperation(operation);
           }
@@ -214,60 +292,193 @@ const App = () => {
         stompClient.subscribe("/topic/operation-ack", function (message: any) {
           const ack = JSON.parse(message.body) as OperationAck;
           console.log("Received operation acknowledgment:", ack);
-          // Handle operation acknowledgment
+          if (pendingOperationsRef.current[ack.operationId]) {
+            delete pendingOperationsRef.current[ack.operationId];
+          }
           if (operationManagerRef.current) {
             operationManagerRef.current.acknowledgeOperation(ack);
           }
-          // Update local version
           if (ack.userId === id) {
             setLocalVersionVector(ack.baseVersionVector);
           }
         });
 
-        // Subscribe to cursor updates
-        stompClient.subscribe("/topic/cursors", function (message: any) {
-          const cursorsData = JSON.parse(message.body);
-          setUsers(cursorsData);
-        });
-
-        // Subscribe to document state events (for initial load)
-        stompClient.subscribe("/topic/document-state", function (message: any) {
-          const documentState = JSON.parse(message.body);
-
-          // Update the editor with the full document state
-          setCode(documentState.content);
-
-          // Update local version
-          setLocalVersionVector(documentState.versionVector);
-
-          if (operationManagerRef.current) {
-            // Check if the version vector has a nested 'versions' property
+        // Personal queue subscriptions
+        stompClient.subscribe(
+          `/user/queue/document-state`,
+          function (message: any) {
+            const documentState = JSON.parse(message.body);
+            console.log("Received personal document state:", documentState);
+            setCode(documentState.content);
+            setLocalVersionVector(documentState.versionVector);
             if (
-              documentState.versionVector &&
-              documentState.versionVector.versions
+              documentState.missingOperations &&
+              documentState.missingOperations.length > 0
             ) {
-              operationManagerRef.current.setVersionVector(
+              documentState.missingOperations.forEach((op: TextOperation) => {
+                if (operationManagerRef.current) {
+                  operationManagerRef.current.applyOperation(op);
+                }
+              });
+            }
+            if (operationManagerRef.current) {
+              // When receiving a document state
+              if (
+                documentState.versionVector &&
                 documentState.versionVector.versions
-              );
-            } else {
-              operationManagerRef.current.setVersionVector(
-                documentState.versionVector
-              );
+              ) {
+                // If it has a 'versions' property, use that
+                setLocalVersionVector(documentState.versionVector.versions);
+                operationManagerRef.current.setVersionVector(
+                  documentState.versionVector.versions
+                );
+              } else {
+                // Otherwise use as is
+                setLocalVersionVector(documentState.versionVector);
+                operationManagerRef.current.setVersionVector(
+                  documentState.versionVector
+                );
+              }
             }
           }
-        });
+        );
+
+        stompClient.subscribe(
+          `/user/queue/operation-status`,
+          function (message: any) {
+            const response = JSON.parse(message.body);
+            console.log("Operation status check response:", response);
+            if (
+              response.received &&
+              pendingOperationsRef.current[response.operationId]
+            ) {
+              delete pendingOperationsRef.current[response.operationId];
+            }
+            if (
+              !response.received &&
+              pendingOperationsRef.current[response.operationId]
+            ) {
+              requestSync();
+            }
+          }
+        );
+
+        stompClient.subscribe(
+          `/user/queue/sync-response`,
+          function (message: any) {
+            const syncResponse = JSON.parse(message.body);
+            console.log("Sync response received:", syncResponse);
+            if (syncResponse.operations && syncResponse.operations.length > 0) {
+              syncResponse.operations.forEach((op: TextOperation) => {
+                if (operationManagerRef.current) {
+                  operationManagerRef.current.applyOperation(op);
+                }
+              });
+            }
+            setLocalVersionVector(syncResponse.serverVersionVector);
+            if (
+              operationManagerRef.current &&
+              syncResponse.serverVersionVector
+            ) {
+              if (syncResponse.serverVersionVector.versions) {
+                operationManagerRef.current.setVersionVector(
+                  syncResponse.serverVersionVector.versions
+                );
+              } else {
+                operationManagerRef.current.setVersionVector(
+                  syncResponse.serverVersionVector
+                );
+              }
+            }
+            pendingOperationsRef.current = {};
+          }
+        );
 
         // Request initial document state
-        stompClient.send(
-          "/app/get-document-state",
-          {},
-          JSON.stringify({
-            sessionId: sessionId,
-          })
-        );
+        requestDocumentState();
+
+        // Assuming TextOperationManager is initialized here or elsewhere
+        // Replace this with your actual initialization if it's different
+        if (editorRef.current && !operationManagerRef.current) {
+          operationManagerRef.current = new TextOperationManager(
+            editorRef.current,
+            id,
+            localVersionVector,
+            sendOperationRef.current // Use the ref here
+          );
+        }
       });
 
+      // Track reconnections
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 5;
+
+      const handleReconnect = () => {
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          console.log(
+            `Connection lost. Reconnecting (${reconnectAttempts}/${maxReconnectAttempts})...`
+          );
+          setTimeout(() => {
+            if (socket.readyState !== SockJS.OPEN) {
+              const newSocket = new SockJS("http://localhost:8080/ws");
+              const newStompClient = Stomp.over(newSocket);
+              stompClientRef.current = newStompClient;
+              newStompClient.connect(
+                {},
+                (frame) => {
+                  console.log("Reconnected: " + frame);
+                  requestSync();
+                },
+                (error) => {
+                  console.error("Reconnection error:", error);
+                  handleReconnect();
+                }
+              );
+            }
+          }, 1000 * Math.pow(2, reconnectAttempts));
+        } else {
+          console.error("Maximum reconnection attempts reached");
+        }
+      };
+
+      const requestDocumentState = () => {
+        if (stompClientRef.current?.connected) {
+          stompClientRef.current.send(
+            "/app/get-document-state",
+            {},
+            JSON.stringify({
+              sessionId: sessionId,
+              userId: id,
+              clientVersionVector: localVersionVector,
+            })
+          );
+        }
+      };
+
+      const requestSync = () => {
+        if (stompClientRef.current?.connected) {
+          stompClientRef.current.send(
+            "/app/sync-operations",
+            {},
+            JSON.stringify({
+              userId: id,
+              sessionId: sessionId,
+              clientVersionVector: localVersionVector,
+            })
+          );
+        }
+      };
+
+      const pingInterval = setInterval(() => {
+        if (stompClientRef.current && !stompClientRef.current.connected) {
+          handleReconnect();
+        }
+      }, 10000);
+
       return () => {
+        clearInterval(retryInterval);
+        clearInterval(pingInterval);
         if (stompClient.connected) {
           stompClient.disconnect(() => console.log("Disconnected"));
         }
@@ -277,7 +488,6 @@ const App = () => {
       };
     }
 
-    // Clean up any existing connection when session becomes inactive
     return () => {
       if (stompClientRef.current?.connected) {
         stompClientRef.current.disconnect(() => console.log("Disconnected"));
@@ -474,7 +684,7 @@ const App = () => {
       simulateRapidTyping(
         editorRef.current,
         operationManagerRef.current,
-        "Debugging CodeCafe is like playing whack-a-mole—fix one bug, and three more pop up, mocking your existence. The error messages are either cryptic riddles or flat-out lies, leaving me wondering if the code is broken or if reality itself is glitching. Sometimes, a bug magically disappears when I add a print statement, only to return the moment I remove it, as if it enjoys taunting me. The console log is basically my therapist now, except it only responds with 'Undefined is not a function' instead of useful advice. At this point, I’m not sure if I’m building CodeCafe or if CodeCafe is slowly breaking me. 😵‍💫",
+        "Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe ",
         50 // Adjust typing speed as needed
       );
     }

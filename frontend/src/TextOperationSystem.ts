@@ -7,8 +7,88 @@ export enum OperationType {
   REPLACE = "REPLACE",
 }
 
-export interface VersionVector {
-  [userId: string]: number;
+export class VersionVector {
+  private versions: { [userId: string]: number };
+
+  constructor(initialVersions: { [userId: string]: number } = {}) {
+    this.versions = { ...initialVersions };
+  }
+
+  // Get the versions map
+  getVersions(): { [userId: string]: number } {
+    return { ...this.versions };
+  }
+
+  // Set the versions map
+  setVersions(versions: { [userId: string]: number } | null): void {
+    this.versions = versions ? { ...versions } : {};
+  }
+
+  // Update a user's version - matches Java implementation
+  update(userId: string, version: number): void {
+    const current = this.versions[userId] || 0;
+    this.versions[userId] = Math.max(current, version);
+  }
+
+  // Check if this vector is concurrent with another - matches Java implementation
+  concurrent(other: VersionVector): boolean {
+    if (!other || !other.getVersions()) {
+      return true;
+    }
+
+    // Check if this vector knows about operations in other vector
+    const knowsAboutOther = this.knowsAboutVersionVector(other);
+
+    // Check if other vector knows about operations in this vector
+    const otherKnowsAboutThis = other.knowsAboutVersionVector(this);
+
+    // They're concurrent if neither fully knows about the other
+    return !knowsAboutOther && !otherKnowsAboutThis;
+  }
+
+  // Helper method to check if this vector knows about all operations in another vector
+  private knowsAboutVersionVector(other: VersionVector): boolean {
+    if (!other || !other.getVersions()) {
+      return true;
+    }
+
+    const otherVersions = other.getVersions();
+
+    for (const userId in otherVersions) {
+      const otherVersion = otherVersions[userId];
+      const thisVersion = this.versions[userId] || 0;
+
+      // If we have a lower version for any user, we don't know about all their operations
+      if (thisVersion < otherVersion) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Merge this vector with another, taking the maximum version for each user
+  merge(other: VersionVector): VersionVector {
+    if (!other || !other.getVersions()) {
+      return new VersionVector(this.versions);
+    }
+
+    const result = new VersionVector(this.versions);
+    const otherVersions = other.getVersions();
+
+    for (const userId in otherVersions) {
+      const otherVersion = otherVersions[userId];
+      const thisVersion = this.versions[userId] || 0;
+      result.versions[userId] = Math.max(thisVersion, otherVersion);
+    }
+
+    return result;
+  }
+
+  // For debugging
+  toString(): string {
+    return JSON.stringify(this.versions);
+  }
 }
 
 export interface TextOperation {
@@ -17,21 +97,21 @@ export interface TextOperation {
   position: number;
   text?: string;
   length?: number;
-  baseVersionVector: VersionVector;
+  baseVersionVector: { [userId: string]: number }; // Keep as raw object for serialization
   userId: string;
   clone?: () => TextOperation;
 }
 
 export interface OperationAck {
   operationId: string;
-  baseVersionVector: VersionVector;
+  baseVersionVector: { [userId: string]: number };
   userId: string;
 }
 
 export class TextOperationManager {
   private editor: editor.IStandaloneCodeEditor;
   private model: editor.ITextModel;
-  private localVersionVector: VersionVector = {};
+  private localVersionVector: VersionVector;
   private pendingOperations: Map<string, TextOperation> = new Map();
   private operationHistory: TextOperation[] = [];
   private userId: string;
@@ -42,17 +122,22 @@ export class TextOperationManager {
   constructor(
     editor: editor.IStandaloneCodeEditor,
     userId: string,
-    initialVersionVector: VersionVector = {},
+    initialVersionVector: { [userId: string]: number } = {},
     operationCallback: (op: TextOperation) => void
   ) {
     this.editor = editor;
     this.model = editor.getModel()!;
     this.userId = userId;
-    this.localVersionVector = { ...initialVersionVector };
+    this.localVersionVector = new VersionVector(
+      typeof initialVersionVector === "object" && initialVersionVector !== null
+        ? initialVersionVector
+        : {}
+    );
     this.operationCallback = operationCallback;
 
-    if (!this.localVersionVector[userId]) {
-      this.localVersionVector[userId] = 0;
+    // Initialize user's version if not present
+    if (!this.localVersionVector.getVersions()[userId]) {
+      this.localVersionVector.update(userId, 0);
     }
 
     this.model.onDidChangeContent((e) => {
@@ -70,7 +155,7 @@ export class TextOperationManager {
 
     console.log(
       "TextOperationManager initialized with version vector:",
-      initialVersionVector
+      this.localVersionVector.toString()
     );
   }
 
@@ -83,7 +168,7 @@ export class TextOperationManager {
       const operation = this.createOperationFromChange(change);
       if (operation) {
         operation.id = uuidv4();
-        operation.baseVersionVector = { ...this.localVersionVector };
+        operation.baseVersionVector = this.localVersionVector.getVersions();
         this.pendingOperations.set(operation.id, operation);
 
         // Increment local version for our own operation
@@ -96,8 +181,9 @@ export class TextOperationManager {
   }
 
   private incrementLocalVersion(): void {
-    this.localVersionVector[this.userId] =
-      (this.localVersionVector[this.userId] || 0) + 1;
+    const versions = this.localVersionVector.getVersions();
+    const currentVersion = versions[this.userId] || 0;
+    this.localVersionVector.update(this.userId, currentVersion + 1);
   }
 
   private createOperationFromChange(
@@ -147,7 +233,10 @@ export class TextOperationManager {
         this.pendingOperations.delete(operation.id);
       }
       this.updateVersionVector(operation.baseVersionVector);
-      console.log("Updated local version vector:", this.localVersionVector);
+      console.log(
+        "Updated local version vector:",
+        this.localVersionVector.toString()
+      );
       return;
     }
 
@@ -156,19 +245,10 @@ export class TextOperationManager {
 
     // For remote operations
     this.updateVersionVector(operation.baseVersionVector);
+
+    // Find concurrent operations and sort them
     const concurrentOps = this.findConcurrentOperations(operation);
-
-    // Sort concurrent operations for consistent transformation
-    concurrentOps.sort((a, b) => {
-      // First by user ID for consistency
-      const userCompare = a.userId.localeCompare(b.userId);
-      if (userCompare !== 0) return userCompare;
-
-      // Then by version number
-      const versionA = a.baseVersionVector[a.userId] || 0;
-      const versionB = b.baseVersionVector[b.userId] || 0;
-      return versionA - versionB;
-    });
+    this.sortOperations(concurrentOps);
 
     // Transform the operation against all concurrent operations
     let transformedOperation = operation.clone
@@ -231,7 +311,7 @@ export class TextOperationManager {
 
       console.log(
         "Editor updated, new version vector:",
-        this.localVersionVector
+        this.localVersionVector.toString()
       );
     } finally {
       this.isApplyingExternalOperation = false;
@@ -277,32 +357,63 @@ export class TextOperationManager {
     cursorOffset: number,
     operation: TextOperation
   ): number {
-    if (operation.type === OperationType.INSERT) {
-      if (cursorOffset < operation.position) {
-        return cursorOffset;
-      } else {
-        return cursorOffset + (operation.text?.length || 0);
-      }
-    } else if (operation.type === OperationType.DELETE && operation.length) {
-      if (cursorOffset <= operation.position) {
-        return cursorOffset;
-      } else if (cursorOffset <= operation.position + operation.length) {
-        return operation.position;
-      } else {
-        return cursorOffset - operation.length;
-      }
-    } else if (operation.type === OperationType.REPLACE && operation.length) {
-      if (cursorOffset <= operation.position) {
-        return cursorOffset;
-      } else if (cursorOffset <= operation.position + operation.length) {
-        // If cursor is in the replaced region, move it to the end of the new text
-        return operation.position + (operation.text?.length || 0);
-      } else {
-        // If cursor is after the replaced region, adjust it by the difference in length
-        const lengthDiff = (operation.text?.length || 0) - operation.length;
-        return cursorOffset + lengthDiff;
-      }
+    switch (operation.type) {
+      case OperationType.INSERT:
+        if (cursorOffset < operation.position) {
+          // Cursor is before the insert point - no change
+          return cursorOffset;
+        } else if (cursorOffset === operation.position) {
+          // Cursor is exactly at the insert point - use the same tie-breaking logic
+          // as operation transformation for consistency
+          if (this.userId === operation.userId) {
+            // Same user, place after insert
+            return cursorOffset + (operation.text?.length || 0);
+          } else {
+            const comparison = this.userId.localeCompare(operation.userId);
+            if (comparison < 0) {
+              // Our ID is smaller, place before
+              return cursorOffset;
+            } else {
+              // Our ID is larger, place after
+              return cursorOffset + (operation.text?.length || 0);
+            }
+          }
+        } else {
+          // Cursor is after the insert point - shift it
+          return cursorOffset + (operation.text?.length || 0);
+        }
+
+      case OperationType.DELETE:
+        if (!operation.length) return cursorOffset;
+
+        if (cursorOffset <= operation.position) {
+          // Cursor is before or at the delete start - no change
+          return cursorOffset;
+        } else if (cursorOffset <= operation.position + operation.length) {
+          // Cursor is within the deleted range - move to the start of deletion
+          return operation.position;
+        } else {
+          // Cursor is after the deletion - shift it left
+          return cursorOffset - operation.length;
+        }
+
+      case OperationType.REPLACE:
+        if (!operation.length) return cursorOffset;
+
+        if (cursorOffset <= operation.position) {
+          // Cursor is before the replace - no change
+          return cursorOffset;
+        } else if (cursorOffset <= operation.position + operation.length) {
+          // Cursor is within the replaced region - move to the end of the new text
+          // This is a common strategy for replace operations
+          return operation.position + (operation.text?.length || 0);
+        } else {
+          // Cursor is after the replaced region - adjust by the difference in length
+          const lengthDiff = (operation.text?.length || 0) - operation.length;
+          return cursorOffset + lengthDiff;
+        }
     }
+
     return cursorOffset;
   }
 
@@ -327,64 +438,55 @@ export class TextOperationManager {
       this.pendingOperations.delete(ack.operationId);
     }
     this.updateVersionVector(ack.baseVersionVector);
-    console.log("Updated local version vector:", this.localVersionVector);
+    console.log(
+      "Updated local version vector:",
+      this.localVersionVector.toString()
+    );
   }
 
-  public getVersionVector(): VersionVector {
-    return { ...this.localVersionVector };
+  public getVersionVector(): { [userId: string]: number } {
+    return this.localVersionVector.getVersions();
   }
 
-  public setVersionVector(vector: VersionVector): void {
-    this.localVersionVector = { ...vector };
-    console.log("Version vector set to:", this.localVersionVector);
+  public setVersionVector(vector: { [userId: string]: number }): void {
+    this.localVersionVector = new VersionVector(vector);
+    console.log("Version vector set to:", this.localVersionVector.toString());
   }
 
   private findConcurrentOperations(operation: TextOperation): TextOperation[] {
     const concurrent: TextOperation[] = [];
+    const opVector = new VersionVector(operation.baseVersionVector);
+
     for (const [_, pendingOp] of this.pendingOperations) {
-      if (this.isConcurrent(operation, pendingOp)) {
+      const pendingVector = new VersionVector(pendingOp.baseVersionVector);
+      if (opVector.concurrent(pendingVector)) {
         concurrent.push(pendingOp);
       }
     }
     return concurrent;
   }
 
-  private isConcurrent(a: TextOperation, b: TextOperation): boolean {
-    return !this.happenedBefore(a, b) && !this.happenedBefore(b, a);
+  private updateVersionVector(newVector: { [userId: string]: number }): void {
+    if (!newVector) {
+      console.warn("Received invalid version vector");
+      return;
+    }
+
+    const newVersionVector = new VersionVector(newVector);
+    this.localVersionVector = this.localVersionVector.merge(newVersionVector);
   }
 
-  private happenedBefore(a: TextOperation, b: TextOperation): boolean {
-    // Check if a happened before b
-    for (const userId in b.baseVersionVector) {
-      const aVersion = a.baseVersionVector[userId] || 0;
-      const bVersion = b.baseVersionVector[userId] || 0;
+  private sortOperations(operations: TextOperation[]): void {
+    operations.sort((a, b) => {
+      // First compare by user ID for consistency
+      const userCompare = a.userId.localeCompare(b.userId);
+      if (userCompare !== 0) return userCompare;
 
-      if (aVersion > bVersion) {
-        return false;
-      }
-    }
-
-    // Check if a made changes that b doesn't know about
-    let madeChanges = false;
-    for (const userId in a.baseVersionVector) {
-      const aVersion = a.baseVersionVector[userId] || 0;
-      const bVersion = b.baseVersionVector[userId] || 0;
-
-      if (aVersion > bVersion) {
-        madeChanges = true;
-        break;
-      }
-    }
-
-    return madeChanges;
-  }
-
-  private updateVersionVector(newVector: VersionVector): void {
-    for (const userId in newVector) {
-      const newVersion = newVector[userId];
-      const currentVersion = this.localVersionVector[userId] || 0;
-      this.localVersionVector[userId] = Math.max(currentVersion, newVersion);
-    }
+      // Then by version number if from same user
+      const aVersion = a.baseVersionVector[a.userId] || 0;
+      const bVersion = b.baseVersionVector[b.userId] || 0;
+      return aVersion - bVersion;
+    });
   }
 
   private transformOperation(
@@ -453,15 +555,14 @@ export class TextOperationManager {
         break;
 
       case OperationType.REPLACE:
-        // Handle replace as delete followed by insert
-        if (b.length === undefined || b.text === undefined) break;
-
+        // Create separate delete and insert operations with proper IDs
         const deletePartOfB: TextOperation = {
           type: OperationType.DELETE,
           position: b.position,
           length: b.length,
           baseVersionVector: { ...b.baseVersionVector },
           userId: b.userId,
+          id: b.id ? `${b.id}-delete` : undefined,
           clone: function () {
             const clone = { ...this };
             clone.baseVersionVector = { ...this.baseVersionVector };
@@ -476,6 +577,7 @@ export class TextOperationManager {
           text: b.text,
           baseVersionVector: { ...b.baseVersionVector },
           userId: b.userId,
+          id: b.id ? `${b.id}-insert` : undefined,
           clone: function () {
             const clone = { ...this };
             clone.baseVersionVector = { ...this.baseVersionVector };
@@ -484,6 +586,7 @@ export class TextOperationManager {
           },
         };
 
+        // First transform against delete, then against insert - same as backend
         const tempTransformedA = this.transformOperation(
           transformedA,
           deletePartOfB
@@ -506,22 +609,21 @@ export class TextOperationManager {
     if (position < otherPosition) {
       return position;
     } else if (position === otherPosition && isInsert) {
-      // Add more robust tie-breaking logic here, but still using existing parameters
-      const userCompare = clientUserId.localeCompare(serverUserId);
-
-      // If the user IDs are the same, deterministically choose based on operation type
-      // This is a simple but consistent approach using what's available
-      if (userCompare === 0) {
-        // Use a property that's already available to break the tie
-        // For example, whether it came from the client or server
-        return isInsert ? position : position + otherLength;
+      // MODIFIED: Ensure identical tie-breaking logic as server
+      if (clientUserId === serverUserId) {
+        return position + otherLength; // Same user, place after
+      } else {
+        const comparison = clientUserId.localeCompare(serverUserId);
+        if (comparison < 0) {
+          return position; // Client ID is smaller, place before
+        } else {
+          return position + otherLength; // Client ID is larger, place after
+        }
       }
-
-      return userCompare < 0 ? position : position + otherLength;
     } else {
       return isInsert
         ? position + otherLength
-        : Math.max(otherPosition, position - otherLength);
+        : Math.max(otherPosition, position + otherLength);
     }
   }
 
@@ -579,20 +681,69 @@ export class TextOperationManager {
 
   private validateOperation(operation: TextOperation): void {
     const maxPos = this.model.getValueLength();
+
+    // Ensure operation has valid ID
+    if (!operation.id) {
+      operation.id = uuidv4();
+      console.warn(`Generated missing operation ID: ${operation.id}`);
+    }
+
+    // Ensure user ID is valid
+    if (!operation.userId) {
+      operation.userId = "anonymous";
+      console.warn("Set missing user ID to anonymous");
+    }
+
+    // Position validation
     if (operation.position < 0) {
       operation.position = 0;
+      console.warn("Adjusted negative position to 0");
     }
-    if (operation.length !== undefined && operation.length < 0) {
-      operation.length = 0;
-    }
+
     if (operation.position > maxPos) {
       operation.position = maxPos;
+      console.warn(
+        `Adjusted out-of-bounds position to document length: ${maxPos}`
+      );
     }
+
+    // Length validation for DELETE and REPLACE
     if (
-      operation.length !== undefined &&
-      operation.position + operation.length > maxPos
+      operation.type === OperationType.DELETE ||
+      operation.type === OperationType.REPLACE
     ) {
-      operation.length = maxPos - operation.position;
+      if (operation.length === undefined) {
+        operation.length = 0;
+        console.warn("Set undefined length to 0");
+      }
+
+      if (operation.length < 0) {
+        operation.length = 0;
+        console.warn("Adjusted negative length to 0");
+      }
+
+      const endPos = operation.position + operation.length;
+      if (endPos > maxPos) {
+        operation.length = maxPos - operation.position;
+        console.warn(`Adjusted out-of-bounds length to: ${operation.length}`);
+      }
+    }
+
+    // Text validation for INSERT and REPLACE
+    if (
+      operation.type === OperationType.INSERT ||
+      operation.type === OperationType.REPLACE
+    ) {
+      if (operation.text === undefined) {
+        operation.text = "";
+        console.warn("Set undefined text to empty string");
+      }
+    }
+
+    // Make sure base version vector exists
+    if (!operation.baseVersionVector) {
+      operation.baseVersionVector = {};
+      console.warn("Created missing base version vector");
     }
   }
 }
