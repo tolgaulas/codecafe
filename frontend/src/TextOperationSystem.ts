@@ -37,6 +37,7 @@ export class TextOperationManager {
   private userId: string;
   private operationCallback: (op: TextOperation) => void;
   private isApplyingExternalOperation: boolean = false;
+  private lastCursorState: editor.ICursorState[] | null = null;
 
   constructor(
     editor: editor.IStandaloneCodeEditor,
@@ -60,6 +61,13 @@ export class TextOperationManager {
       }
     });
 
+    // Save cursor state when user moves the cursor
+    this.editor.onDidChangeCursorPosition(() => {
+      if (!this.isApplyingExternalOperation) {
+        this.lastCursorState = this.editor.saveViewState()?.cursorState || null;
+      }
+    });
+
     console.log(
       "TextOperationManager initialized with version vector:",
       initialVersionVector
@@ -68,6 +76,7 @@ export class TextOperationManager {
 
   private handleModelContentChange(e: editor.IModelContentChangedEvent): void {
     const changes = e.changes;
+    // Sort changes in reverse order to handle multiple changes correctly
     changes.sort((a, b) => b.rangeOffset - a.rangeOffset);
 
     for (const change of changes) {
@@ -76,10 +85,19 @@ export class TextOperationManager {
         operation.id = uuidv4();
         operation.baseVersionVector = { ...this.localVersionVector };
         this.pendingOperations.set(operation.id, operation);
+
+        // Increment local version for our own operation
+        this.incrementLocalVersion();
+
         console.log("Created operation:", operation);
         this.operationCallback(operation);
       }
     }
+  }
+
+  private incrementLocalVersion(): void {
+    this.localVersionVector[this.userId] =
+      (this.localVersionVector[this.userId] || 0) + 1;
   }
 
   private createOperationFromChange(
@@ -89,12 +107,15 @@ export class TextOperationManager {
     const length = change.rangeLength;
     const text = change.text;
 
+    // Special handling for newlines to ensure they're preserved
+    const normalizedText = text.replace(/\r\n/g, "\n");
+
     let type: OperationType;
-    if (length === 0 && text.length > 0) {
+    if (length === 0 && normalizedText.length > 0) {
       type = OperationType.INSERT;
-    } else if (length > 0 && text.length === 0) {
+    } else if (length > 0 && normalizedText.length === 0) {
       type = OperationType.DELETE;
-    } else if (length > 0 && text.length > 0) {
+    } else if (length > 0 && normalizedText.length > 0) {
       type = OperationType.REPLACE;
     } else {
       return null;
@@ -103,7 +124,7 @@ export class TextOperationManager {
     const operation: TextOperation = {
       type,
       position,
-      text: text.length > 0 ? text : undefined,
+      text: normalizedText.length > 0 ? normalizedText : undefined,
       length: length > 0 ? length : undefined,
       baseVersionVector: {},
       userId: this.userId,
@@ -120,6 +141,7 @@ export class TextOperationManager {
   public applyOperation(operation: TextOperation): void {
     console.log("Applying operation:", operation);
 
+    // Handle local operations (acknowledged by server)
     if (operation.userId === this.userId) {
       if (operation.id && this.pendingOperations.has(operation.id)) {
         this.pendingOperations.delete(operation.id);
@@ -129,15 +151,26 @@ export class TextOperationManager {
       return;
     }
 
+    // Save cursor position before applying remote operation
+    const previousSelections = this.editor.getSelections() || [];
+
+    // For remote operations
     this.updateVersionVector(operation.baseVersionVector);
     const concurrentOps = this.findConcurrentOperations(operation);
 
+    // Sort concurrent operations for consistent transformation
     concurrentOps.sort((a, b) => {
+      // First by user ID for consistency
+      const userCompare = a.userId.localeCompare(b.userId);
+      if (userCompare !== 0) return userCompare;
+
+      // Then by version number
       const versionA = a.baseVersionVector[a.userId] || 0;
       const versionB = b.baseVersionVector[b.userId] || 0;
-      return versionA - versionB; // Ascending order
+      return versionA - versionB;
     });
 
+    // Transform the operation against all concurrent operations
     let transformedOperation = operation.clone
       ? operation.clone()
       : { ...operation };
@@ -150,9 +183,10 @@ export class TextOperationManager {
 
     this.validateOperation(transformedOperation);
 
+    // Apply the transformed operation to the editor
     this.isApplyingExternalOperation = true;
     try {
-      const currentPosition = this.editor.getPosition();
+      // Prepare the edit operation
       const edits: editor.IIdentifiedSingleEditOperation[] = [];
       const range = this.getOperationRange(transformedOperation);
 
@@ -160,10 +194,14 @@ export class TextOperationManager {
         edits.push({
           range,
           text: transformedOperation.text || "",
-          forceMoveMarkers: false,
+          forceMoveMarkers: false, // This is important for cursor handling
         });
       } else if (transformedOperation.type === OperationType.DELETE) {
-        edits.push({ range, text: "", forceMoveMarkers: false });
+        edits.push({
+          range,
+          text: "",
+          forceMoveMarkers: false,
+        });
       } else if (transformedOperation.type === OperationType.REPLACE) {
         edits.push({
           range,
@@ -172,62 +210,23 @@ export class TextOperationManager {
         });
       }
 
-      this.model.pushEditOperations([], edits, (_inverseEdits) => {
-        if (currentPosition) {
-          let newOffset = this.model.getOffsetAt(currentPosition);
-          if (transformedOperation.position <= newOffset) {
-            if (transformedOperation.type === OperationType.INSERT) {
-              newOffset += transformedOperation.text?.length || 0;
-            } else if (transformedOperation.type === OperationType.DELETE) {
-              newOffset -= Math.min(
-                transformedOperation.length || 0,
-                newOffset - transformedOperation.position
-              );
-            } else if (transformedOperation.type === OperationType.REPLACE) {
-              newOffset +=
-                (transformedOperation.text?.length || 0) -
-                (transformedOperation.length || 0);
-            }
-          }
-          const newPosition = this.model.getPositionAt(Math.max(0, newOffset));
-          return [
-            new Selection(
-              newPosition.lineNumber,
-              newPosition.column,
-              newPosition.lineNumber,
-              newPosition.column
-            ),
-          ];
-        }
-        return null;
-      });
+      // Calculate how this operation affects our existing selections
+      const transformedSelections = this.transformSelections(
+        previousSelections,
+        transformedOperation
+      );
 
-      if (currentPosition) {
-        const newOffset = this.model.getOffsetAt(currentPosition);
-        let adjustedOffset = newOffset;
-        if (transformedOperation.position <= newOffset) {
-          if (transformedOperation.type === OperationType.INSERT) {
-            adjustedOffset += transformedOperation.text?.length || 0;
-          } else if (transformedOperation.type === OperationType.DELETE) {
-            adjustedOffset -= Math.min(
-              transformedOperation.length || 0,
-              newOffset - transformedOperation.position
-            );
-          } else if (transformedOperation.type === OperationType.REPLACE) {
-            adjustedOffset +=
-              (transformedOperation.text?.length || 0) -
-              (transformedOperation.length || 0);
-          }
-        }
-        const newPosition = this.model.getPositionAt(
-          Math.max(0, adjustedOffset)
-        );
-        this.editor.setPosition(newPosition);
-      }
+      // Apply the edit while preserving selections
+      this.model.pushEditOperations(
+        previousSelections,
+        edits,
+        () => transformedSelections
+      );
 
+      // Add the operation to history
       this.operationHistory.push(transformedOperation);
       if (this.operationHistory.length > 100) {
-        this.operationHistory.shift(); // Consider a TreeMap for large histories
+        this.operationHistory.shift();
       }
 
       console.log(
@@ -237,6 +236,74 @@ export class TextOperationManager {
     } finally {
       this.isApplyingExternalOperation = false;
     }
+  }
+
+  private transformSelections(
+    selections: Selection[],
+    operation: TextOperation
+  ): Selection[] {
+    if (!selections || selections.length === 0) {
+      return [];
+    }
+
+    return selections.map((selection) => {
+      const startOffset = this.model.getOffsetAt({
+        lineNumber: selection.startLineNumber,
+        column: selection.startColumn,
+      });
+      const endOffset = this.model.getOffsetAt({
+        lineNumber: selection.endLineNumber,
+        column: selection.endColumn,
+      });
+
+      // Transform start and end positions
+      let newStartOffset = this.transformCursorPosition(startOffset, operation);
+      let newEndOffset = this.transformCursorPosition(endOffset, operation);
+
+      // Convert back to line/column positions
+      const newStartPos = this.model.getPositionAt(newStartOffset);
+      const newEndPos = this.model.getPositionAt(newEndOffset);
+
+      return new Selection(
+        newStartPos.lineNumber,
+        newStartPos.column,
+        newEndPos.lineNumber,
+        newEndPos.column
+      );
+    });
+  }
+
+  private transformCursorPosition(
+    cursorOffset: number,
+    operation: TextOperation
+  ): number {
+    if (operation.type === OperationType.INSERT) {
+      if (cursorOffset < operation.position) {
+        return cursorOffset;
+      } else {
+        return cursorOffset + (operation.text?.length || 0);
+      }
+    } else if (operation.type === OperationType.DELETE && operation.length) {
+      if (cursorOffset <= operation.position) {
+        return cursorOffset;
+      } else if (cursorOffset <= operation.position + operation.length) {
+        return operation.position;
+      } else {
+        return cursorOffset - operation.length;
+      }
+    } else if (operation.type === OperationType.REPLACE && operation.length) {
+      if (cursorOffset <= operation.position) {
+        return cursorOffset;
+      } else if (cursorOffset <= operation.position + operation.length) {
+        // If cursor is in the replaced region, move it to the end of the new text
+        return operation.position + (operation.text?.length || 0);
+      } else {
+        // If cursor is after the replaced region, adjust it by the difference in length
+        const lengthDiff = (operation.text?.length || 0) - operation.length;
+        return cursorOffset + lengthDiff;
+      }
+    }
+    return cursorOffset;
   }
 
   private getOperationRange(operation: TextOperation): IRange {
@@ -287,17 +354,29 @@ export class TextOperationManager {
   }
 
   private happenedBefore(a: TextOperation, b: TextOperation): boolean {
+    // Check if a happened before b
+    for (const userId in b.baseVersionVector) {
+      const aVersion = a.baseVersionVector[userId] || 0;
+      const bVersion = b.baseVersionVector[userId] || 0;
+
+      if (aVersion > bVersion) {
+        return false;
+      }
+    }
+
+    // Check if a made changes that b doesn't know about
+    let madeChanges = false;
     for (const userId in a.baseVersionVector) {
       const aVersion = a.baseVersionVector[userId] || 0;
       const bVersion = b.baseVersionVector[userId] || 0;
-      if (aVersion > bVersion) return false;
+
+      if (aVersion > bVersion) {
+        madeChanges = true;
+        break;
+      }
     }
-    for (const userId in a.baseVersionVector) {
-      const aVersion = a.baseVersionVector[userId] || 0;
-      const bVersion = b.baseVersionVector[userId] || 0;
-      if (aVersion < bVersion) return true;
-    }
-    return false;
+
+    return madeChanges;
   }
 
   private updateVersionVector(newVector: VersionVector): void {
@@ -336,24 +415,29 @@ export class TextOperationManager {
           originalA.userId,
           b.userId
         );
+
+        // If we're deleting/replacing text and the insert happened within our range
         if (
           (transformedA.type === OperationType.DELETE ||
             transformedA.type === OperationType.REPLACE) &&
           transformedA.length !== undefined
         ) {
           const aEnd = transformedA.position + transformedA.length;
-          if (b.position > transformedA.position && b.position < aEnd) {
+          if (b.position >= transformedA.position && b.position <= aEnd) {
             transformedA.length += b.text?.length || 0;
           }
         }
         break;
 
       case OperationType.DELETE:
+        if (b.length === undefined) break;
+
         transformedA.position = this.transformPositionAgainstDelete(
           transformedA.position,
           b.position,
-          b.length || 0
+          b.length
         );
+
         if (
           (transformedA.type === OperationType.DELETE ||
             transformedA.type === OperationType.REPLACE) &&
@@ -363,12 +447,15 @@ export class TextOperationManager {
             transformedA.position,
             transformedA.length,
             b.position,
-            b.length || 0
+            b.length
           );
         }
         break;
 
       case OperationType.REPLACE:
+        // Handle replace as delete followed by insert
+        if (b.length === undefined || b.text === undefined) break;
+
         const deletePartOfB: TextOperation = {
           type: OperationType.DELETE,
           position: b.position,
@@ -382,6 +469,7 @@ export class TextOperationManager {
             return clone;
           },
         };
+
         const insertPartOfB: TextOperation = {
           type: OperationType.INSERT,
           position: b.position,
@@ -395,6 +483,7 @@ export class TextOperationManager {
             return clone;
           },
         };
+
         const tempTransformedA = this.transformOperation(
           transformedA,
           deletePartOfB
@@ -402,6 +491,7 @@ export class TextOperationManager {
         transformedA = this.transformOperation(tempTransformedA, insertPartOfB);
         break;
     }
+
     return transformedA;
   }
 
@@ -416,11 +506,18 @@ export class TextOperationManager {
     if (position < otherPosition) {
       return position;
     } else if (position === otherPosition && isInsert) {
-      if (clientUserId.localeCompare(serverUserId) > 0) {
-        return position + otherLength;
-      } else {
-        return position;
+      // Add more robust tie-breaking logic here, but still using existing parameters
+      const userCompare = clientUserId.localeCompare(serverUserId);
+
+      // If the user IDs are the same, deterministically choose based on operation type
+      // This is a simple but consistent approach using what's available
+      if (userCompare === 0) {
+        // Use a property that's already available to break the tie
+        // For example, whether it came from the client or server
+        return isInsert ? position : position + otherLength;
       }
+
+      return userCompare < 0 ? position : position + otherLength;
     } else {
       return isInsert
         ? position + otherLength
@@ -451,15 +548,32 @@ export class TextOperationManager {
     const endPos = pos + len;
     const deleteEndPos = deletePos + deleteLen;
 
+    // No overlap
     if (endPos <= deletePos || pos >= deleteEndPos) {
       return len;
     }
-    if (pos < deletePos) {
-      return deletePos - pos + Math.max(0, endPos - deleteEndPos);
+
+    // Delete entirely contains operation
+    if (pos >= deletePos && endPos <= deleteEndPos) {
+      return 0;
     }
-    if (endPos > deleteEndPos) {
+
+    // Operation entirely contains delete
+    if (pos <= deletePos && endPos >= deleteEndPos) {
+      return len - deleteLen;
+    }
+
+    // Delete overlaps with start of operation
+    if (pos < deletePos && endPos > deletePos && endPos <= deleteEndPos) {
+      return deletePos - pos;
+    }
+
+    // Delete overlaps with end of operation
+    if (pos >= deletePos && pos < deleteEndPos && endPos > deleteEndPos) {
       return endPos - deleteEndPos;
     }
+
+    // Shouldn't get here
     return 0;
   }
 

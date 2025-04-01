@@ -1,4 +1,4 @@
-import { editor, Range } from "monaco-editor";
+import { editor } from "monaco-editor";
 import { TextOperationManager } from "./TextOperationSystem"; // Adjust path
 
 export function simulateRapidTyping(
@@ -10,7 +10,7 @@ export function simulateRapidTyping(
   const model = editorInstance.getModel();
   if (!model) return;
 
-  let currentPosition = 0;
+  let currentPosition = editorInstance.getPosition() || model.getPositionAt(0);
   let charIndex = 0;
 
   const typingInterval = setInterval(() => {
@@ -20,26 +20,23 @@ export function simulateRapidTyping(
     }
 
     const char = text[charIndex];
-    const position = model.getPositionAt(currentPosition);
 
-    const editOperation = {
-      range: new Range(
-        position.lineNumber,
-        position.column,
-        position.lineNumber,
-        position.column
-      ),
-      text: char,
-      forceMoveMarkers: true,
-    };
+    // Use the editor's setValue method which will trigger the content change event
+    editorInstance.executeEdits("typing-simulation", [
+      {
+        range: {
+          startLineNumber: currentPosition.lineNumber,
+          startColumn: currentPosition.column,
+          endLineNumber: currentPosition.lineNumber,
+          endColumn: currentPosition.column,
+        },
+        text: char,
+        forceMoveMarkers: true,
+      },
+    ]);
 
-    model.pushEditOperations(
-      editorInstance.getSelections(),
-      [editOperation],
-      () => null
-    );
-
-    currentPosition++;
+    // Get the new cursor position after the edit
+    currentPosition = editorInstance.getPosition() || currentPosition;
     charIndex++;
   }, typingSpeed);
 }

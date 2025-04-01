@@ -1,15 +1,19 @@
 package com.codecafe.backend.dto;
 
+import java.util.Objects;
+
 public class TextOperation {
     private String id;
     private OperationType type;
     private int position;
     private String text;
     private Integer length;
-    private VersionVector baseVersionVector; // Changed from version to baseVersionVector
+    private VersionVector baseVersionVector;
     private String userId;
 
-    // Getters and setters
+    public TextOperation() {
+        // Default constructor
+    }
 
     public String getId() {
         return id;
@@ -56,7 +60,7 @@ public class TextOperation {
     }
 
     public void setBaseVersionVector(VersionVector baseVersionVector) {
-        this.baseVersionVector = baseVersionVector != null ? baseVersionVector : new VersionVector();
+        this.baseVersionVector = baseVersionVector;
     }
 
     public String getUserId() {
@@ -68,13 +72,32 @@ public class TextOperation {
     }
 
     @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TextOperation that = (TextOperation) o;
+        return position == that.position &&
+                Objects.equals(id, that.id) &&
+                type == that.type &&
+                Objects.equals(text, that.text) &&
+                Objects.equals(length, that.length) &&
+                Objects.equals(baseVersionVector, that.baseVersionVector) &&
+                Objects.equals(userId, that.userId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id, type, position, text, length, baseVersionVector, userId);
+    }
+
+    @Override
     public String toString() {
         return "TextOperation{" +
                 "id='" + id + '\'' +
                 ", type=" + type +
                 ", position=" + position +
-                ", text='" + text + '\'' +
-                ", length=" + length +
+                (text != null ? ", text='" + (text.length() > 20 ? text.substring(0, 17) + "..." : text) + '\'' : "") +
+                (length != null ? ", length=" + length : "") +
                 ", baseVersionVector=" + baseVersionVector +
                 ", userId='" + userId + '\'' +
                 '}';
