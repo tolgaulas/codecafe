@@ -36,30 +36,35 @@ export class VersionVector {
       return true;
     }
 
-    // Check if this vector knows about operations in other vector
-    const knowsAboutOther = this.knowsAboutVersionVector(other);
-
-    // Check if other vector knows about operations in this vector
-    const otherKnowsAboutThis = other.knowsAboutVersionVector(this);
-
-    // They're concurrent if neither fully knows about the other
-    return !knowsAboutOther && !otherKnowsAboutThis;
+    return !this.happenedBefore(other) && !other.happenedBefore(this);
   }
 
-  // Helper method to check if this vector knows about all operations in another vector
-  private knowsAboutVersionVector(other: VersionVector): boolean {
-    if (!other || !other.getVersions()) {
-      return true;
-    }
-
+  private happenedBefore(other: VersionVector): boolean {
+    const thisVersions = this.versions;
     const otherVersions = other.getVersions();
 
+    // Check if this has changes not in other
+    let hasChangesNotInOther = false;
+    for (const userId in thisVersions) {
+      const thisVersion = thisVersions[userId];
+      const otherVersion = otherVersions[userId] || 0;
+
+      if (thisVersion > otherVersion) {
+        hasChangesNotInOther = true;
+        break;
+      }
+    }
+
+    if (!hasChangesNotInOther) {
+      return false;
+    }
+
+    // Check if other has additional changes not in this
     for (const userId in otherVersions) {
       const otherVersion = otherVersions[userId];
-      const thisVersion = this.versions[userId] || 0;
+      const thisVersion = thisVersions[userId] || 0;
 
-      // If we have a lower version for any user, we don't know about all their operations
-      if (thisVersion < otherVersion) {
+      if (otherVersion > thisVersion) {
         return false;
       }
     }
@@ -104,7 +109,7 @@ export interface TextOperation {
 
 export interface OperationAck {
   operationId: string;
-  baseVersionVector: { [userId: string]: number };
+  versionVector: { versions: { [userId: string]: number } };
   userId: string;
 }
 
@@ -437,7 +442,7 @@ export class TextOperationManager {
     if (this.pendingOperations.has(ack.operationId)) {
       this.pendingOperations.delete(ack.operationId);
     }
-    this.updateVersionVector(ack.baseVersionVector);
+    this.updateVersionVector(ack.versionVector.versions);
     console.log(
       "Updated local version vector:",
       this.localVersionVector.toString()
@@ -468,10 +473,14 @@ export class TextOperationManager {
 
   private updateVersionVector(newVector: { [userId: string]: number }): void {
     if (!newVector) {
-      console.warn("Received invalid version vector");
+      console.warn(
+        "Received invalid version vector for line",
+        console.log(newVector),
+        "operation source:",
+        new Error().stack
+      );
       return;
     }
-
     const newVersionVector = new VersionVector(newVector);
     this.localVersionVector = this.localVersionVector.merge(newVersionVector);
   }
