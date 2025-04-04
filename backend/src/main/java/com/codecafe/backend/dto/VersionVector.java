@@ -1,9 +1,12 @@
 package com.codecafe.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class VersionVector {
     private Map<String, Integer> versions;
 
@@ -43,39 +46,42 @@ public class VersionVector {
         versions.put(userId, Math.max(current, version));
     }
 
-    /**
-     * Check if this vector is concurrent with another vector
-     */
     public boolean concurrent(VersionVector other) {
         if (other == null || other.getVersions() == null) {
             return true;
         }
+        return !happenedBefore(other) && !other.happenedBefore(this);
+    }
 
-        boolean thisGreater = false;
-        boolean otherGreater = false;
-
-        // Check if this vector has any versions greater than other
+    private boolean happenedBefore(VersionVector other) {
+        // Check if this has changes not in other
+        boolean hasChangesNotInOther = false;
         for (Map.Entry<String, Integer> entry : versions.entrySet()) {
             String userId = entry.getKey();
             int thisVersion = entry.getValue();
             int otherVersion = other.getVersions().getOrDefault(userId, 0);
 
             if (thisVersion > otherVersion) {
-                thisGreater = true;
-            } else if (thisVersion < otherVersion) {
-                otherGreater = true;
+                hasChangesNotInOther = true;
+                break;
             }
         }
 
-        // Check if other vector has any users this one doesn't have
+        if (!hasChangesNotInOther) {
+            return false;
+        }
+
+        // Check if other has additional changes not in this
         for (String userId : other.getVersions().keySet()) {
-            if (!versions.containsKey(userId) && other.getVersions().get(userId) > 0) {
-                otherGreater = true;
+            int otherVersion = other.getVersions().get(userId);
+            int thisVersion = versions.getOrDefault(userId, 0);
+
+            if (otherVersion > thisVersion) {
+                return false;
             }
         }
 
-        // They're concurrent if both have greater versions
-        return thisGreater && otherGreater;
+        return true;
     }
 
     /**

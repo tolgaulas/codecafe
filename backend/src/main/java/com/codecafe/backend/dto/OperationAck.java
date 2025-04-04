@@ -2,7 +2,7 @@ package com.codecafe.backend.dto;
 
 public class OperationAck {
     private String operationId;
-    private VersionVector versionVector;
+    private VersionVector baseVersionVector;
     private String userId;
 
     public OperationAck() {
@@ -10,7 +10,7 @@ public class OperationAck {
 
     public OperationAck(String operationId, VersionVector versionVector, String userId) {
         this.operationId = operationId;
-        this.versionVector = versionVector;
+        this.baseVersionVector = versionVector;
         this.userId = userId;
     }
 
@@ -23,11 +23,11 @@ public class OperationAck {
     }
 
     public VersionVector getVersionVector() {
-        return versionVector;
+        return baseVersionVector;
     }
 
     public void setVersionVector(VersionVector versionVector) {
-        this.versionVector = versionVector;
+        this.baseVersionVector = versionVector;
     }
 
     public String getUserId() {

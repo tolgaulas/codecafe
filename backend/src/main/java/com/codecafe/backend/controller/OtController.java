@@ -32,6 +32,8 @@ public class OtController {
 
         // Send acknowledgment back to clients
         OperationAck ack = new OperationAck(operation.getId(), processedOp.getBaseVersionVector(), operation.getUserId());
+        System.out.println("Base version vector: " + processedOp.getBaseVersionVector());
+        System.out.println("Base version vector map: " + processedOp.getBaseVersionVector().getVersions());
         messagingTemplate.convertAndSend("/topic/operation-ack", ack);
     }
 
