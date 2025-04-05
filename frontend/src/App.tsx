@@ -87,6 +87,10 @@ const App = () => {
     console.log(name);
   }, [name]);
 
+  useEffect(() => {
+    console.log("localVersionVector changed to:", localVersionVector);
+  }, [localVersionVector]);
+
   function getRandomColor() {
     let letters = "0123456789ABCDEF";
     let color = "#";
@@ -138,11 +142,14 @@ const App = () => {
         };
 
         console.log("Sending operation to server:", operationToSend);
-
+        const serverOperation = {
+          ...operation,
+          baseVersionVector: { versions: operation.baseVersionVector },
+        };
         stompClientRef.current.send(
           "/app/operation",
           {},
-          JSON.stringify(operationToSend)
+          JSON.stringify(serverOperation)
         );
       } else {
         console.warn("Cannot send operation: session inactive or disconnected");
@@ -211,7 +218,7 @@ const App = () => {
   // Enhanced version of your client-side WebSocket setup
   useEffect(() => {
     if (isSessionActive) {
-      const socket = new SockJS("http://157.230.83.211:8080/ws");
+      const socket = new SockJS("http://localhost:8080/ws");
       const stompClient = Stomp.over(socket);
 
       // Create retry mechanism for pending operations
@@ -421,7 +428,7 @@ const App = () => {
           );
           setTimeout(() => {
             if (socket.readyState !== SockJS.OPEN) {
-              const newSocket = new SockJS("http://157.230.83.211:8080/ws");
+              const newSocket = new SockJS("http://localhost:8080/ws");
               const newStompClient = Stomp.over(newSocket);
               stompClientRef.current = newStompClient;
               newStompClient.connect(
@@ -506,7 +513,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://157.230.83.211:8080/api/execute",
+        "http://localhost:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -616,7 +623,7 @@ const App = () => {
 
       // Fetch session info
       axios
-        .get(`http://157.230.83.211:8080/api/sessions/${sessionIdFromUrl}`)
+        .get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
         .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
@@ -633,7 +640,7 @@ const App = () => {
     try {
       // Create a new session on the server
       const response = await axios.post(
-        "http://157.230.83.211:8080/api/sessions/create",
+        "http://localhost:8080/api/sessions/create",
         {
           creatorName: name || displayName || "Anonymous",
         }
@@ -684,8 +691,8 @@ const App = () => {
       simulateRapidTyping(
         editorRef.current,
         operationManagerRef.current,
-        "Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe Debugging CodeCafe ",
-        50 // Adjust typing speed as needed
+        "Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello ",
+        100 // Adjust typing speed as needed
       );
     }
   };
@@ -801,7 +808,7 @@ const App = () => {
             </button>
             <button
               className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 ml-1"
-              onClick={handleSimulateTyping}
+              onClick={() => setTimeout(handleSimulateTyping, 1000)}
             >
               Simulate Typing
             </button>

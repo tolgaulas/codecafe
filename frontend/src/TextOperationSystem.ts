@@ -375,7 +375,7 @@ export class TextOperationManager {
             return cursorOffset + (operation.text?.length || 0);
           } else {
             const comparison = this.userId.localeCompare(operation.userId);
-            if (comparison < 0) {
+            if (comparison <= 0) {
               // Our ID is smaller, place before
               return cursorOffset;
             } else {
