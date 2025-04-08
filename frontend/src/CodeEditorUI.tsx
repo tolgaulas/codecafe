@@ -96,7 +96,7 @@ const CodeEditorUI = () => {
 
         {/* File Tree */}
         <div className="w-48 bg-stone-800 bg-opacity-60 overflow-y-auto border-r border-stone-600">
-          <div className="font-bold p-2 text-sm text-stone-400">Files</div>
+          <div className="font-bold p-2 text-sm text-stone-400">EXPLORER</div>
           <div className="w-full">
             <div className="flex items-center text-sm py-1 hover:bg-neutral-900 cursor-pointer w-full pl-0">
               <span className="text-stone-300 w-full pl-2">index.html</span>
@@ -154,15 +154,15 @@ const CodeEditorUI = () => {
 
             {/* Terminal */}
             <div className="h-1/3 bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600">
-              <div className="flex bg-stone-800 bg-opacity-60 px-4 py-1 text-sm">
-                <div className="px-2 py-1 text-stone-400">Terminal</div>
+              <div className="flex bg-stone-800 py-1 text-sm">
+                <div className="px-4 py-1 text-stone-400">TERMINAL</div>
               </div>
-              <div className="flex-1 p-2 font-mono text-sm overflow-auto">
+              <div className="flex-1 px-4 py-2 font-mono text-sm overflow-auto">
                 <div className="text-stone-400">$ node script.js</div>
                 <div className="text-stone-300">Hello, world!</div>
                 <div className="flex items-center">
                   <span className="text-stone-400">$</span>
-                  <span className="ml-2 animate-pulse text-stone-300">|</span>
+                  {/* <span className="ml-2 animate-pulse text-stone-300">|</span> */}
                 </div>
               </div>
             </div>
