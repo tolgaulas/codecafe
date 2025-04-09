@@ -298,11 +298,12 @@ export class TextOperationManager {
 
     // Update version vector for both local and remote operations
     if (operation.id && this.pendingOperations.has(operation.id)) {
+      // This handles the case where a local operation is echoed back
+      // We remove it from pending, but the main vector update happens in acknowledgeOperation
       this.pendingOperations.delete(operation.id);
     }
-    this.updateVersionVector(operation.baseVersionVector);
     console.log(
-      "Updated local version vector:",
+      "Local version vector after applyOperation (no merge for remote):",
       this.localVersionVector.toString()
     );
   }
@@ -442,19 +443,82 @@ export class TextOperationManager {
     console.log("Version vector set to:", this.localVersionVector.toString());
   }
 
-  private findConcurrentOperations(operation: TextOperation): TextOperation[] {
+  private findConcurrentOperations(incomingOp: TextOperation): TextOperation[] {
     const concurrent: TextOperation[] = [];
-    const opVector = new VersionVector(operation.baseVersionVector || {});
+    // Use the versions map directly from the incoming operation's base vector
+    const incomingVectorMap = incomingOp.baseVersionVector || {}; // Note: Assuming structure { userId: version }
+
+    console.log(
+      `Finding concurrent ops for incoming ${incomingOp.id} (User ${
+        incomingOp.userId
+      }) with VV ${JSON.stringify(incomingVectorMap)}`
+    );
 
     for (const [_, pendingOp] of this.pendingOperations) {
-      if (operation.id && pendingOp.id === operation.id) continue;
-
-      const pendingVector = new VersionVector(
-        pendingOp.baseVersionVector || {}
-      );
-      if (opVector.concurrent(pendingVector)) {
-        concurrent.push(this.cloneOperation(pendingOp));
+      // Skip transforming an incoming op against its own echo
+      if (
+        incomingOp.id &&
+        pendingOp.id === incomingOp.id &&
+        incomingOp.userId === pendingOp.userId
+      ) {
+        console.log(
+          ` - Skipping pending op ${pendingOp.id} (matches incoming op)`
+        );
+        continue;
       }
+
+      // Get the base vector map of the local pending operation
+      const pendingVectorMap = pendingOp.baseVersionVector || {}; // Note: Assuming structure { userId: version }
+      const pendingUserId = pendingOp.userId;
+
+      // Get the version of the pending op's user *when the pending op was created*
+      const pendingOpUserVersionAtCreation =
+        pendingVectorMap[pendingUserId] || 0;
+
+      // Get the version of the pending op's user as known by the *incoming operation's base state*
+      const pendingOpUserVersionInIncoming =
+        incomingVectorMap[pendingUserId] || 0;
+
+      // If the incoming operation's state knows a version for the pending op's user
+      // that is strictly less than the version *after* the pending op would have been applied (creation version + 1),
+      // it means the server processed the incoming operation without having processed our pending operation.
+      // Thus, the client needs to transform the incoming op against the pending op.
+      if (pendingOpUserVersionInIncoming < pendingOpUserVersionAtCreation + 1) {
+        console.log(
+          ` -> Found concurrent pending op ${pendingOp.id} (User ${pendingUserId}, created after ver ${pendingOpUserVersionAtCreation})`
+        );
+        console.log(
+          `    Incoming op VV knows User ${pendingUserId} state: ${pendingOpUserVersionInIncoming}`
+        );
+        concurrent.push(this.cloneOperation(pendingOp));
+      } else {
+        console.log(
+          ` - Skipping pending op ${pendingOp.id} (User ${pendingUserId}, created after ver ${pendingOpUserVersionAtCreation}). Incoming op VV knows state ${pendingOpUserVersionInIncoming}`
+        );
+      }
+    }
+
+    // Sort the identified concurrent pending operations for deterministic transformation order.
+    // Sort by user ID, then by the operation's effective sequence number (base version + 1) for that user.
+    concurrent.sort((a, b) => {
+      const userCompare = a.userId.localeCompare(b.userId);
+      if (userCompare !== 0) return userCompare;
+
+      // Use baseVersionVector for sorting
+      const aVersion = a.baseVersionVector?.[a.userId] || 0;
+      const bVersion = b.baseVersionVector?.[b.userId] || 0;
+      // Sort based on the version *after* the operation: base version + 1
+      return aVersion + 1 - (bVersion + 1);
+    });
+
+    if (concurrent.length > 0) {
+      console.log(
+        ` -> Incoming op ${incomingOp.id} (User ${
+          incomingOp.userId
+        }) will be transformed against ${
+          concurrent.length
+        } pending operations: [${concurrent.map((op) => op.id).join(", ")}]`
+      );
     }
 
     return concurrent;
@@ -501,115 +565,243 @@ export class TextOperationManager {
     b: TextOperation
   ): TextOperation {
     let transformedA = this.cloneOperation(a);
-    const originalA = a;
 
-    if (a.id === b.id) return transformedA;
+    // No need to transform if same op ID (already handled by concurrency check generally)
+    // Although IDs might differ if backend reconstructs ops, rely on VV check mostly
+    if (a.id === b.id && a.userId === b.userId) {
+      console.warn("Attempting to transform operation against itself:", a.id);
+      return transformedA;
+    }
 
-    switch (a.type) {
+    switch (
+      transformedA.type // Use transformedA here to modify the clone
+    ) {
       case OperationType.INSERT:
-        transformedA.position = this.transformPosition(
-          transformedA.position,
-          b.position,
-          b.type === OperationType.INSERT || b.type === OperationType.REPLACE
-            ? b.text?.length || 0
-            : 0,
-          b.type === OperationType.INSERT || b.type === OperationType.REPLACE,
-          b.userId,
-          a.userId
-        );
-        break;
-
-      case OperationType.DELETE:
-        if (a.length === undefined) break;
-
-        transformedA.position = this.transformPositionAgainstDelete(
-          transformedA.position,
-          b.position,
-          b.length!
-        );
-
-        if (
-          (transformedA.type === OperationType.DELETE ||
-            transformedA.type === OperationType.REPLACE) &&
-          transformedA.length !== undefined
-        ) {
-          transformedA.length = this.transformLengthAgainstDelete(
+        if (b.type === OperationType.INSERT) {
+          transformedA.position = this.transformPosition(
             transformedA.position,
-            transformedA.length,
             b.position,
-            b.length!
+            b.text?.length || 0,
+            true, // isInsert flag (for b)
+            a.userId, // client user id (a's user)
+            b.userId // server user id (b's user)
           );
-        }
-        break;
-
-      case OperationType.REPLACE:
-        if (b.type === OperationType.REPLACE) {
+        } else if (b.type === OperationType.DELETE && b.length !== undefined) {
+          transformedA.position = this.transformPositionAgainstDelete(
+            transformedA.position,
+            b.position,
+            b.length
+          );
+        } else if (b.type === OperationType.REPLACE && b.length !== undefined) {
+          // Decompose concurrent REPLACE (b) into Delete then Insert
           const deletePartOfB: TextOperation = {
             type: OperationType.DELETE,
             position: b.position,
-            length: b.length!,
+            length: b.length,
             baseVersionVector: { ...b.baseVersionVector },
             userId: b.userId,
             id: b.id ? `${b.id}-delete` : undefined,
           };
-
           const insertPartOfB: TextOperation = {
             type: OperationType.INSERT,
             position: b.position,
-            text: b.text!,
+            text: b.text || "",
             baseVersionVector: { ...b.baseVersionVector },
             userId: b.userId,
             id: b.id ? `${b.id}-insert` : undefined,
           };
-
+          // Transform against delete part first
           let tempTransformedA = this.transformOperation(
             this.cloneOperation(transformedA),
-            this.cloneOperation(deletePartOfB)
+            deletePartOfB
           );
-
+          // Then transform the result against the insert part
           transformedA = this.transformOperation(
-            this.cloneOperation(tempTransformedA),
-            this.cloneOperation(insertPartOfB)
+            tempTransformedA,
+            insertPartOfB
           );
-        } else {
-          if (b.type === OperationType.INSERT) {
-            transformedA.position = this.transformPosition(
-              a.position,
-              b.position,
-              b.text?.length || 0,
-              true,
-              b.userId,
-              a.userId
-            );
-            const originalEndPos = a.position + (a.length || 0);
-            if (b.position > a.position && b.position < originalEndPos) {
-              transformedA.length =
-                (transformedA.length || 0) + (b.text?.length || 0);
-            }
-          } else if (
-            b.type === OperationType.DELETE &&
-            b.length !== undefined
-          ) {
-            const originalPos = a.position;
-            const originalLen = a.length || 0;
-
-            transformedA.position = this.transformPositionAgainstDelete(
-              originalPos,
-              b.position,
-              b.length
-            );
-            transformedA.length = this.transformLengthAgainstDelete(
-              originalPos,
-              originalLen,
-              b.position,
-              b.length
-            );
-          }
         }
+        break;
+
+      case OperationType.DELETE:
+        if (transformedA.length === undefined) {
+          console.warn("DELETE operation has undefined length:", transformedA);
+          transformedA.length = 0; // Avoid break, try to recover
+        }
+
+        if (b.type === OperationType.INSERT) {
+          // Store original position before transforming position
+          const originalPosForLengthCalc = transformedA.position;
+          // Adjust delete position based on the concurrent insert
+          transformedA.position = this.transformPosition(
+            transformedA.position,
+            b.position,
+            b.text?.length || 0,
+            true, // isInsert flag (for b)
+            a.userId, // client user id (a's user)
+            b.userId // server user id (b's user)
+          );
+          // Adjust delete length if the insert happened inside the delete range
+          // Use the original position to determine overlap correctly before position was shifted
+          transformedA.length = this.transformLengthForInsert(
+            originalPosForLengthCalc,
+            transformedA.length || 0, // Use current length
+            b.position,
+            b.text?.length || 0
+          );
+        } else if (b.type === OperationType.DELETE && b.length !== undefined) {
+          // Store original position before transforming position
+          const originalPosForLengthCalc = transformedA.position;
+          // Adjust delete position based on concurrent delete
+          transformedA.position = this.transformPositionAgainstDelete(
+            transformedA.position,
+            b.position,
+            b.length
+          );
+          // Adjust length based on overlap with concurrent delete
+          // Use the original position to determine overlap correctly
+          transformedA.length = this.transformLengthAgainstDelete(
+            originalPosForLengthCalc,
+            transformedA.length || 0, // Use current length
+            b.position,
+            b.length
+          );
+        } else if (b.type === OperationType.REPLACE && b.length !== undefined) {
+          // Decompose concurrent REPLACE (b) into Delete then Insert
+          const deletePartOfB: TextOperation = {
+            type: OperationType.DELETE,
+            position: b.position,
+            length: b.length,
+            baseVersionVector: { ...b.baseVersionVector },
+            userId: b.userId,
+            id: b.id ? `${b.id}-delete` : undefined,
+          };
+          const insertPartOfB: TextOperation = {
+            type: OperationType.INSERT,
+            position: b.position,
+            text: b.text || "",
+            baseVersionVector: { ...b.baseVersionVector },
+            userId: b.userId,
+            id: b.id ? `${b.id}-insert` : undefined,
+          };
+          // Transform against delete part first
+          let tempTransformedA = this.transformOperation(
+            this.cloneOperation(transformedA),
+            deletePartOfB
+          );
+          // Then transform the result against the insert part
+          transformedA = this.transformOperation(
+            tempTransformedA,
+            insertPartOfB
+          );
+        }
+
+        // If length becomes 0, it might become a no-op
+        if (transformedA.length !== undefined && transformedA.length <= 0) {
+          transformedA.length = 0;
+          // Note: An operation with length 0 might still be relevant if its position changed
+        }
+        break;
+
+      case OperationType.REPLACE:
+        // Decompose the operation being transformed (a) into Delete and Insert parts
+        // Ensure original parts have length/text defined if they exist
+        const deletePartOfA: TextOperation = {
+          id: a.id ? `${a.id}-del` : undefined,
+          type: OperationType.DELETE,
+          position: a.position,
+          length: a.length || 0, // Ensure length is defined
+          baseVersionVector: { ...a.baseVersionVector },
+          userId: a.userId,
+        };
+        const insertPartOfA: TextOperation = {
+          id: a.id ? `${a.id}-ins` : undefined,
+          type: OperationType.INSERT,
+          position: a.position,
+          text: a.text || "", // Ensure text is defined
+          baseVersionVector: { ...a.baseVersionVector },
+          userId: a.userId,
+        };
+
+        // Transform the delete part of A against B
+        const transformedDeletePart = this.transformOperation(
+          this.cloneOperation(deletePartOfA),
+          this.cloneOperation(b)
+        );
+
+        // Transform the insert part of A against B
+        const transformedInsertPart = this.transformOperation(
+          this.cloneOperation(insertPartOfA),
+          this.cloneOperation(b)
+        );
+
+        // Reconstruct the transformed Replace operation
+        transformedA.position = transformedDeletePart.position; // Use position from transformed delete part
+        transformedA.length = transformedDeletePart.length; // Use length from transformed delete part
+        transformedA.text = transformedInsertPart.text; // Use text from transformed insert part
+
+        // --- Determine final type based on transformed parts ---
+
+        // If the delete part's length became 0 AND insert text exists: operation is now an Insert
+        if (
+          transformedA.length !== undefined &&
+          transformedA.length <= 0 &&
+          transformedA.text &&
+          transformedA.text.length > 0
+        ) {
+          transformedA.type = OperationType.INSERT;
+          transformedA.length = undefined; // No length for insert
+          transformedA.position = transformedInsertPart.position; // Use insert's transformed position for clarity
+        }
+        // If the insert part's text became empty AND delete length > 0: operation is now a Delete
+        else if (
+          (!transformedA.text || transformedA.text.length === 0) &&
+          transformedA.length !== undefined &&
+          transformedA.length > 0
+        ) {
+          transformedA.type = OperationType.DELETE;
+          transformedA.text = undefined; // No text for delete
+        }
+        // If BOTH delete length is 0 AND insert text is empty: it's a NO-OP in content.
+        // We might still need to apply it if the position changed relative to other ops,
+        // but often can be discarded. For now, keep it as REPLACE with 0 length/empty text.
+        // Application logic should ideally handle this gracefully.
+        else if (
+          transformedA.length !== undefined &&
+          transformedA.length <= 0 &&
+          (!transformedA.text || transformedA.text.length === 0)
+        ) {
+          // Mark as effectively NO-OP? Or let apply handle it.
+          transformedA.length = 0;
+          transformedA.text = "";
+        }
+        // Otherwise, it remains a REPLACE
+
         break;
     }
 
     return transformedA;
+  }
+
+  // Helper function added to match backend logic for transforming DELETE/REPLACE length against INSERT
+  private transformLengthForInsert(
+    opPos: number,
+    opLen: number,
+    insertPos: number,
+    insertLen: number
+  ): number {
+    if (opLen === undefined) return 0; // Safety check
+
+    if (insertPos <= opPos) {
+      // Insert before op starts: length unchanged
+      return opLen;
+    } else if (insertPos >= opPos && insertPos < opPos + opLen) {
+      // Insert strictly within op's range (inclusive start, exclusive end): length increases
+      return opLen + insertLen;
+    } else {
+      // Insert at or after op ends: length unchanged
+      return opLen;
+    }
   }
 
   private transformPosition(
