@@ -188,102 +188,102 @@ const TerminalComponent = forwardRef((_, ref) => {
   }));
 
   return (
-    // <ResizableBox
-    //   className="overflow-hidden overscroll-none"
-    //   width={width}
-    //   height={height}
-    //   minConstraints={[
-    //     Math.max(300, window.innerWidth * 0.7 - screenSixteenth.width),
-    //     Math.max(100, window.innerHeight * 0.1 - screenSixteenth.height),
-    //   ]}
-    //   maxConstraints={[
-    //     Math.min(
-    //       window.innerWidth,
-    //       window.innerWidth * 0.75 + screenSixteenth.width
-    //     ),
-    //     Math.min(
-    //       window.innerHeight,
-    //       window.innerHeight * 0.35 + screenSixteenth.height
-    //     ),
-    //   ]}
-    //   onResize={(_, { size }) => {
-    //     setWidth(size.width);
-    //     setHeight(size.height);
-    //     // Trigger terminal fit after resize
-    //     setTimeout(() => {
-    //       if (fitAddonRef.current) {
-    //         fitAddonRef.current.fit();
-    //       }
-    //     }, 0);
-    //   }}
-    //   resizeHandles={["w", "nw", "n"]}
-    //   handle={(handleAxis, handleRef) => {
-    //     const baseStyle = {
-    //       background: "transparent",
-    //       transform: "translate(-50%, -50%)",
-    //     };
-
-    //     // Custom styles for each handle
-    //     const styles: Record<ResizeHandle, React.CSSProperties | undefined> = {
-    //       nw: {
-    //         ...baseStyle,
-    //         width: "5px",
-    //         height: "5px",
-    //         padding: "5px",
-    //       },
-    //       n: {
-    //         ...baseStyle,
-    //         width: `${width}px`,
-    //         height: "5px",
-    //         padding: "5px",
-    //         transform: "translate(-50%, -50%) translateX(15px)",
-    //       },
-    //       w: {
-    //         ...baseStyle,
-    //         width: "5px",
-    //         height: `${height}px`,
-    //         padding: "5px",
-    //         transform: "translate(-50%, -50%) translateY(15px)",
-    //       },
-    //       s: undefined,
-    //       e: undefined,
-    //       sw: undefined,
-    //       se: undefined,
-    //       ne: undefined,
-    //     };
-
-    //     return (
-    //       <div
-    //         ref={handleRef}
-    //         className={`react-resizable-handle react-resizable-handle-${handleAxis}`}
-    //         style={styles[handleAxis]}
-    //       />
-    //     );
-    //   }}
-    //   style={{
-    //     position: "fixed",
-    //     bottom: 0,
-    //     left: `calc(100vw - ${width}px)`,
-    //     zIndex: 10,
-    //   }}
-    // >
-    //   <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-lg border border-neutral-800/50 shadow-xl overflow-auto overscroll-none">
-    //     <div
-    //       className="p-4 font-mono text-green-400/80"
-    //       style={{ height, width }}
-    //     >
-    <div
-      ref={terminalRef}
-      style={{
-        width: "100%",
-        height: "100%",
-        backgroundColor: "rgba(0,0,0,0)",
+    <ResizableBox
+      className="overflow-hidden overscroll-none"
+      width={width}
+      height={height}
+      minConstraints={[
+        Math.max(300, window.innerWidth * 0.7 - screenSixteenth.width),
+        Math.max(100, window.innerHeight * 0.1 - screenSixteenth.height),
+      ]}
+      maxConstraints={[
+        Math.min(
+          window.innerWidth,
+          window.innerWidth * 0.75 + screenSixteenth.width
+        ),
+        Math.min(
+          window.innerHeight,
+          window.innerHeight * 0.35 + screenSixteenth.height
+        ),
+      ]}
+      onResize={(_, { size }) => {
+        setWidth(size.width);
+        setHeight(size.height);
+        // Trigger terminal fit after resize
+        setTimeout(() => {
+          if (fitAddonRef.current) {
+            fitAddonRef.current.fit();
+          }
+        }, 0);
       }}
-      className="overflow-hidden"
-    />
-    // </div>
-    //   </Card>
-    // </ResizableBox>
+      resizeHandles={["w", "nw", "n"]}
+      handle={(handleAxis, handleRef) => {
+        const baseStyle = {
+          background: "transparent",
+          transform: "translate(-50%, -50%)",
+        };
+
+        // Custom styles for each handle
+        const styles: Record<ResizeHandle, React.CSSProperties | undefined> = {
+          nw: {
+            ...baseStyle,
+            width: "5px",
+            height: "5px",
+            padding: "5px",
+          },
+          n: {
+            ...baseStyle,
+            width: `${width}px`,
+            height: "5px",
+            padding: "5px",
+            transform: "translate(-50%, -50%) translateX(15px)",
+          },
+          w: {
+            ...baseStyle,
+            width: "5px",
+            height: `${height}px`,
+            padding: "5px",
+            transform: "translate(-50%, -50%) translateY(15px)",
+          },
+          s: undefined,
+          e: undefined,
+          sw: undefined,
+          se: undefined,
+          ne: undefined,
+        };
+
+        return (
+          <div
+            ref={handleRef}
+            className={`react-resizable-handle react-resizable-handle-${handleAxis}`}
+            style={styles[handleAxis]}
+          />
+        );
+      }}
+      style={{
+        position: "fixed",
+        bottom: 0,
+        left: `calc(100vw - ${width}px)`,
+        zIndex: 10,
+      }}
+    >
+      <Card className="bg-neutral-900/70 backdrop-blur-md rounded-tl-lg border border-neutral-800/50 shadow-xl overflow-auto overscroll-none">
+        <div
+          className="p-4 font-mono text-green-400/80"
+          style={{ height, width }}
+        >
+          <div
+            ref={terminalRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              backgroundColor: "rgba(0,0,0,0)",
+            }}
+            className="overflow-hidden"
+          />
+        </div>
+      </Card>
+    </ResizableBox>
   );
 });
 

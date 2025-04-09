@@ -122,13 +122,13 @@ const CodeEditorUI = () => {
         <div className="w-48 bg-stone-800 bg-opacity-60 overflow-y-auto border-r border-stone-600">
           <div className="pl-4 py-2 text-xs text-stone-400">EXPLORER</div>
           <div className="w-full">
-            <div className="flex items-center text-sm py-1 hover:bg-neutral-900 cursor-pointer w-full pl-0">
+            <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
               <span className="text-stone-300 w-full pl-4">index.html</span>
             </div>
-            <div className="flex items-center text-sm py-1 bg-neutral-900 cursor-pointer w-full pl-0">
+            <div className="flex items-center text-sm py-1 bg-stone-700 cursor-pointer w-full pl-0 border border-stone-500">
               <span className="text-stone-200 w-full pl-4">script.js</span>
             </div>
-            <div className="flex items-center text-sm py-1 hover:bg-neutral-900 cursor-pointer w-full pl-0">
+            <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
               <span className="text-stone-300 w-full pl-4">style.css</span>
             </div>
           </div>
