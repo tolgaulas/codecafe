@@ -1,13 +1,11 @@
-package com.codecafe.backend;
+package com.codecafe.backend.service;
 
 import com.codecafe.backend.dto.TextOperation;
 import com.codecafe.backend.dto.OperationType;
 import com.codecafe.backend.dto.VersionVector;
-import com.codecafe.backend.service.OtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
-
 
 import java.util.HashMap;
 import java.util.Map;
@@ -68,8 +66,8 @@ public class OtServiceTest {
         // Result should be deterministic based on user IDs
         String content = otService.getDocumentContent();
         assertTrue(
-                content.equals("Hello World ") || content.equals("World Hello "),
-                "Content should be either 'Hello World ' or 'World Hello ' but was: " + content
+            content.equals("Hello World ") || content.equals("World Hello "),
+            "Content should be either 'Hello World ' or 'World Hello ' but was: " + content
         );
     }
 
@@ -164,8 +162,8 @@ public class OtServiceTest {
 
         String content = otService.getDocumentContent();
         assertTrue(
-                content.equals("Hello Everyone") || content.equals("Hello Friends"),
-                "Content should be either 'Hello Everyone' or 'Hello Friends' but was: " + content
+            content.equals("Hello Everyone") || content.equals("Hello Friends"),
+            "Content should be either 'Hello Everyone' or 'Hello Friends' but was: " + content
         );
     }
 
@@ -227,4 +225,4 @@ public class OtServiceTest {
         assertFalse(content.contains("\r\n"), "Windows-style newlines should be normalized");
         assertTrue(content.contains("\n"), "Newlines should be preserved in Unix style");
     }
-}
+} 

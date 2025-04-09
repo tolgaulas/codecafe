@@ -10,8 +10,8 @@ export enum OperationType {
 export class VersionVector {
   private versions: { [userId: string]: number };
 
-  constructor(initialVersions: { [userId: string]: number } = {}) {
-    this.versions = { ...initialVersions };
+  constructor(initialVersions?: { [userId: string]: number } | null) {
+    this.versions = initialVersions ? { ...initialVersions } : {};
   }
 
   // Get the versions map
@@ -26,8 +26,9 @@ export class VersionVector {
 
   // Update a user's version - matches Java implementation
   update(userId: string, version: number): void {
+    const safeVersion = Math.max(0, version);
     const current = this.versions[userId] || 0;
-    this.versions[userId] = Math.max(current, version);
+    this.versions[userId] = Math.max(current, safeVersion);
   }
 
   // Check if this vector is concurrent with another - matches Java implementation
@@ -40,36 +41,32 @@ export class VersionVector {
   }
 
   private happenedBefore(other: VersionVector): boolean {
+    if (!other || !other.getVersions()) {
+      return false;
+    }
     const thisVersions = this.versions;
     const otherVersions = other.getVersions();
 
-    // Check if this has changes not in other
-    let hasChangesNotInOther = false;
-    for (const userId in thisVersions) {
-      const thisVersion = thisVersions[userId];
-      const otherVersion = otherVersions[userId] || 0;
+    let allLeq = true;
+    let existsLess = false;
+    const allUserIds = new Set([
+      ...Object.keys(thisVersions),
+      ...Object.keys(otherVersions),
+    ]);
 
-      if (thisVersion > otherVersion) {
-        hasChangesNotInOther = true;
+    for (const userId of allUserIds) {
+      const thisV = thisVersions[userId] || 0;
+      const otherV = otherVersions[userId] || 0;
+      if (thisV > otherV) {
+        allLeq = false;
         break;
       }
-    }
-
-    if (!hasChangesNotInOther) {
-      return false;
-    }
-
-    // Check if other has additional changes not in this
-    for (const userId in otherVersions) {
-      const otherVersion = otherVersions[userId];
-      const thisVersion = thisVersions[userId] || 0;
-
-      if (otherVersion > thisVersion) {
-        return false;
+      if (thisV < otherV) {
+        existsLess = true;
       }
     }
 
-    return true;
+    return allLeq && existsLess;
   }
 
   // Merge this vector with another, taking the maximum version for each user
@@ -82,9 +79,16 @@ export class VersionVector {
     const otherVersions = other.getVersions();
 
     for (const userId in otherVersions) {
-      const otherVersion = otherVersions[userId];
+      const otherVersion = otherVersions[userId] || 0;
       const thisVersion = this.versions[userId] || 0;
-      result.versions[userId] = Math.max(thisVersion, otherVersion);
+      result.versions[userId] = Math.max(
+        0,
+        Math.max(thisVersion, otherVersion)
+      );
+    }
+
+    for (const userId in result.versions) {
+      result.versions[userId] = Math.max(0, result.versions[userId]);
     }
 
     return result;
@@ -104,7 +108,6 @@ export interface TextOperation {
   length?: number;
   baseVersionVector: { [userId: string]: number }; // Keep as raw object for serialization
   userId: string;
-  clone?: () => TextOperation;
 }
 
 export interface OperationAck {
@@ -219,12 +222,6 @@ export class TextOperationManager {
       length: length > 0 ? length : undefined,
       baseVersionVector: {},
       userId: this.userId,
-      clone: function () {
-        const clone = { ...this };
-        clone.baseVersionVector = { ...this.baseVersionVector };
-        clone.clone = this.clone;
-        return clone;
-      },
     };
     return operation;
   }
@@ -232,95 +229,82 @@ export class TextOperationManager {
   public applyOperation(operation: TextOperation): void {
     console.log("Applying operation:", operation);
 
-    // Handle local operations (acknowledged by server)
-    if (operation.userId === this.userId) {
-      if (operation.id && this.pendingOperations.has(operation.id)) {
-        this.pendingOperations.delete(operation.id);
-      }
-      this.updateVersionVector(operation.baseVersionVector);
-      console.log(
-        "Updated local version vector:",
-        this.localVersionVector.toString()
-      );
-      return;
-    }
-
-    // Save cursor position before applying remote operation
-    const previousSelections = this.editor.getSelections() || [];
-
     // For remote operations
+    if (operation.userId !== this.userId) {
+      // Save cursor position before applying remote operation
+      const previousSelections = this.editor.getSelections() || [];
+
+      // Find concurrent operations and sort them
+      const concurrentOps = this.findConcurrentOperations(operation);
+      this.sortOperations(concurrentOps);
+
+      // Transform the operation against all concurrent operations
+      let transformedOperation = this.cloneOperation(operation);
+      for (const concurrentOp of concurrentOps) {
+        transformedOperation = this.transformOperation(
+          this.cloneOperation(transformedOperation),
+          this.cloneOperation(concurrentOp)
+        );
+      }
+
+      this.validateOperation(transformedOperation);
+
+      // Apply the transformed operation
+      this.isApplyingExternalOperation = true;
+      try {
+        const edits: editor.IIdentifiedSingleEditOperation[] = [];
+        const range = this.getOperationRange(transformedOperation);
+
+        if (transformedOperation.type === OperationType.INSERT) {
+          edits.push({
+            range,
+            text: transformedOperation.text || "",
+            forceMoveMarkers: true, // Changed to true to ensure consistent marker behavior
+          });
+        } else if (transformedOperation.type === OperationType.DELETE) {
+          edits.push({
+            range,
+            text: "",
+            forceMoveMarkers: true, // Changed to true to ensure consistent marker behavior
+          });
+        } else if (transformedOperation.type === OperationType.REPLACE) {
+          edits.push({
+            range,
+            text: transformedOperation.text || "",
+            forceMoveMarkers: true, // Changed to true to ensure consistent marker behavior
+          });
+        }
+
+        // Transform selections against the operation
+        const transformedSelections = this.transformSelections(
+          previousSelections,
+          transformedOperation
+        );
+
+        this.model.pushEditOperations(
+          previousSelections,
+          edits,
+          () => transformedSelections
+        );
+
+        this.operationHistory.push(transformedOperation);
+        if (this.operationHistory.length > 100) {
+          this.operationHistory.shift();
+        }
+      } finally {
+        this.isApplyingExternalOperation = false;
+      }
+    }
+
+    // Update version vector for both local and remote operations
+    if (operation.id && this.pendingOperations.has(operation.id)) {
+      this.pendingOperations.delete(operation.id);
+    }
     this.updateVersionVector(operation.baseVersionVector);
-
-    // Find concurrent operations and sort them
-    const concurrentOps = this.findConcurrentOperations(operation);
-    this.sortOperations(concurrentOps);
-
-    // Transform the operation against all concurrent operations
-    let transformedOperation = operation.clone
-      ? operation.clone()
-      : { ...operation };
-    for (const concurrentOp of concurrentOps) {
-      transformedOperation = this.transformOperation(
-        transformedOperation,
-        concurrentOp
-      );
-    }
-
-    this.validateOperation(transformedOperation);
-
-    // Apply the transformed operation to the editor
-    this.isApplyingExternalOperation = true;
-    try {
-      // Prepare the edit operation
-      const edits: editor.IIdentifiedSingleEditOperation[] = [];
-      const range = this.getOperationRange(transformedOperation);
-
-      if (transformedOperation.type === OperationType.INSERT) {
-        edits.push({
-          range,
-          text: transformedOperation.text || "",
-          forceMoveMarkers: false, // This is important for cursor handling
-        });
-      } else if (transformedOperation.type === OperationType.DELETE) {
-        edits.push({
-          range,
-          text: "",
-          forceMoveMarkers: false,
-        });
-      } else if (transformedOperation.type === OperationType.REPLACE) {
-        edits.push({
-          range,
-          text: transformedOperation.text || "",
-          forceMoveMarkers: false,
-        });
-      }
-
-      // Calculate how this operation affects our existing selections
-      const transformedSelections = this.transformSelections(
-        previousSelections,
-        transformedOperation
-      );
-
-      // Apply the edit while preserving selections
-      this.model.pushEditOperations(
-        previousSelections,
-        edits,
-        () => transformedSelections
-      );
-
-      // Add the operation to history
-      this.operationHistory.push(transformedOperation);
-      if (this.operationHistory.length > 100) {
-        this.operationHistory.shift();
-      }
-
-      console.log(
-        "Editor updated, new version vector:",
-        this.localVersionVector.toString()
-      );
-    } finally {
-      this.isApplyingExternalOperation = false;
-    }
+    console.log(
+      "Updated local version vector:",
+      this.localVersionVector.toString()
+    );
   }
 
   private transformSelections(
@@ -460,29 +444,43 @@ export class TextOperationManager {
 
   private findConcurrentOperations(operation: TextOperation): TextOperation[] {
     const concurrent: TextOperation[] = [];
-    const opVector = new VersionVector(operation.baseVersionVector);
+    const opVector = new VersionVector(operation.baseVersionVector || {});
 
     for (const [_, pendingOp] of this.pendingOperations) {
-      const pendingVector = new VersionVector(pendingOp.baseVersionVector);
+      if (operation.id && pendingOp.id === operation.id) continue;
+
+      const pendingVector = new VersionVector(
+        pendingOp.baseVersionVector || {}
+      );
       if (opVector.concurrent(pendingVector)) {
-        concurrent.push(pendingOp);
+        concurrent.push(this.cloneOperation(pendingOp));
       }
     }
+
     return concurrent;
   }
 
-  private updateVersionVector(newVector: { [userId: string]: number }): void {
-    if (!newVector) {
+  private updateVersionVector(
+    newVersions: { [userId: string]: number } | null
+  ): void {
+    if (!newVersions) {
       console.warn(
-        "Received invalid version vector for line",
-        console.log(newVector),
-        "operation source:",
+        "Received null or undefined version vector map to merge.",
         new Error().stack
       );
       return;
     }
-    const newVersionVector = new VersionVector(newVector);
-    this.localVersionVector = this.localVersionVector.merge(newVersionVector);
+    const cleanVectorData =
+      typeof newVersions.versions === "object" && newVersions.versions !== null
+        ? newVersions.versions
+        : newVersions;
+
+    const vectorToMerge = new VersionVector(cleanVectorData);
+    this.localVersionVector = this.localVersionVector.merge(vectorToMerge);
+    console.log(
+      "Merged vector, new local vector:",
+      this.localVersionVector.toString()
+    );
   }
 
   private sortOperations(operations: TextOperation[]): void {
@@ -502,51 +500,32 @@ export class TextOperationManager {
     a: TextOperation,
     b: TextOperation
   ): TextOperation {
-    let transformedA = a.clone ? a.clone() : { ...a };
+    let transformedA = this.cloneOperation(a);
     const originalA = a;
-
-    if (!transformedA.clone) {
-      transformedA.clone = function () {
-        const clone = { ...this };
-        clone.baseVersionVector = { ...this.baseVersionVector };
-        clone.clone = this.clone;
-        return clone;
-      };
-    }
 
     if (a.id === b.id) return transformedA;
 
-    switch (b.type) {
+    switch (a.type) {
       case OperationType.INSERT:
         transformedA.position = this.transformPosition(
           transformedA.position,
           b.position,
-          b.text?.length || 0,
-          true,
-          originalA.userId,
-          b.userId
+          b.type === OperationType.INSERT || b.type === OperationType.REPLACE
+            ? b.text?.length || 0
+            : 0,
+          b.type === OperationType.INSERT || b.type === OperationType.REPLACE,
+          b.userId,
+          a.userId
         );
-
-        // If we're deleting/replacing text and the insert happened within our range
-        if (
-          (transformedA.type === OperationType.DELETE ||
-            transformedA.type === OperationType.REPLACE) &&
-          transformedA.length !== undefined
-        ) {
-          const aEnd = transformedA.position + transformedA.length;
-          if (b.position >= transformedA.position && b.position <= aEnd) {
-            transformedA.length += b.text?.length || 0;
-          }
-        }
         break;
 
       case OperationType.DELETE:
-        if (b.length === undefined) break;
+        if (a.length === undefined) break;
 
         transformedA.position = this.transformPositionAgainstDelete(
           transformedA.position,
           b.position,
-          b.length
+          b.length!
         );
 
         if (
@@ -558,49 +537,75 @@ export class TextOperationManager {
             transformedA.position,
             transformedA.length,
             b.position,
-            b.length
+            b.length!
           );
         }
         break;
 
       case OperationType.REPLACE:
-        // Create separate delete and insert operations with proper IDs
-        const deletePartOfB: TextOperation = {
-          type: OperationType.DELETE,
-          position: b.position,
-          length: b.length,
-          baseVersionVector: { ...b.baseVersionVector },
-          userId: b.userId,
-          id: b.id ? `${b.id}-delete` : undefined,
-          clone: function () {
-            const clone = { ...this };
-            clone.baseVersionVector = { ...this.baseVersionVector };
-            clone.clone = this.clone;
-            return clone;
-          },
-        };
+        if (b.type === OperationType.REPLACE) {
+          const deletePartOfB: TextOperation = {
+            type: OperationType.DELETE,
+            position: b.position,
+            length: b.length!,
+            baseVersionVector: { ...b.baseVersionVector },
+            userId: b.userId,
+            id: b.id ? `${b.id}-delete` : undefined,
+          };
 
-        const insertPartOfB: TextOperation = {
-          type: OperationType.INSERT,
-          position: b.position,
-          text: b.text,
-          baseVersionVector: { ...b.baseVersionVector },
-          userId: b.userId,
-          id: b.id ? `${b.id}-insert` : undefined,
-          clone: function () {
-            const clone = { ...this };
-            clone.baseVersionVector = { ...this.baseVersionVector };
-            clone.clone = this.clone;
-            return clone;
-          },
-        };
+          const insertPartOfB: TextOperation = {
+            type: OperationType.INSERT,
+            position: b.position,
+            text: b.text!,
+            baseVersionVector: { ...b.baseVersionVector },
+            userId: b.userId,
+            id: b.id ? `${b.id}-insert` : undefined,
+          };
 
-        // First transform against delete, then against insert - same as backend
-        const tempTransformedA = this.transformOperation(
-          transformedA,
-          deletePartOfB
-        );
-        transformedA = this.transformOperation(tempTransformedA, insertPartOfB);
+          let tempTransformedA = this.transformOperation(
+            this.cloneOperation(transformedA),
+            this.cloneOperation(deletePartOfB)
+          );
+
+          transformedA = this.transformOperation(
+            this.cloneOperation(tempTransformedA),
+            this.cloneOperation(insertPartOfB)
+          );
+        } else {
+          if (b.type === OperationType.INSERT) {
+            transformedA.position = this.transformPosition(
+              a.position,
+              b.position,
+              b.text?.length || 0,
+              true,
+              b.userId,
+              a.userId
+            );
+            const originalEndPos = a.position + (a.length || 0);
+            if (b.position > a.position && b.position < originalEndPos) {
+              transformedA.length =
+                (transformedA.length || 0) + (b.text?.length || 0);
+            }
+          } else if (
+            b.type === OperationType.DELETE &&
+            b.length !== undefined
+          ) {
+            const originalPos = a.position;
+            const originalLen = a.length || 0;
+
+            transformedA.position = this.transformPositionAgainstDelete(
+              originalPos,
+              b.position,
+              b.length
+            );
+            transformedA.length = this.transformLengthAgainstDelete(
+              originalPos,
+              originalLen,
+              b.position,
+              b.length
+            );
+          }
+        }
         break;
     }
 
@@ -617,22 +622,12 @@ export class TextOperationManager {
   ): number {
     if (position < otherPosition) {
       return position;
-    } else if (position === otherPosition && isInsert) {
-      // MODIFIED: Ensure identical tie-breaking logic as server
-      if (clientUserId === serverUserId) {
-        return position + otherLength; // Same user, place after
-      } else {
-        const comparison = clientUserId.localeCompare(serverUserId);
-        if (comparison < 0) {
-          return position; // Client ID is smaller, place before
-        } else {
-          return position + otherLength; // Client ID is larger, place after
-        }
-      }
+    } else if (position === otherPosition) {
+      // Use exact same comparison as backend for consistency
+      const comparison = clientUserId.localeCompare(serverUserId, "en"); // Force 'en' locale for consistent behavior
+      return comparison <= 0 ? position : position + otherLength;
     } else {
-      return isInsert
-        ? position + otherLength
-        : Math.max(otherPosition, position + otherLength);
+      return position + otherLength;
     }
   }
 
@@ -754,5 +749,13 @@ export class TextOperationManager {
       operation.baseVersionVector = {};
       console.warn("Created missing base version vector");
     }
+  }
+
+  private cloneOperation(op: TextOperation): TextOperation {
+    const clone = { ...op };
+    clone.baseVersionVector = op.baseVersionVector
+      ? { ...op.baseVersionVector }
+      : {};
+    return clone;
   }
 }
