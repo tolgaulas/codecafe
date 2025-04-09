@@ -127,43 +127,70 @@ public class OtService {
     private List<TextOperation> findConcurrentOperations(TextOperation operation) {
         List<TextOperation> concurrent = new ArrayList<>();
         VersionVector clientVector = operation.getBaseVersionVector();
+        Map<String, Integer> clientVersions = (clientVector != null && clientVector.getVersions() != null) 
+                                             ? clientVector.getVersions() : new HashMap<>();
 
-        if (clientVector == null || clientVector.getVersions() == null) {
-            logger.warning("Client operation has null version vector: " + operation.getId());
-            // Cannot determine concurrency, assume none? Or all subsequent ops?
-            // For safety, returning empty might be best if this state is unexpected.
-            return concurrent; 
-        }
+        logger.info("Finding concurrent ops for incoming " + operation.getId() + " (User " + operation.getUserId() + ") with VV " + clientVector);
+
 
         for (TextOperation historyOp : operationHistory) {
-            VersionVector historyVector = historyOp.getBaseVersionVector();
-            if (historyVector == null || historyVector.getVersions() == null) {
-                 logger.warning("History operation has null version vector: " + historyOp.getId());
-                 continue; // Skip ops with invalid vectors
+            // Don't transform an operation against itself if it somehow appears in history
+            // (e.g., reprocessing or specific server logic). Primarily, VV handles this.
+            if (operation.getId() != null && operation.getId().equals(historyOp.getId()) &&
+                operation.getUserId().equals(historyOp.getUserId())) {
+                 logger.fine(" - Skipping history op " + historyOp.getId() + " (matches incoming op)");
+                 continue;
             }
 
-            // Check concurrency using VersionVector's logic
-            // An operation 'h' from history is concurrent to incoming 'op' if 
-            // neither happened before the other based on their base vectors.
-            // Essentially, if op.vector does not dominate h.vector AND h.vector does not dominate op.vector.
-            // We also need to ensure we only transform against ops the client *doesn't* know about.
-            // An op 'h' needs transformation if op has not seen h's effect.
-            // This means clientVector[h.userId] < h.vector[h.userId] + 1 (or equivalent check)
-            
-            // Let's use the VersionVector.concurrent method, assuming it's correct.
-            if (clientVector.concurrent(historyVector)) {
-                 // Additionally, ensure we only transform against operations not originating
-                 // from the same client if their IDs match (avoids transforming against self in edge cases)
-                 if (!operation.getUserId().equals(historyOp.getUserId()) || 
-                     (operation.getId() != null && !operation.getId().equals(historyOp.getId()))) {
-                    concurrent.add(historyOp);
-                 }            
+            VersionVector historyVector = historyOp.getBaseVersionVector();
+            if (historyVector == null || historyVector.getVersions() == null) {
+                 logger.warning("Skipping history operation with null version vector: " + historyOp.getId());
+                 continue; // Skip ops with invalid vectors
+            }
+            Map<String, Integer> historyVersions = historyVector.getVersions();
+            String historyOpUserId = historyOp.getUserId();
+
+            // Get the version of the history op's user *when the history op was created*
+            int historyOpUserVersionAtCreation = historyVersions.getOrDefault(historyOpUserId, 0);
+
+            // Get the version of the history op's user as known by the *incoming operation's base state*
+            int historyOpUserVersionInClient = clientVersions.getOrDefault(historyOpUserId, 0);
+
+            // If the incoming client operation's state knows a version for the history op's user
+            // that is strictly less than the version *after* the history op would have been applied (creation version + 1),
+            // it means the client created its operation without knowledge of this history operation.
+            // Thus, the client's operation needs to be transformed against this history operation.
+            if (historyOpUserVersionInClient < historyOpUserVersionAtCreation + 1) {
+                logger.fine(" -> Found concurrent history op " + historyOp.getId() + " (User " + historyOpUserId + ", created after ver " + historyOpUserVersionAtCreation + ")");
+                logger.fine("    Incoming op VV knows User " + historyOpUserId + " state: " + historyOpUserVersionInClient);
+                concurrent.add(historyOp); // Add the original history op for transformation
             } else {
-                 // Debug logging for non-concurrent ops might be useful
-                 // logger.fine("Op " + operation.getId() + " is NOT concurrent with History Op " + historyOp.getId());
+                 logger.fine(" - Skipping history op " + historyOp.getId() + " (User " + historyOpUserId + ", created after ver " + historyOpUserVersionAtCreation + "). Incoming op VV knows state " + historyOpUserVersionInClient);
             }
         }
-        logger.fine("Op " + operation.getId() + " (User " + operation.getUserId() + ") is concurrent with " + concurrent.size() + " history operations.");
+
+        // Sort the identified concurrent history operations for deterministic transformation order.
+        // Sort by user ID, then by the operation's effective sequence number (base version + 1) for that user.
+        concurrent.sort((a, b) -> {
+            int userCompare = a.getUserId().compareTo(b.getUserId());
+            if (userCompare != 0) return userCompare;
+
+            // Use baseVersionVector for sorting
+            Map<String, Integer> aVersions = a.getBaseVersionVector() != null ? a.getBaseVersionVector().getVersions() : new HashMap<>();
+            Map<String, Integer> bVersions = b.getBaseVersionVector() != null ? b.getBaseVersionVector().getVersions() : new HashMap<>();
+            int aVersion = aVersions.getOrDefault(a.getUserId(), 0);
+            int bVersion = bVersions.getOrDefault(b.getUserId(), 0);
+            // Sort based on the version *after* the operation: base version + 1
+            return Integer.compare(aVersion + 1, bVersion + 1);
+        });
+
+
+        if (!concurrent.isEmpty()) {
+            logger.info(" -> Incoming op " + operation.getId() + " (User " + operation.getUserId() + ") will be transformed against " + concurrent.size() + " history operations: [" + concurrent.stream().map(TextOperation::getId).reduce((acc, id) -> acc + ", " + id).orElse("") + "]");
+        } else {
+             logger.info(" -> Incoming op " + operation.getId() + " (User " + operation.getUserId() + ") requires no transformation against history.");
+        }
+
         return concurrent;
     }
 
