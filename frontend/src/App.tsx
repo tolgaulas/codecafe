@@ -105,7 +105,7 @@ const App = () => {
 
   const stompClientRef = useRef<Stomp.Client | null>(null);
 
-  // const socket = new SockJS("http://157.245.244.233:8080/ws");
+  // const socket = new SockJS("http://157.230.83.211:8080/ws");
   // const stompClient = Stomp.over(socket);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -218,7 +218,7 @@ const App = () => {
   // Enhanced version of your client-side WebSocket setup
   useEffect(() => {
     if (isSessionActive) {
-      const socket = new SockJS("http://157.245.244.233:8080/ws");
+      const socket = new SockJS("http://157.230.83.211:8080/ws");
       const stompClient = Stomp.over(socket);
 
       // Create retry mechanism for pending operations
@@ -433,7 +433,7 @@ const App = () => {
           );
           setTimeout(() => {
             if (socket.readyState !== SockJS.OPEN) {
-              const newSocket = new SockJS("http://157.245.244.233:8080/ws");
+              const newSocket = new SockJS("http://157.230.83.211:8080/ws");
               const newStompClient = Stomp.over(newSocket);
               stompClientRef.current = newStompClient;
               newStompClient.connect(
@@ -518,7 +518,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://157.245.244.233:8080/api/execute",
+        "http://157.230.83.211:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -628,7 +628,7 @@ const App = () => {
 
       // Fetch session info
       axios
-        .get(`http://157.245.244.233:8080/api/sessions/${sessionIdFromUrl}`)
+        .get(`http://157.230.83.211:8080/api/sessions/${sessionIdFromUrl}`)
         .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
@@ -645,7 +645,7 @@ const App = () => {
     try {
       // Create a new session on the server
       const response = await axios.post(
-        "http://157.245.244.233:8080/api/sessions/create",
+        "http://157.230.83.211:8080/api/sessions/create",
         {
           creatorName: name || displayName || "Anonymous",
         }
