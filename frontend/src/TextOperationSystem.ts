@@ -198,10 +198,8 @@ export class TextOperationManager {
     change: editor.IModelContentChange
   ): TextOperation | null {
     const position = change.rangeOffset;
-    const length = change.rangeLength;
+    let length = change.rangeLength; // Get length from event first
     const text = change.text;
-
-    // Special handling for newlines to ensure they're preserved
     const normalizedText = text.replace(/\r\n/g, "\n");
 
     let type: OperationType;
@@ -209,6 +207,14 @@ export class TextOperationManager {
       type = OperationType.INSERT;
     } else if (length > 0 && normalizedText.length === 0) {
       type = OperationType.DELETE;
+      // Potential Workaround: Re-check length for full document deletes?
+      // if (position === 0) {
+      //   const currentModelLength = this.model.getValueLength();
+      //   if (length !== currentModelLength) {
+      //      console.warn(`DELETE rangeLength (${length}) from event differs from current model length (${currentModelLength}). Using current length.`);
+      //      length = currentModelLength; // Use potentially more up-to-date length
+      //   }
+      // }
     } else if (length > 0 && normalizedText.length > 0) {
       type = OperationType.REPLACE;
     } else {
