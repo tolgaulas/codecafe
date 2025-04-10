@@ -250,43 +250,210 @@ describe("TextOperationSystem", () => {
         baseVersionVector: { user1: 0 },
         userId: "user1",
       };
+      // Simulate op1 being pending (created locally but not yet acknowledged)
+      (operationManager as any).pendingOperations.set(op1.id, op1);
+      (operationManager as any).incrementLocalVersion(); // user1: 1
+      mockEditor.setValue("abc"); // Update mock editor state
 
-      // Apply operation
-      operationManager.applyOperation(op1);
-      expect(mockEditor.getValue()).toBe("abc");
-
-      // User2 (concurrent) inserts '123' at position 1 (after 'a')
+      // User2 inserts 'xyz' concurrently at position 0
       const op2: TextOperation = {
         id: "op2",
         type: OperationType.INSERT,
-        position: 1,
-        text: "123",
-        baseVersionVector: { user2: 0 },
+        position: 0,
+        text: "xyz",
+        baseVersionVector: { user2: 0 }, // Based on initial empty state
         userId: "user2",
       };
 
-      // Apply operation - should be transformed against op1
+      // Apply User2's operation
       operationManager.applyOperation(op2);
 
-      // Should be 'a123bc'
-      expect(mockEditor.getValue()).toBe("a123bc");
+      // Expected transformation: op2 is transformed against op1
+      // transformPosition(0, 0, 3, true, "user2", "user1") -> 3 (since user2 > user1)
+      // Expected state: "abcxyz"
+      expect(mockEditor.getValue()).toBe("abcxyz");
+    });
 
-      // User3 (concurrent with both) deletes character at position 2
-      const op3: TextOperation = {
-        id: "op3",
+    // --- Multi-line Tests ---
+
+    test("should handle local multi-line insert", () => {
+      const op = simulateLocalContentChange(0, "Line1\nLine2");
+      expect(op.type).toBe(OperationType.INSERT);
+      expect(op.position).toBe(0);
+      expect(op.text).toBe("Line1\nLine2");
+    });
+
+    test("should handle local multi-line delete", () => {
+      mockEditor.setValue("Line1\nLine2\nLine3");
+      // Delete "Line2\n" (pos 6, len 6)
+      const op = simulateLocalContentChange(6, "", 6);
+      expect(op.type).toBe(OperationType.DELETE);
+      expect(op.position).toBe(6);
+      expect(op.length).toBe(6);
+    });
+
+    test("should handle local multi-line replace", () => {
+      mockEditor.setValue("Line1\nLine2\nLine3");
+      // Replace "Line2\nLine3" (pos 6, len 12) with "Replacement"
+      const op = simulateLocalContentChange(6, "Replacement", 12);
+      expect(op.type).toBe(OperationType.REPLACE);
+      expect(op.position).toBe(6);
+      expect(op.text).toBe("Replacement");
+      expect(op.length).toBe(12);
+    });
+
+    test("should apply remote multi-line insert", () => {
+      mockEditor.setValue("Existing");
+      const op: TextOperation = {
+        id: "op-remote-ml-ins",
+        type: OperationType.INSERT,
+        position: 8,
+        text: "\nNewLine1\nNewLine2",
+        baseVersionVector: { user2: 0 },
+        userId: "user2",
+      };
+      operationManager.applyOperation(op);
+      expect(mockEditor.getValue()).toBe("Existing\nNewLine1\nNewLine2");
+    });
+
+    test("should apply remote multi-line delete", () => {
+      mockEditor.setValue("Line1\nLine2\nLine3\nLine4");
+      // Delete "Line2\nLine3\n" (pos 6, len 12)
+      const op: TextOperation = {
+        id: "op-remote-ml-del",
         type: OperationType.DELETE,
-        position: 2,
-        length: 1,
-        baseVersionVector: { user3: 0 },
-        userId: "user3",
+        position: 6,
+        length: 12,
+        baseVersionVector: { user2: 0 },
+        userId: "user2",
+      };
+      operationManager.applyOperation(op);
+      expect(mockEditor.getValue()).toBe("Line1\nLine4");
+    });
+
+    test("should apply remote multi-line replace", () => {
+      mockEditor.setValue("Line1\nLine2\nLine3");
+      // Replace "Line2\nLine3" (pos 6, len 12) with "NewContent"
+      const op: TextOperation = {
+        id: "op-remote-ml-rep",
+        type: OperationType.REPLACE,
+        position: 6,
+        length: 12,
+        text: "NewContent",
+        baseVersionVector: { user2: 0 },
+        userId: "user2",
+      };
+      operationManager.applyOperation(op);
+      expect(mockEditor.getValue()).toBe("Line1\nNewContent");
+    });
+
+    test("should transform remote multi-line insert against local pending insert", () => {
+      // Local pending op: insert "LocalInsert " at pos 0
+      mockEditor.setValue("LocalInsert ");
+      const pendingOp: TextOperation = {
+        id: "local-pending",
+        type: OperationType.INSERT,
+        position: 0,
+        text: "LocalInsert ",
+        baseVersionVector: { user1: 0 },
+        userId: "user1",
+      };
+      (operationManager as any).pendingOperations.set(pendingOp.id, pendingOp);
+      (operationManager as any).incrementLocalVersion(); // user1: 1
+
+      // Remote op: insert "Remote\nLines" at pos 0 (concurrently)
+      const remoteOp: TextOperation = {
+        id: "remote-ml",
+        type: OperationType.INSERT,
+        position: 0,
+        text: "Remote\nLines",
+        baseVersionVector: { user2: 0 }, // Based on empty state
+        userId: "user2",
       };
 
-      // Apply operation - should be transformed against op1 and op2
-      operationManager.applyOperation(op3);
+      operationManager.applyOperation(remoteOp);
 
-      // The result depends on the transformation - checking that it's applied
-      // without errors and is different from the previous state
-      expect(mockEditor.getValue()).not.toBe("a123bc");
+      // Expected: remoteOp transformed against pendingOp.
+      // transformPosition(0, 0, 12, true, "user2", "user1") -> 12 (user2 > user1)
+      // Expected value: "LocalInsert Remote\nLines"
+      expect(mockEditor.getValue()).toBe("LocalInsert Remote\nLines");
+    });
+
+    test("should transform remote multi-line delete against local pending insert", () => {
+      mockEditor.setValue("LocalInsert Line1\nLine2\nLine3");
+      const initialContent = "Line1\nLine2\nLine3";
+      const insertOffset = "LocalInsert ".length; // 12
+
+      // Local pending op: insert "LocalInsert " at pos 0
+      const pendingOp: TextOperation = {
+        id: "local-pending-ins",
+        type: OperationType.INSERT,
+        position: 0,
+        text: "LocalInsert ",
+        baseVersionVector: { user1: 0 },
+        userId: "user1",
+      };
+      (operationManager as any).pendingOperations.set(pendingOp.id, pendingOp);
+      (operationManager as any).incrementLocalVersion(); // user1: 1
+
+      // Remote op: delete "Line2\nLine3" (original pos 6, len 12)
+      const remoteOp: TextOperation = {
+        id: "remote-ml-del",
+        type: OperationType.DELETE,
+        position: 6,
+        length: 12,
+        baseVersionVector: { user2: 0 }, // Based on initial content state
+        userId: "user2",
+      };
+
+      operationManager.applyOperation(remoteOp);
+
+      // Expected: remoteOp transformed against pendingOp.
+      // transformPositionAgainstInsert(6, 0, 12) -> 6 + 12 = 18
+      // transformLengthForInsert(6, 12, 0, 12) -> 12 (insert is before delete)
+      // Transformed remoteOp: delete pos 18, len 12
+      // Expected value: "LocalInsert Line1\n"
+      expect(mockEditor.getValue()).toBe("LocalInsert Line1\n");
+    });
+
+    test("should transform local pending multi-line delete against remote insert", () => {
+      // Initial state: "Line1\nLine2\nLine3\nLine4"
+      mockEditor.setValue("Line1\nLine2\nLine3\nLine4");
+
+      // Local pending op: delete "Line2\nLine3\n" (pos 6, len 12)
+      const pendingOp: TextOperation = {
+        id: "local-pending-del",
+        type: OperationType.DELETE,
+        position: 6,
+        length: 12,
+        baseVersionVector: { user1: 0 },
+        userId: "user1",
+      };
+      (operationManager as any).pendingOperations.set(pendingOp.id, pendingOp);
+      (operationManager as any).incrementLocalVersion(); // user1: 1
+      mockEditor.setValue("Line1\nLine4"); // Reflect local delete
+
+      // Remote op: insert "RemoteInsert " at pos 0 (concurrently)
+      const remoteOp: TextOperation = {
+        id: "remote-ins",
+        type: OperationType.INSERT,
+        position: 0,
+        text: "RemoteInsert ",
+        baseVersionVector: { user2: 0 }, // Based on initial content state
+        userId: "user2",
+      };
+
+      // Apply remote op. It will be transformed against the *pending* op.
+      operationManager.applyOperation(remoteOp);
+
+      // Expected transformation of remoteOp against pendingOp:
+      // transformPosition(0, 6, undefined, false, ...) -> 0 (no change as insert is before delete)
+      // The remote insert applies at pos 0.
+      // Expected document state after remote op: "RemoteInsert Line1\nLine4"
+      expect(mockEditor.getValue()).toBe("RemoteInsert Line1\nLine4");
+
+      // Now, imagine the ACK for the pending delete comes back, or we send it.
+      // The key is that the remote op was correctly applied relative to the local state *before* the remote op arrived.
     });
   });
 });

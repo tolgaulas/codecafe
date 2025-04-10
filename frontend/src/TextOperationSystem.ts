@@ -240,16 +240,29 @@ export class TextOperationManager {
       // Save cursor position before applying remote operation
       const previousSelections = this.editor.getSelections() || [];
 
-      // Find concurrent operations and sort them
-      const concurrentOps = this.findConcurrentOperations(operation);
-      this.sortOperations(concurrentOps);
+      // Find concurrent operations ONLY against pending
+      const concurrentPendingOps =
+        this.findConcurrentPendingOperations(operation);
+      // Sort them deterministically (already implemented in sortOperations)
+      this.sortOperations(concurrentPendingOps); // Uses existing sorting logic
 
-      // Transform the operation against all concurrent operations
+      // Transform the operation against all concurrent PENDING operations
       let transformedOperation = this.cloneOperation(operation);
-      for (const concurrentOp of concurrentOps) {
+      for (const concurrentOp of concurrentPendingOps) {
+        // Avoid transforming against self if somehow included (though concurrency check should prevent)
+        if (
+          transformedOperation.id &&
+          concurrentOp.id === transformedOperation.id &&
+          concurrentOp.userId === transformedOperation.userId
+        ) {
+          console.warn(
+            `Skipping self-transformation for op ${transformedOperation.id}`
+          );
+          continue;
+        }
         transformedOperation = this.transformOperation(
-          this.cloneOperation(transformedOperation),
-          this.cloneOperation(concurrentOp)
+          this.cloneOperation(transformedOperation), // Pass clone to avoid side effects
+          this.cloneOperation(concurrentOp) // Pass clone to avoid side effects
         );
       }
 
@@ -265,19 +278,19 @@ export class TextOperationManager {
           edits.push({
             range,
             text: transformedOperation.text || "",
-            forceMoveMarkers: true, // Changed to true to ensure consistent marker behavior
+            forceMoveMarkers: true,
           });
         } else if (transformedOperation.type === OperationType.DELETE) {
           edits.push({
             range,
             text: "",
-            forceMoveMarkers: true, // Changed to true to ensure consistent marker behavior
+            forceMoveMarkers: true,
           });
         } else if (transformedOperation.type === OperationType.REPLACE) {
           edits.push({
             range,
             text: transformedOperation.text || "",
-            forceMoveMarkers: true, // Changed to true to ensure consistent marker behavior
+            forceMoveMarkers: true,
           });
         }
 
@@ -292,11 +305,6 @@ export class TextOperationManager {
           edits,
           () => transformedSelections
         );
-
-        this.operationHistory.push(transformedOperation);
-        if (this.operationHistory.length > 100) {
-          this.operationHistory.shift();
-        }
       } finally {
         this.isApplyingExternalOperation = false;
       }
@@ -307,11 +315,25 @@ export class TextOperationManager {
       // This handles the case where a local operation is echoed back
       // We remove it from pending, but the main vector update happens in acknowledgeOperation
       this.pendingOperations.delete(operation.id);
+      console.log(`Removed echoed local op ${operation.id} from pending.`);
     }
-    console.log(
-      "Local version vector after applyOperation (no merge for remote):",
-      this.localVersionVector.toString()
-    );
+
+    // We merge the vector state *associated with the incoming operation*
+    // This advances our knowledge of the state of other clients as represented
+    // by the incoming operation's base vector.
+    // For acknowledged local operations, the vector update happens in `acknowledgeOperation`.
+    // For remote operations, we merge their base vector here.
+    if (operation.userId !== this.userId) {
+      this.updateVersionVector(operation.baseVersionVector);
+      console.log(
+        `Merged incoming remote op ${operation.id}'s base vector. New local vector:`,
+        this.localVersionVector.toString()
+      );
+    } else {
+      console.log(
+        `Local echo ${operation.id}. Vector update deferred to acknowledgeOperation.`
+      );
+    }
   }
 
   private transformSelections(
@@ -449,81 +471,94 @@ export class TextOperationManager {
     console.log("Version vector set to:", this.localVersionVector.toString());
   }
 
-  private findConcurrentOperations(incomingOp: TextOperation): TextOperation[] {
+  private findConcurrentPendingOperations(
+    incomingOp: TextOperation
+  ): TextOperation[] {
     const concurrent: TextOperation[] = [];
     // Use the versions map directly from the incoming operation's base vector
-    const incomingVectorMap = incomingOp.baseVersionVector || {}; // Note: Assuming structure { userId: version }
+    const incomingVectorMap = (incomingOp.baseVersionVector?.versions ||
+      incomingOp.baseVersionVector ||
+      {}) as { [userId: string]: number };
 
     console.log(
-      `Finding concurrent ops for incoming ${incomingOp.id} (User ${
+      `Finding concurrent PENDING ops for incoming ${incomingOp.id} (User ${
         incomingOp.userId
       }) with VV ${JSON.stringify(incomingVectorMap)}`
     );
 
-    for (const [_, pendingOp] of this.pendingOperations) {
-      // Skip transforming an incoming op against its own echo
+    const checkConcurrency = (opToCheck: TextOperation, source: string) => {
+      // Skip transforming an incoming op against itself (redundant check)
       if (
         incomingOp.id &&
-        pendingOp.id === incomingOp.id &&
-        incomingOp.userId === pendingOp.userId
+        opToCheck.id === incomingOp.id &&
+        incomingOp.userId === opToCheck.userId
       ) {
         console.log(
-          ` - Skipping pending op ${pendingOp.id} (matches incoming op)`
+          ` - Skipping ${source} op ${opToCheck.id} (matches incoming op)`
         );
-        continue;
+        return;
       }
 
-      // Get the base vector map of the local pending operation
-      const pendingVectorMap = pendingOp.baseVersionVector || {}; // Note: Assuming structure { userId: version }
-      const pendingUserId = pendingOp.userId;
+      // Defensive access: Try .versions first, then direct map
+      const opToCheckBaseMap = (opToCheck.baseVersionVector?.versions ||
+        opToCheck.baseVersionVector ||
+        {}) as { [userId: string]: number };
+      const incomingBaseMap = (incomingOp.baseVersionVector?.versions ||
+        incomingOp.baseVersionVector ||
+        {}) as { [userId: string]: number };
 
-      // Get the version of the pending op's user *when the pending op was created*
-      const pendingOpUserVersionAtCreation =
-        pendingVectorMap[pendingUserId] || 0;
+      const opToCheckUserId = opToCheck.userId;
 
-      // Get the version of the pending op's user as known by the *incoming operation's base state*
-      const pendingOpUserVersionInIncoming =
-        incomingVectorMap[pendingUserId] || 0;
+      // Get the version of the opToCheck's user as known by the *incoming operation's base state*
+      const opToCheckUserVersionInIncoming =
+        incomingBaseMap[opToCheckUserId] || 0; // Use derived incomingBaseMap
 
-      // If the incoming operation's state knows a version for the pending op's user
-      // that is strictly less than the version *after* the pending op would have been applied (creation version + 1),
-      // it means the server processed the incoming operation without having processed our pending operation.
-      // Thus, the client needs to transform the incoming op against the pending op.
-      if (pendingOpUserVersionInIncoming < pendingOpUserVersionAtCreation + 1) {
+      // Get the version of the opToCheck's user *when opToCheck was created/applied*
+      // This is the sequence number component relevant for concurrency check.
+      const opToCheckSequenceNumber =
+        (opToCheckBaseMap[opToCheckUserId] || 0) + 1; // Use derived opToCheckBaseMap
+
+      // Log for debugging (using the calculated values)
+      console.log(
+        `  vs ${source} Op ${
+          opToCheck.id?.substring(0, 8) ?? "N/A"
+        } (User ${opToCheckUserId}): IncomingKnowsVer(${opToCheckUserId})=${opToCheckUserVersionInIncoming}, OpToCheckCreatesVer(${opToCheckUserId})=${opToCheckSequenceNumber}`
+      );
+
+      // Concurrency Check
+      if (opToCheckUserVersionInIncoming < opToCheckSequenceNumber) {
         console.log(
-          ` -> Found concurrent pending op ${pendingOp.id} (User ${pendingUserId}, created after ver ${pendingOpUserVersionAtCreation})`
+          `   -> CONCURRENT: Incoming state for User ${opToCheckUserId} (${opToCheckUserVersionInIncoming}) < OpToCheck's resulting version (${opToCheckSequenceNumber})`
         );
-        console.log(
-          `    Incoming op VV knows User ${pendingUserId} state: ${pendingOpUserVersionInIncoming}`
-        );
-        concurrent.push(this.cloneOperation(pendingOp));
+        concurrent.push(this.cloneOperation(opToCheck)); // Add a clone
       } else {
         console.log(
-          ` - Skipping pending op ${pendingOp.id} (User ${pendingUserId}, created after ver ${pendingOpUserVersionAtCreation}). Incoming op VV knows state ${pendingOpUserVersionInIncoming}`
+          `   -> NOT CONCURRENT: Incoming state for User ${opToCheckUserId} (${opToCheckUserVersionInIncoming}) >= OpToCheck's resulting version (${opToCheckSequenceNumber})`
         );
       }
+    };
+
+    // Check against pending operations
+    console.log(" Checking against PENDING operations:");
+    for (const [_, pendingOp] of this.pendingOperations) {
+      // Pass the correct incoming map for comparison
+      checkConcurrency(pendingOp, "Pending");
     }
 
-    // Sort the identified concurrent pending operations for deterministic transformation order.
-    // Sort by user ID, then by the operation's effective sequence number (base version + 1) for that user.
-    concurrent.sort((a, b) => {
-      const userCompare = a.userId.localeCompare(b.userId);
-      if (userCompare !== 0) return userCompare;
-
-      // Use baseVersionVector for sorting
-      const aVersion = a.baseVersionVector?.[a.userId] || 0;
-      const bVersion = b.baseVersionVector?.[b.userId] || 0;
-      // Sort based on the version *after* the operation: base version + 1
-      return aVersion + 1 - (bVersion + 1);
-    });
-
+    // No need to sort here, sortOperations is called in applyOperation
     if (concurrent.length > 0) {
       console.log(
         ` -> Incoming op ${incomingOp.id} (User ${
           incomingOp.userId
         }) will be transformed against ${
           concurrent.length
-        } pending operations: [${concurrent.map((op) => op.id).join(", ")}]`
+        } PENDING operations: [${concurrent
+          .map((op) => `${op.id?.substring(0, 8)}`)
+          .join(", ")}]`
+      );
+    } else {
+      console.log(
+        ` -> Incoming op ${incomingOp.id} (User ${incomingOp.userId}) requires no transformation against PENDING ops.`
       );
     }
 
