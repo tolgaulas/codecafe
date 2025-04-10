@@ -19,6 +19,7 @@ public class CodeExecutionController {
     @PostMapping("/execute")
     public String executeCode(@RequestBody CodeExecutionRequest request) {
         String pistonApiUrl = "https://emkc.org/api/v2/piston/execute";
+        System.out.println(request);
         try {
             return restTemplate.postForObject(pistonApiUrl, request, String.class);
         } catch (Exception e) {

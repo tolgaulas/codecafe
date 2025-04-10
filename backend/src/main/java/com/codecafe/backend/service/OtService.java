@@ -59,139 +59,148 @@ public class OtService {
             logger.info("Processing operation: " + operation);
             String userId = operation.getUserId();
 
-            // Validate incoming operation before processing
-            validateOperation(operation);
+            // Clone original base vector for concurrency checks and initial validation state
+            VersionVector originalBaseVector = (operation.getBaseVersionVector() != null && operation.getBaseVersionVector().getVersions() != null)
+                ? new VersionVector(new HashMap<>(operation.getBaseVersionVector().getVersions()))
+                : new VersionVector(new HashMap<>());
 
-            // Handle case of null version vector
-            if (operation.getBaseVersionVector() == null || operation.getBaseVersionVector().getVersions() == null) {
-                VersionVector initialVector = new VersionVector(new HashMap<>());
-                operation.setBaseVersionVector(initialVector);
-            }
+            // Validate incoming operation structure (e.g., null checks) - modifies the 'operation' object if needed
+            validateOperation(operation); // Basic structural validation
 
-            // Find concurrent operations that happened after the client's base version
-            List<TextOperation> concurrentOps = findConcurrentOperations(operation);
+            // Find concurrent operations that happened after the client's original base version
+            // Pass the original base vector for comparison against history ops' base vectors
+            List<TextOperation> concurrentOps = findConcurrentOperations(userId, originalBaseVector);
             logger.info("Found " + concurrentOps.size() + " concurrent operations");
 
-            // Sort operations deterministically
-            concurrentOps.sort((a, b) -> {
-                int userCompare = a.getUserId().compareTo(b.getUserId());
-                if (userCompare != 0) return userCompare;
-                
-                Map<String, Integer> aVersions = a.getBaseVersionVector().getVersions();
-                Map<String, Integer> bVersions = b.getBaseVersionVector().getVersions();
-                int aVersion = aVersions.getOrDefault(a.getUserId(), 0);
-                int bVersion = bVersions.getOrDefault(b.getUserId(), 0);
-                return Integer.compare(aVersion, bVersion);
-            });
+            // Sort concurrent operations deterministically
+            sortConcurrentOps(concurrentOps); // Extracted helper method
 
-            // Transform operation against all concurrent operations
-            TextOperation transformedOp = cloneOperation(operation);
-            StringBuilder tempDoc = new StringBuilder(documentContent);
-            
+            // Transform the incoming operation against all concurrent operations
+            TextOperation transformedOp = cloneOperation(operation); // Start transformation with a clone of the validated incoming op
+
             for (TextOperation concurrentOp : concurrentOps) {
-                // Transform the operation
+                // Transform the operation iteratively
                 transformedOp = transformOperation(transformedOp, concurrentOp);
                 logger.fine("Transformed against: " + concurrentOp.getId() + ", result: " + transformedOp);
             }
 
-            // Validate the transformed operation against current document state
-            validateOperation(transformedOp);
+            // Capture the server's version vector state *before* applying the transformed operation
+            VersionVector serverVectorBeforeApply = new VersionVector(new HashMap<>(serverVersionVector.getVersions()));
 
-            // Apply the operation to the document
-            applyOperation(transformedOp);
+            // Apply the final transformed operation to the document content
+            applyOperation(transformedOp); // Modifies documentContent
 
-            // Update version vector
-            Map<String, Integer> newVersions = new HashMap<>(serverVersionVector.getVersions());
-            int userVersion = newVersions.getOrDefault(userId, 0) + 1;
-            newVersions.put(userId, userVersion);
-            serverVersionVector = new VersionVector(newVersions);
-            transformedOp.setBaseVersionVector(new VersionVector(newVersions));
+            // Update the main server version vector reflecting the application of the transformedOp
+            Map<String, Integer> newServerVersions = new HashMap<>(serverVectorBeforeApply.getVersions());
+            int currentUserVersion = newServerVersions.getOrDefault(userId, 0) + 1; // Increment version for the op's user
+            newServerVersions.put(userId, currentUserVersion);
+            serverVersionVector = new VersionVector(newServerVersions); // Update the main server vector
 
-            // Add to history with pruning
-            operationHistory.add(transformedOp);
-            if (operationHistory.size() > MAX_HISTORY_SIZE) {
-                operationHistory.subList(0, operationHistory.size() - MAX_HISTORY_SIZE / 2).clear();
-            }
+            // Prepare the operation representation for storing in history
+            TextOperation historyOp = cloneOperation(transformedOp); // Clone the applied operation's details
+            historyOp.setBaseVersionVector(serverVectorBeforeApply); // ** CRITICAL: Set base vector to state *before* apply **
+
+            // Add the history operation to the log
+            operationHistory.add(historyOp);
+            pruneHistory(); // Extracted helper method
+
+            // Prepare the operation to return to the client
+            TextOperation returnedOp = cloneOperation(transformedOp); // Clone applied op details again
+            returnedOp.setBaseVersionVector(serverVersionVector); // Set vector to the *new* server state
 
             logger.info("New document state: " + documentContent);
             logger.info("New server version vector: " + serverVersionVector);
-            return transformedOp;
+
+            return returnedOp; // Return the applied op with the latest server vector
+
         } finally {
             lock.unlock();
         }
     }
 
     /**
-     * Find operations that are concurrent with the given operation
+     * Find operations that are concurrent with the given operation based on its base vector
      */
-    private List<TextOperation> findConcurrentOperations(TextOperation operation) {
+    private List<TextOperation> findConcurrentOperations(String incomingUserId, VersionVector clientVector) { // Modified signature
         List<TextOperation> concurrent = new ArrayList<>();
-        VersionVector clientVector = operation.getBaseVersionVector();
-        Map<String, Integer> clientVersions = (clientVector != null && clientVector.getVersions() != null) 
+        Map<String, Integer> clientVersions = (clientVector != null && clientVector.getVersions() != null)
                                              ? clientVector.getVersions() : new HashMap<>();
 
-        logger.info("Finding concurrent ops for incoming " + operation.getId() + " (User " + operation.getUserId() + ") with VV " + clientVector);
-
+        logger.info("Finding concurrent ops for incoming User " + incomingUserId + " with VV " + clientVector);
 
         for (TextOperation historyOp : operationHistory) {
-            // Don't transform an operation against itself if it somehow appears in history
-            // (e.g., reprocessing or specific server logic). Primarily, VV handles this.
-            if (operation.getId() != null && operation.getId().equals(historyOp.getId()) &&
-                operation.getUserId().equals(historyOp.getUserId())) {
-                 logger.fine(" - Skipping history op " + historyOp.getId() + " (matches incoming op)");
+            // historyOp.getBaseVersionVector() now correctly represents the server state *before* historyOp was applied
+
+            VersionVector historyBaseVector = historyOp.getBaseVersionVector();
+            if (historyBaseVector == null || historyBaseVector.getVersions() == null) {
+                 logger.warning("Skipping history operation with null base version vector: " + historyOp.getId());
                  continue;
             }
+            Map<String, Integer> historyBaseVersions = historyBaseVector.getVersions();
+            String historyOpUserId = historyOp.getUserId(); // User H (author of history op)
 
-            VersionVector historyVector = historyOp.getBaseVersionVector();
-            if (historyVector == null || historyVector.getVersions() == null) {
-                 logger.warning("Skipping history operation with null version vector: " + historyOp.getId());
-                 continue; // Skip ops with invalid vectors
-            }
-            Map<String, Integer> historyVersions = historyVector.getVersions();
-            String historyOpUserId = historyOp.getUserId();
+            // Get the version of user H *before* historyOp was applied.
+            int historyOpBaseVersion = historyBaseVersions.getOrDefault(historyOpUserId, 0);
 
-            // Get the version of the history op's user *when the history op was created*
-            int historyOpUserVersionAtCreation = historyVersions.getOrDefault(historyOpUserId, 0);
+            // Get the sequence number that historyOp created for user H.
+            int historyOpSequenceNumber = historyOpBaseVersion + 1;
 
-            // Get the version of the history op's user as known by the *incoming operation's base state*
+            // Get the version of user H as known by the incoming client operation.
             int historyOpUserVersionInClient = clientVersions.getOrDefault(historyOpUserId, 0);
 
-            // If the incoming client operation's state knows a version for the history op's user
-            // that is strictly less than the version *after* the history op would have been applied (creation version + 1),
-            // it means the client created its operation without knowledge of this history operation.
-            // Thus, the client's operation needs to be transformed against this history operation.
-            if (historyOpUserVersionInClient < historyOpUserVersionAtCreation + 1) {
-                logger.fine(" -> Found concurrent history op " + historyOp.getId() + " (User " + historyOpUserId + ", created after ver " + historyOpUserVersionAtCreation + ")");
-                logger.fine("    Incoming op VV knows User " + historyOpUserId + " state: " + historyOpUserVersionInClient);
-                concurrent.add(historyOp); // Add the original history op for transformation
+            // Log the values being compared
+            logger.fine(String.format("  vs HistOp %s (User %s): ClientKnowsVer(H)=%d, HistOpCreatesVer(H)=%d (HistOpBaseVer(H)=%d)",
+                                  historyOp.getId() != null ? historyOp.getId().substring(0, Math.min(8, historyOp.getId().length())) : "N/A", // Short ID
+                                  historyOpUserId,
+                                  historyOpUserVersionInClient,
+                                  historyOpSequenceNumber,
+                                  historyOpBaseVersion));
+
+            // Concurrency Check: If the client's knowledge of H is less than the version H *became* after historyOp,
+            // then the client didn't know about historyOp.
+            if (historyOpUserVersionInClient < historyOpSequenceNumber) {
+                logger.fine("   -> CONCURRENT: Client state for User " + historyOpUserId + " (" + historyOpUserVersionInClient + ") < History Op's resulting version (" + historyOpSequenceNumber + ")");
+                concurrent.add(historyOp); // Add the actual history op for transformation
             } else {
-                 logger.fine(" - Skipping history op " + historyOp.getId() + " (User " + historyOpUserId + ", created after ver " + historyOpUserVersionAtCreation + "). Incoming op VV knows state " + historyOpUserVersionInClient);
+                 logger.fine("   -> NOT CONCURRENT: Client state for User " + historyOpUserId + " (" + historyOpUserVersionInClient + ") >= History Op's resulting version (" + historyOpSequenceNumber + ")");
             }
         }
 
-        // Sort the identified concurrent history operations for deterministic transformation order.
-        // Sort by user ID, then by the operation's effective sequence number (base version + 1) for that user.
-        concurrent.sort((a, b) -> {
-            int userCompare = a.getUserId().compareTo(b.getUserId());
-            if (userCompare != 0) return userCompare;
-
-            // Use baseVersionVector for sorting
-            Map<String, Integer> aVersions = a.getBaseVersionVector() != null ? a.getBaseVersionVector().getVersions() : new HashMap<>();
-            Map<String, Integer> bVersions = b.getBaseVersionVector() != null ? b.getBaseVersionVector().getVersions() : new HashMap<>();
-            int aVersion = aVersions.getOrDefault(a.getUserId(), 0);
-            int bVersion = bVersions.getOrDefault(b.getUserId(), 0);
-            // Sort based on the version *after* the operation: base version + 1
-            return Integer.compare(aVersion + 1, bVersion + 1);
-        });
-
-
         if (!concurrent.isEmpty()) {
-            logger.info(" -> Incoming op " + operation.getId() + " (User " + operation.getUserId() + ") will be transformed against " + concurrent.size() + " history operations: [" + concurrent.stream().map(TextOperation::getId).reduce((acc, id) -> acc + ", " + id).orElse("") + "]");
+            logger.info(" -> Incoming op (User " + incomingUserId + ") will be transformed against " + concurrent.size() + " history operations.");
         } else {
-             logger.info(" -> Incoming op " + operation.getId() + " (User " + operation.getUserId() + ") requires no transformation against history.");
+             logger.info(" -> Incoming op (User " + incomingUserId + ") requires no transformation against history.");
         }
 
         return concurrent;
+    }
+
+    /** Sorts operations deterministically: User ID first, then sequence number */
+    private void sortConcurrentOps(List<TextOperation> ops) {
+         ops.sort((a, b) -> {
+            int userCompare = a.getUserId().compareTo(b.getUserId());
+            if (userCompare != 0) return userCompare;
+
+            VersionVector aBaseVector = a.getBaseVersionVector();
+            VersionVector bBaseVector = b.getBaseVersionVector();
+            Map<String, Integer> aVersions = (aBaseVector != null && aBaseVector.getVersions() != null) ? aBaseVector.getVersions() : new HashMap<>();
+            Map<String, Integer> bVersions = (bBaseVector != null && bBaseVector.getVersions() != null) ? bBaseVector.getVersions() : new HashMap<>();
+
+            int aBaseVersion = aVersions.getOrDefault(a.getUserId(), 0);
+            int bBaseVersion = bVersions.getOrDefault(b.getUserId(), 0);
+            // Sort based on the version *created by* the operation: base version + 1
+            return Integer.compare(aBaseVersion + 1, bBaseVersion + 1);
+        });
+    }
+
+    /** Prunes the operation history if it exceeds the maximum size */
+    private void pruneHistory() {
+        if (operationHistory.size() > MAX_HISTORY_SIZE) {
+            // Remove the oldest half of the excess operations
+            int removeCount = operationHistory.size() - (MAX_HISTORY_SIZE / 2);
+            operationHistory.subList(0, removeCount).clear();
+            logger.info("Pruned operation history. New size: " + operationHistory.size());
+        }
     }
 
     /**
@@ -201,66 +210,47 @@ public class OtService {
         StringBuilder sb = new StringBuilder(documentContent);
         int docLength = sb.length();
 
-        // Ensure operation position is validated (should be done before apply)
-        // validateOperation(operation); // Validation should happen *before* transformation usually
-
-        // Re-validate position just before applying
-        if (operation.getPosition() < 0) operation.setPosition(0);
-        if (operation.getPosition() > docLength) operation.setPosition(docLength);
+        // Re-validate position just before applying, clamp to bounds
+        int position = Math.max(0, operation.getPosition());
+        position = Math.min(position, docLength); // Clamp position to [0, docLength]
 
         String text = operation.getText() != null ? operation.getText().replace("\r\n", "\n") : "";
-        operation.setText(text); // Ensure normalized text is set back
         int length = operation.getLength() != null ? operation.getLength() : 0;
         if (length < 0) length = 0;
 
         try {
             switch (operation.getType()) {
                 case INSERT:
-                    sb.insert(operation.getPosition(), text);
+                    sb.insert(position, text);
                     break;
                 case DELETE:
-                    int deleteEnd = operation.getPosition() + length;
-                    if (deleteEnd > docLength) {
-                        deleteEnd = docLength;
-                    }
+                    int deleteEnd = position + length;
+                    // Clamp deleteEnd to docLength
+                    deleteEnd = Math.min(deleteEnd, docLength);
                     // Only delete if start position is valid and before end position
-                    if (operation.getPosition() < deleteEnd) {
-                        sb.delete(operation.getPosition(), deleteEnd);
+                    if (position < deleteEnd) {
+                        sb.delete(position, deleteEnd);
                     }
                     break;
                 case REPLACE:
-                    // Treat Replace with length 0 as an Insert
-                    if (length == 0) {
-                         sb.insert(operation.getPosition(), text);
+                    int replaceEnd = position + length;
+                    // Clamp replaceEnd to docLength
+                    replaceEnd = Math.min(replaceEnd, docLength);
+                    // Only replace if start position is valid and before end position
+                    if (position < replaceEnd) {
+                        sb.replace(position, replaceEnd, text);
+                    } else if (position <= docLength) { // Handle insert-at-end case if length was 0 or invalid
+                        sb.insert(position, text);
                     } else {
-                        int replaceEnd = operation.getPosition() + length;
-                        if (replaceEnd > docLength) {
-                            replaceEnd = docLength;
-                        }
-                        // Only replace if start position is valid and before end position
-                        if (operation.getPosition() < replaceEnd) {
-                           sb.replace(operation.getPosition(), replaceEnd, text);
-                        }
-                         // If replace position is at the end and length > 0, it might mean append
-                         else if (operation.getPosition() == docLength && length > 0) {
-                            // This case indicates deletion beyond bounds, effectively a no-op for deletion part.
-                            // We still might need to insert the text if specified.
-                            // However, standard OT Replace implies replacing existing content.
-                            // Let's log a warning if this edge case is hit unexpectedly.
-                             logger.warning("Replace operation attempted beyond document bounds, applying as insert at end.");
-                             sb.insert(operation.getPosition(), text);
-                         } else if (operation.getPosition() == docLength && length == 0) {
-                             // This is an insert at the end handled above.
-                              sb.insert(operation.getPosition(), text);
-                         }
+                        logger.warning("Replace operation could not be applied: position " + position + " >= docLength " + docLength);
                     }
                     break;
             }
-            documentContent = sb.toString();
-            logger.fine("Operation applied successfully: " + operation.getType() + " at pos " + operation.getPosition());
+            documentContent = sb.toString(); // Assign back the modified content
+            logger.fine("Operation applied successfully: " + operation.getType() + " at pos " + position + ", Final doc length: " + documentContent.length());
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error applying operation: " + operation + " to doc state: '" + documentContent + "'", e);
-            // Avoid modifying document on error
+            // Avoid modifying document on error - sb changes are discarded
         }
     }
 

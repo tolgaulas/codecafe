@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import TerminalComponent from "./components/TerminalComponent";
 import { FaRegFolder } from "react-icons/fa";
@@ -7,13 +8,81 @@ import { VscFiles } from "react-icons/vsc";
 import { VscSettingsGear } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import { HiOutlineShare } from "react-icons/hi2";
+import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
+
+// Define types for code execution
+interface CodeFile {
+  content: string;
+}
+
+interface CodeExecutionRequest {
+  language: string;
+  version: string;
+  files: CodeFile[];
+}
+
+interface CodeExecutionResponse {
+  run: {
+    stdout: string;
+    stderr: string;
+  };
+}
+
+// Define the Terminal ref interface
+interface TerminalRef {
+  writeToTerminal: (text: string) => void;
+}
 
 const CodeEditorUI = () => {
   const [code, setCode] = useState(
     '// Start coding here\nfunction helloWorld() {\n  console.log("Hello, world!");\n}\n'
   );
-
   const [activeIcon, setActiveIcon] = useState("files");
+  const [isLoading, setIsLoading] = useState(false);
+  const [editorLanguage] = useState("javascript");
+
+  // Create a ref for the terminal
+  const terminalRef = useRef<TerminalRef>();
+
+  // Handle code execution
+  const handleRunCode = async () => {
+    setIsLoading(true);
+    try {
+      const requestBody: CodeExecutionRequest = {
+        language: editorLanguage,
+        version: LANGUAGE_VERSIONS[editorLanguage].version,
+        files: [{ content: code }],
+      };
+
+      const response = await axios.post<CodeExecutionResponse>(
+        "http://localhost:8080/api/execute",
+        requestBody,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const executionOutput = response.data.run.stderr
+        ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
+        : response.data.run.stdout;
+      // Write directly to terminal
+      if (executionOutput !== "") {
+        console.log(executionOutput);
+        terminalRef.current?.writeToTerminal(executionOutput);
+      }
+    } catch (error) {
+      const errorOutput = `Error: ${
+        error instanceof Error ? error.message : "Unknown error occurred"
+      }`;
+      // Write errors directly to terminal
+      terminalRef.current?.writeToTerminal(errorOutput);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300">
@@ -30,8 +99,12 @@ const CodeEditorUI = () => {
             <button className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
               View
             </button>
-            <button className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
-              Run
+            <button
+              className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
+              onClick={handleRunCode}
+              disabled={isLoading}
+            >
+              {isLoading ? "Running..." : "Run"}
             </button>
           </div>
         </div>
@@ -152,6 +225,11 @@ const CodeEditorUI = () => {
                 theme="codeCafeTheme"
                 language="javascript"
                 showLineNumbers={true}
+                code={code}
+                onCodeChange={(code) => {
+                  setCode(code);
+                  console.log(code);
+                }}
               />
             </div>
 
@@ -164,7 +242,7 @@ const CodeEditorUI = () => {
                 <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
               </div>
               <div className="flex-1 px-4 py-2 font-mono text-sm overflow-auto">
-                <TerminalComponent />
+                <TerminalComponent ref={terminalRef} />
               </div>
             </div>
           </div>
@@ -174,7 +252,7 @@ const CodeEditorUI = () => {
       {/* Status Bar */}
       <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-center px-4 py-1 text-xs border-t border-stone-600">
         <div className="flex items-center space-x-4">
-          <span>JavaScript</span>
+          <span>{editorLanguage}</span>
           <span>UTF-8</span>
         </div>
         <div className="flex items-center space-x-4">
