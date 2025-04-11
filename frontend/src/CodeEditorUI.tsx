@@ -56,7 +56,7 @@ const CodeEditorUI = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://localhost:8080/api/execute",
+        "http://157.230.83.211:8080/api/execute",
         requestBody,
         {
           headers: {
