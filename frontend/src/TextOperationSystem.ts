@@ -446,6 +446,17 @@ export class TextOperation {
         }
         operation2prime.delete(minLength);
       } else {
+        // Add logging to see the unexpected combination
+        console.error("Unrecognized transform case hit!", {
+          current_op1: op1,
+          current_op2: op2,
+          index1: i1,
+          index2: i2,
+          initial_ops1: ops1,
+          initial_ops2: ops2,
+          prime1_so_far: operation1prime.toJSON(),
+          prime2_so_far: operation2prime.toJSON(),
+        });
         throw new Error("Unrecognized case in transform.");
       }
     }
