@@ -133,6 +133,21 @@ const CodeEditor = ({
       .monaco-editor {
         border: none !important;
       }
+
+      /* Remove shadows from common widgets */
+      .monaco-editor .find-widget,
+      .monaco-editor .suggest-widget,
+      .monaco-editor .monaco-hover,
+      .monaco-editor .parameter-hints-widget {
+          box-shadow: none !important;
+          border: 1px solid #404040 !important; /* Optional: Add a subtle border instead */
+      }
+
+      /* Remove shadow from sticky scroll header */
+      .monaco-editor .header-wrapper {
+          box-shadow: none !important;
+      }
+
       ${users
         .map(
           (user) => `
@@ -291,9 +306,11 @@ const CodeEditor = ({
           cursorStyle: "line",
           scrollBeyondLastLine: false,
           scrollbar: {
-            handleMouseWheel: false,
-            verticalScrollbarSize: 0,
-            verticalSliderSize: 0,
+            vertical: "auto",
+            useShadows: false,
+          },
+          find: {
+            addExtraSpaceOnTop: false,
           },
         }}
         className="monaco-editor"
