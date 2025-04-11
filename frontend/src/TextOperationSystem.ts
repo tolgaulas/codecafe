@@ -377,37 +377,6 @@ export class TextOperation {
         continue;
       }
 
-      if (typeof op1 === "undefined") {
-        // Log context before throwing error
-        console.error("Transform Error: op1 undefined, op2 defined.", {
-          operation1_initial: operation1.toJSON(), // Log initial ops
-          operation2_initial: operation2.toJSON(),
-          current_op2: op2, // What's left in op2?
-          current_i1: i1,
-          current_i2: i2,
-          operation1prime_so_far: operation1prime.toJSON(), // What was built for op1'?
-          operation2prime_so_far: operation2prime.toJSON(), // What was built for op2'?
-        });
-        throw new Error(
-          "Cannot transform operations: first operation is too short."
-        );
-      }
-      if (typeof op2 === "undefined") {
-        // Log context before throwing error
-        console.error("Transform Error: op2 undefined, op1 defined.", {
-          operation1_initial: operation1.toJSON(), // Log initial ops
-          operation2_initial: operation2.toJSON(),
-          current_op1: op1, // What's left in op1?
-          current_i1: i1,
-          current_i2: i2,
-          operation1prime_so_far: operation1prime.toJSON(), // What was built for op1'?
-          operation2prime_so_far: operation2prime.toJSON(), // What was built for op2'?
-        });
-        throw new Error(
-          "Cannot transform operations: second operation is too short."
-        );
-      }
-
       let minLength;
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
         // Simple case: retain/retain
