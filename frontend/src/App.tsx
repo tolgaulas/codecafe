@@ -134,7 +134,7 @@ const App = () => {
     console.log(`Session active (ID: ${sessionId}), connecting WebSocket...`);
     setCode("// Connecting to session...");
 
-    const socket = new SockJS("http://157.230.83.211:8080/ws");
+    const socket = new SockJS("http://localhost:8080/ws");
     const stompClient = Stomp.over(socket);
     stompClientRef.current = stompClient;
 
@@ -244,6 +244,7 @@ const App = () => {
                   clientRef.current?.blur();
                 },
               });
+              console.log("Adapter callbacks registered.");
             } else {
               console.warn(
                 "Received document state after client initialization - potential desync? Check revision:",
@@ -405,7 +406,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://157.230.83.211:8080/api/execute",
+        "http://localhost:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -474,7 +475,7 @@ const App = () => {
       setSessionId(sessionIdFromUrl);
       setIsJoiningSession(true);
       axios
-        .get(`http://157.230.83.211:8080/api/sessions/${sessionIdFromUrl}`)
+        .get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
         .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
@@ -491,7 +492,7 @@ const App = () => {
   const startSession = async () => {
     try {
       const response = await axios.post(
-        "http://157.230.83.211:8080/api/sessions/create",
+        "http://localhost:8080/api/sessions/create",
         {
           creatorName: name || "Anonymous",
         }
@@ -519,8 +520,8 @@ const App = () => {
   const handleSimulateTyping = () => {
     if (editorRef.current && adapterRef.current && clientRef.current) {
       const textToSimulate =
-        "Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello Hello ";
-      const simulationDelay = 5;
+        "Typing simulation... Typing simulation... Typing simulation..";
+      const simulationDelay = 40;
       simulateRapidTyping(
         editorRef.current,
         adapterRef.current,
@@ -611,7 +612,7 @@ const App = () => {
             </button>
             <button
               className="flex items-center justify-center p-2 rounded-md transition-all duration-200 bg-transparent hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400 disabled:!isSessionActive || !editorRef.current"
-              onClick={() => setTimeout(handleSimulateTyping, 2000)}
+              onClick={handleSimulateTyping}
               disabled={!isSessionActive || !editorRef.current}
               title={
                 !isSessionActive || !editorRef.current

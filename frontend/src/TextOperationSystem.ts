@@ -1126,8 +1126,24 @@ class AwaitingWithBuffer implements IClientState {
 
   applyClient(client: Client, operation: TextOperation): IClientState {
     // console.log(`[${client.userId}] AwaitingWithBuffer -> Composing Buffer`);
-    const newBuffer = this.buffer.compose(operation);
-    return new AwaitingWithBuffer(this.outstanding, newBuffer);
+    console.log("[AWB ApplyClient] Before Compose:", {
+      buffer_ops: this.buffer.toJSON(),
+      buffer_base: this.buffer.baseLength,
+      buffer_target: this.buffer.targetLength,
+      operation_ops: operation.toJSON(),
+      operation_base: operation.baseLength,
+      operation_target: operation.targetLength,
+    });
+    try {
+      const newBuffer = this.buffer.compose(operation);
+      return new AwaitingWithBuffer(this.outstanding, newBuffer);
+    } catch (e) {
+      console.error("[AWB ApplyClient] Compose Error:", e, {
+        buffer: this.buffer,
+        operation: operation,
+      });
+      throw e; // Rethrow
+    }
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
     // Detailed logging before the potentially failing transform calls
