@@ -345,7 +345,7 @@ const CodeEditorUI = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1">
         {/* Combined Sidebar Area */}
         <div
           ref={sidebarContainerRef}
@@ -480,7 +480,7 @@ const CodeEditorUI = () => {
         {/* Code and Terminal Area */}
         <div
           ref={editorTerminalAreaRef}
-          className="flex-1 flex flex-col overflow-hidden relative"
+          className="flex-1 flex flex-col relative"
         >
           {/* Tabs - Restored */}
           <div className="flex bg-stone-800 bg-opacity-60 border-b border-stone-600 flex-shrink-0">
@@ -518,16 +518,19 @@ const CodeEditorUI = () => {
 
           {/* Terminal */}
           <div
-            className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 overflow-hidden ${
-              isTerminalCollapsed ? "hidden" : "flex" // Use hidden/flex to show/hide
+            className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
+              isTerminalCollapsed ? "hidden" : "flex"
             }`}
             style={{ height: `${terminalHeight}px` }} // Apply dynamic height
           >
             <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
               <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
             </div>
-            <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-auto min-h-0">
-              {!isTerminalCollapsed && <TerminalComponent ref={terminalRef} />}
+            {/* Terminal Content Area */}
+            <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
+              {!isTerminalCollapsed && (
+                <TerminalComponent ref={terminalRef} height={terminalHeight} />
+              )}
             </div>
           </div>
         </div>
