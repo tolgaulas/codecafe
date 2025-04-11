@@ -134,7 +134,7 @@ const App = () => {
     console.log(`Session active (ID: ${sessionId}), connecting WebSocket...`);
     setCode("// Connecting to session...");
 
-    const socket = new SockJS("http://localhost:8080/ws");
+    const socket = new SockJS("http://157.230.83.211:8080/ws");
     const stompClient = Stomp.over(socket);
     stompClientRef.current = stompClient;
 
@@ -244,7 +244,6 @@ const App = () => {
                   clientRef.current?.blur();
                 },
               });
-              console.log("Adapter callbacks registered.");
             } else {
               console.warn(
                 "Received document state after client initialization - potential desync? Check revision:",
@@ -406,7 +405,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://localhost:8080/api/execute",
+        "http://157.230.83.211:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -475,7 +474,7 @@ const App = () => {
       setSessionId(sessionIdFromUrl);
       setIsJoiningSession(true);
       axios
-        .get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
+        .get(`http://157.230.83.211:8080/api/sessions/${sessionIdFromUrl}`)
         .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
@@ -492,7 +491,7 @@ const App = () => {
   const startSession = async () => {
     try {
       const response = await axios.post(
-        "http://localhost:8080/api/sessions/create",
+        "http://157.230.83.211:8080/api/sessions/create",
         {
           creatorName: name || "Anonymous",
         }
