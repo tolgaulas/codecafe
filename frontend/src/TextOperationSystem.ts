@@ -1,994 +1,1296 @@
-import { editor, IRange, Selection } from "monaco-editor";
-import { v4 as uuidv4 } from "uuid";
+import {
+  editor,
+  IRange,
+  Position,
+  Selection,
+  IDisposable,
+  Range as MonacoRange,
+} from "monaco-editor";
+import { v4 as uuidv4 } from "uuid"; // Keep for potential other uses
+import { debounce } from "lodash"; // Import debounce
 
-export enum OperationType {
-  INSERT = "INSERT",
-  DELETE = "DELETE",
-  REPLACE = "REPLACE",
-}
+// #############################################################################
+// ## Core TextOperation Logic (Directly adapted from ot.js principles)
+// #############################################################################
 
-export class VersionVector {
-  private versions: { [userId: string]: number };
+export class TextOperation {
+  ops: (string | number)[];
+  baseLength: number;
+  targetLength: number;
 
-  constructor(initialVersions?: { [userId: string]: number } | null) {
-    this.versions = initialVersions ? { ...initialVersions } : {};
+  // Constructor.
+  constructor() {
+    this.ops = [];
+    this.baseLength = 0;
+    this.targetLength = 0;
   }
 
-  // Get the versions map
-  getVersions(): { [userId: string]: number } {
-    return { ...this.versions };
+  // Helper to check if an op is retain.
+  static isRetain(op: any): op is number {
+    return typeof op === "number" && op > 0;
   }
 
-  // Set the versions map
-  setVersions(versions: { [userId: string]: number } | null): void {
-    this.versions = versions ? { ...versions } : {};
+  // Helper to check if an op is insert.
+  static isInsert(op: any): op is string {
+    return typeof op === "string";
   }
 
-  // Update a user's version - matches Java implementation
-  update(userId: string, version: number): void {
-    const safeVersion = Math.max(0, version);
-    const current = this.versions[userId] || 0;
-    this.versions[userId] = Math.max(current, safeVersion);
+  // Helper to check if an op is delete.
+  static isDelete(op: any): op is number {
+    return typeof op === "number" && op < 0;
   }
 
-  // Check if this vector is concurrent with another - matches Java implementation
-  concurrent(other: VersionVector): boolean {
-    if (!other || !other.getVersions()) {
-      return true;
+  // Add a retain operation.
+  retain(n: number): this {
+    if (typeof n !== "number" || n < 0) {
+      throw new Error("retain expects a non-negative integer.");
     }
-
-    return !this.happenedBefore(other) && !other.happenedBefore(this);
+    if (n === 0) return this;
+    this.baseLength += n;
+    this.targetLength += n;
+    let lastOp = this.ops[this.ops.length - 1];
+    if (TextOperation.isRetain(lastOp)) {
+      // Combine consecutive retains.
+      this.ops[this.ops.length - 1] = lastOp + n;
+    } else {
+      this.ops.push(n);
+    }
+    return this;
   }
 
-  private happenedBefore(other: VersionVector): boolean {
-    if (!other || !other.getVersions()) {
-      return false;
+  // Add an insert operation.
+  insert(str: string): this {
+    if (typeof str !== "string") {
+      throw new Error("insert expects a string.");
     }
-    const thisVersions = this.versions;
-    const otherVersions = other.getVersions();
+    if (str === "") return this;
+    this.targetLength += str.length;
+    let ops = this.ops;
+    let lastOp = ops[ops.length - 1];
+    let secondLastOp = ops[ops.length - 2];
 
-    let allLeq = true;
-    let existsLess = false;
-    const allUserIds = new Set([
-      ...Object.keys(thisVersions),
-      ...Object.keys(otherVersions),
-    ]);
-
-    for (const userId of allUserIds) {
-      const thisV = thisVersions[userId] || 0;
-      const otherV = otherVersions[userId] || 0;
-      if (thisV > otherV) {
-        allLeq = false;
-        break;
+    if (TextOperation.isInsert(lastOp)) {
+      // Combine consecutive inserts.
+      ops[ops.length - 1] = lastOp + str;
+    } else if (TextOperation.isDelete(lastOp)) {
+      // It doesn't matter when an insert occurs between retain and delete,
+      // so push it before the delete.
+      if (TextOperation.isInsert(secondLastOp)) {
+        ops[ops.length - 2] = secondLastOp + str;
+      } else {
+        ops[ops.length] = lastOp;
+        ops[ops.length - 2] = str;
       }
-      if (thisV < otherV) {
-        existsLess = true;
-      }
+    } else {
+      ops.push(str);
     }
-
-    return allLeq && existsLess;
+    return this;
   }
 
-  // Merge this vector with another, taking the maximum version for each user
-  merge(other: VersionVector): VersionVector {
-    if (!other || !other.getVersions()) {
-      return new VersionVector(this.versions);
+  // Add a delete operation.
+  delete(n: number | string): this {
+    let length;
+    if (typeof n === "string") {
+      length = n.length;
+    } else if (typeof n === "number") {
+      length = n;
+    } else {
+      throw new Error("delete expects an integer or a string.");
     }
+    if (length === 0) return this;
+    if (length > 0) {
+      length = -length;
+    }
+    this.baseLength -= length; // baseLength increases
+    let lastOp = this.ops[this.ops.length - 1];
+    if (TextOperation.isDelete(lastOp)) {
+      this.ops[this.ops.length - 1] = lastOp + length;
+    } else {
+      this.ops.push(length);
+    }
+    return this;
+  }
 
-    const result = new VersionVector(this.versions);
-    const otherVersions = other.getVersions();
+  // Checks if this operation is a no-op.
+  isNoop(): boolean {
+    return (
+      this.ops.length === 0 ||
+      (this.ops.length === 1 && TextOperation.isRetain(this.ops[0]))
+    );
+  }
 
-    for (const userId in otherVersions) {
-      const otherVersion = otherVersions[userId] || 0;
-      const thisVersion = this.versions[userId] || 0;
-      result.versions[userId] = Math.max(
-        0,
-        Math.max(thisVersion, otherVersion)
+  // Converts operation into a JSON serializable representation.
+  toJSON(): (string | number)[] {
+    return this.ops;
+  }
+
+  // Creates an operation from a JSON representation.
+  static fromJSON(ops: (string | number)[]): TextOperation {
+    let o = new TextOperation();
+    for (let i = 0; i < ops.length; i++) {
+      let op = ops[i];
+      if (TextOperation.isRetain(op)) {
+        o.retain(op as number);
+      } else if (TextOperation.isInsert(op)) {
+        o.insert(op as string);
+      } else if (TextOperation.isDelete(op)) {
+        o.delete(op as number);
+      } else {
+        throw new Error("unknown operation type: " + JSON.stringify(op));
+      }
+    }
+    return o;
+  }
+
+  // Apply the operation to a string, returning a new string.
+  apply(str: string): string {
+    // No initial baseLength check - problematic after transform
+    let newStr = [];
+    let strIndex = 0;
+    for (let i = 0; i < this.ops.length; i++) {
+      let op = this.ops[i];
+      if (TextOperation.isRetain(op)) {
+        if (strIndex + op > str.length) {
+          throw new Error(
+            "Operation check error: Retain length should not exceed string length."
+          );
+        }
+        newStr.push(str.slice(strIndex, strIndex + op));
+        strIndex += op;
+      } else if (TextOperation.isInsert(op)) {
+        newStr.push(op);
+      } else {
+        // delete op
+        strIndex -= op; // op is negative
+        if (strIndex > str.length) {
+          throw new Error(
+            "Operation check error: Delete length should not exceed string length."
+          );
+        }
+      }
+    }
+    // Final check removed as it's invalid after transforms
+    // if (strIndex !== str.length) {
+    //   throw new Error("Operation check error: Operation length mismatch.");
+    // }
+    return newStr.join("");
+  }
+
+  // Computes the inverse of an operation.
+  invert(str: string): TextOperation {
+    let inverse = new TextOperation();
+    let strIndex = 0;
+    for (let i = 0; i < this.ops.length; i++) {
+      let op = this.ops[i];
+      if (TextOperation.isRetain(op)) {
+        inverse.retain(op);
+        strIndex += op;
+      } else if (TextOperation.isInsert(op)) {
+        inverse.delete(op.length);
+      } else {
+        // delete op
+        // Check boundary condition before substring
+        if (strIndex > str.length) {
+          throw new Error(
+            `Cannot invert delete (${-op}) starting past end of document (${
+              str.length
+            }) at index ${strIndex}. Original Op: ${this.toString()}`
+          );
+        }
+        const endIndex = Math.min(strIndex - op, str.length); // -op is positive delete count
+        inverse.insert(str.slice(strIndex, endIndex));
+        strIndex -= op; // op is negative
+      }
+    }
+    return inverse;
+  }
+
+  // Compose merges two consecutive operations into one.
+  compose(operation2: TextOperation): TextOperation {
+    let operation1 = this;
+    if (operation1.targetLength !== operation2.baseLength) {
+      throw new Error(
+        "The base length of the second operation has to be the target length of the first operation"
       );
     }
 
-    for (const userId in result.versions) {
-      result.versions[userId] = Math.max(0, result.versions[userId]);
-    }
-
-    return result;
-  }
-
-  // For debugging
-  toString(): string {
-    return JSON.stringify(this.versions);
-  }
-}
-
-export interface TextOperation {
-  id?: string;
-  type: OperationType;
-  position: number;
-  text?: string;
-  length?: number;
-  baseVersionVector: { [userId: string]: number }; // Keep as raw object for serialization
-  userId: string;
-}
-
-export interface OperationAck {
-  operationId: string;
-  versionVector: { versions: { [userId: string]: number } };
-  userId: string;
-}
-
-export class TextOperationManager {
-  private editor: editor.IStandaloneCodeEditor;
-  private model: editor.ITextModel;
-  private localVersionVector: VersionVector;
-  private pendingOperations: Map<string, TextOperation> = new Map();
-  private operationHistory: TextOperation[] = [];
-  private userId: string;
-  private operationCallback: (op: TextOperation) => void;
-  private isApplyingExternalOperation: boolean = false;
-  private lastCursorState: editor.ICursorState[] | null = null;
-
-  constructor(
-    editor: editor.IStandaloneCodeEditor,
-    userId: string,
-    initialVersionVector: { [userId: string]: number } = {},
-    operationCallback: (op: TextOperation) => void
-  ) {
-    this.editor = editor;
-    this.model = editor.getModel()!;
-    this.userId = userId;
-    this.localVersionVector = new VersionVector(
-      typeof initialVersionVector === "object" && initialVersionVector !== null
-        ? initialVersionVector
-        : {}
-    );
-    this.operationCallback = operationCallback;
-
-    // Initialize user's version if not present
-    if (!this.localVersionVector.getVersions()[userId]) {
-      this.localVersionVector.update(userId, 0);
-    }
-
-    this.model.onDidChangeContent((e) => {
-      if (!this.isApplyingExternalOperation) {
-        this.handleModelContentChange(e);
+    let operation = new TextOperation(); // the combined operation
+    let ops1 = operation1.ops;
+    let ops2 = operation2.ops;
+    let i1 = 0,
+      i2 = 0; // current index into ops1/ops2
+    let op1 = ops1[i1++];
+    let op2 = ops2[i2++];
+    while (true) {
+      // Dispatch on the type of op1 and op2
+      if (typeof op1 === "undefined" && typeof op2 === "undefined") {
+        // end condition: both operations have been processed
+        break;
       }
-    });
 
-    // Save cursor state when user moves the cursor
-    this.editor.onDidChangeCursorPosition(() => {
-      if (!this.isApplyingExternalOperation) {
-        this.lastCursorState = this.editor.saveViewState()?.cursorState || null;
+      if (TextOperation.isDelete(op1)) {
+        operation.delete(op1 as number);
+        op1 = ops1[i1++];
+        continue;
       }
-    });
+      if (TextOperation.isInsert(op2)) {
+        operation.insert(op2 as string);
+        op2 = ops2[i2++];
+        continue;
+      }
 
-    console.log(
-      "TextOperationManager initialized with version vector:",
-      this.localVersionVector.toString()
-    );
-  }
+      if (typeof op1 === "undefined") {
+        throw new Error(
+          "Cannot compose operations: first operation is too short."
+        );
+      }
+      if (typeof op2 === "undefined") {
+        throw new Error(
+          "Cannot compose operations: second operation is too short."
+        );
+      }
 
-  private handleModelContentChange(e: editor.IModelContentChangedEvent): void {
-    const changes = e.changes;
-    // Sort changes in reverse order to handle multiple changes correctly
-    changes.sort((a, b) => b.rangeOffset - a.rangeOffset);
-
-    for (const change of changes) {
-      const operation = this.createOperationFromChange(change);
-      if (operation) {
-        operation.id = uuidv4();
-        operation.baseVersionVector = this.localVersionVector.getVersions();
-        this.pendingOperations.set(operation.id, operation);
-
-        // Increment local version for our own operation
-        this.incrementLocalVersion();
-
-        console.log("Created operation:", operation);
-        this.operationCallback(operation);
+      if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
+        let op1Retain = op1 as number;
+        let op2Retain = op2 as number;
+        if (op1Retain > op2Retain) {
+          operation.retain(op2Retain);
+          op1 = op1Retain - op2Retain;
+          op2 = ops2[i2++];
+        } else if (op1Retain === op2Retain) {
+          operation.retain(op1Retain);
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          operation.retain(op1Retain);
+          op2 = op2Retain - op1Retain;
+          op1 = ops1[i1++];
+        }
+      } else if (TextOperation.isInsert(op1) && TextOperation.isDelete(op2)) {
+        let op1Insert = op1 as string;
+        let op2Delete = op2 as number;
+        if (op1Insert.length > -op2Delete) {
+          op1 = op1Insert.slice(0, op1Insert.length + op2Delete);
+          op2 = ops2[i2++];
+        } else if (op1Insert.length === -op2Delete) {
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          op2 = op2Delete + op1Insert.length;
+          op1 = ops1[i1++];
+        }
+      } else if (TextOperation.isInsert(op1) && TextOperation.isRetain(op2)) {
+        let op1Insert = op1 as string;
+        let op2Retain = op2 as number;
+        if (op1Insert.length > op2Retain) {
+          operation.insert(op1Insert.slice(0, op2Retain));
+          op1 = op1Insert.slice(op2Retain);
+          op2 = ops2[i2++];
+        } else if (op1Insert.length === op2Retain) {
+          operation.insert(op1Insert);
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          operation.insert(op1Insert);
+          op2 = op2Retain - op1Insert.length;
+          op1 = ops1[i1++];
+        }
+      } else if (TextOperation.isRetain(op1) && TextOperation.isDelete(op2)) {
+        let op1Retain = op1 as number;
+        let op2Delete = op2 as number;
+        if (op1Retain > -op2Delete) {
+          operation.delete(op2Delete);
+          op1 = op1Retain + op2Delete;
+          op2 = ops2[i2++];
+        } else if (op1Retain === -op2Delete) {
+          operation.delete(op2Delete);
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          operation.delete(-op1Retain);
+          op2 = op2Delete + op1Retain;
+          op1 = ops1[i1++];
+        }
+      } else {
+        throw new Error(
+          "This shouldn't happen: op1: " +
+            JSON.stringify(op1) +
+            ", op2: " +
+            JSON.stringify(op2)
+        );
       }
     }
-  }
-
-  private incrementLocalVersion(): void {
-    const versions = this.localVersionVector.getVersions();
-    const currentVersion = versions[this.userId] || 0;
-    this.localVersionVector.update(this.userId, currentVersion + 1);
-  }
-
-  private createOperationFromChange(
-    change: editor.IModelContentChange
-  ): TextOperation | null {
-    const position = change.rangeOffset;
-    let length = change.rangeLength; // Get length from event first
-    const text = change.text;
-    const normalizedText = text.replace(/\r\n/g, "\n");
-
-    let type: OperationType;
-    if (length === 0 && normalizedText.length > 0) {
-      type = OperationType.INSERT;
-    } else if (length > 0 && normalizedText.length === 0) {
-      type = OperationType.DELETE;
-      // Potential Workaround: Re-check length for full document deletes?
-      // if (position === 0) {
-      //   const currentModelLength = this.model.getValueLength();
-      //   if (length !== currentModelLength) {
-      //      console.warn(`DELETE rangeLength (${length}) from event differs from current model length (${currentModelLength}). Using current length.`);
-      //      length = currentModelLength; // Use potentially more up-to-date length
-      //   }
-      // }
-    } else if (length > 0 && normalizedText.length > 0) {
-      type = OperationType.REPLACE;
-    } else {
-      return null;
-    }
-
-    const operation: TextOperation = {
-      type,
-      position,
-      text: normalizedText.length > 0 ? normalizedText : undefined,
-      length: length > 0 ? length : undefined,
-      baseVersionVector: {},
-      userId: this.userId,
-    };
+    // Don't need the compose logs anymore if using reference impl
+    // console.log(`[Compose End] Final composed: ${operation.toString()}, base=${operation.baseLength}, target=${operation.targetLength}`);
     return operation;
   }
 
-  public applyOperation(operation: TextOperation): void {
-    console.log("Applying operation:", operation);
+  // Transform takes two operations A and B that happened concurrently and
+  // produces two operations A' and B' (in an array) such that
+  // apply(apply(S, A), B') = apply(apply(S, B), A').
+  static transform(
+    operation1: TextOperation,
+    operation2: TextOperation
+  ): [TextOperation, TextOperation] {
+    // Add detailed logging before the check
+    console.log(
+      `[Transform Check] Op1 Base: ${operation1.baseLength}, Op2 Base: ${operation2.baseLength}`,
+      {
+        op1_ops: operation1.toJSON(),
+        op2_ops: operation2.toJSON(),
+        // Log the full objects for inspection in console
+        op1_object: operation1,
+        op2_object: operation2,
+      }
+    );
 
-    // For remote operations
-    if (operation.userId !== this.userId) {
-      // Save cursor position before applying remote operation
-      const previousSelections = this.editor.getSelections() || [];
+    let operation1prime = new TextOperation();
+    let operation2prime = new TextOperation();
+    let ops1 = operation1.ops;
+    let ops2 = operation2.ops;
+    let i1 = 0,
+      i2 = 0;
+    let op1 = ops1[i1++];
+    let op2 = ops2[i2++];
+    while (true) {
+      // At every iteration of the loop, the imaginary cursor that both
+      // operation1 and operation2 have that operates on the input string must
+      // have the same position in the input string.
 
-      // Find concurrent operations ONLY against pending
-      const concurrentPendingOps =
-        this.findConcurrentPendingOperations(operation);
-      // Sort them deterministically (already implemented in sortOperations)
-      this.sortOperations(concurrentPendingOps); // Uses existing sorting logic
+      if (typeof op1 === "undefined" && typeof op2 === "undefined") {
+        // end condition: both operations have been processed
+        break;
+      }
 
-      // Transform the operation against all concurrent PENDING operations
-      let transformedOperation = this.cloneOperation(operation);
-      for (const concurrentOp of concurrentPendingOps) {
-        // Avoid transforming against self if somehow included (though concurrency check should prevent)
-        if (
-          transformedOperation.id &&
-          concurrentOp.id === transformedOperation.id &&
-          concurrentOp.userId === transformedOperation.userId
-        ) {
-          console.warn(
-            `Skipping self-transformation for op ${transformedOperation.id}`
-          );
-          continue;
-        }
-        transformedOperation = this.transformOperation(
-          this.cloneOperation(transformedOperation), // Pass clone to avoid side effects
-          this.cloneOperation(concurrentOp) // Pass clone to avoid side effects
+      // next two cases: one operation is insert, the other is retain/delete
+      // the insert operations have to be fitted in first
+      if (TextOperation.isInsert(op1)) {
+        operation1prime.insert(op1 as string);
+        operation2prime.retain((op1 as string).length);
+        op1 = ops1[i1++];
+        continue;
+      }
+      if (TextOperation.isInsert(op2)) {
+        operation1prime.retain((op2 as string).length);
+        operation2prime.insert(op2 as string);
+        op2 = ops2[i2++];
+        continue;
+      }
+
+      if (typeof op1 === "undefined") {
+        // Log context before throwing error
+        console.error("Transform Error: op1 undefined, op2 defined.", {
+          operation1_initial: operation1.toJSON(), // Log initial ops
+          operation2_initial: operation2.toJSON(),
+          current_op2: op2, // What's left in op2?
+          current_i1: i1,
+          current_i2: i2,
+          operation1prime_so_far: operation1prime.toJSON(), // What was built for op1'?
+          operation2prime_so_far: operation2prime.toJSON(), // What was built for op2'?
+        });
+        throw new Error(
+          "Cannot transform operations: first operation is too short."
+        );
+      }
+      if (typeof op2 === "undefined") {
+        // Log context before throwing error
+        console.error("Transform Error: op2 undefined, op1 defined.", {
+          operation1_initial: operation1.toJSON(), // Log initial ops
+          operation2_initial: operation2.toJSON(),
+          current_op1: op1, // What's left in op1?
+          current_i1: i1,
+          current_i2: i2,
+          operation1prime_so_far: operation1prime.toJSON(), // What was built for op1'?
+          operation2prime_so_far: operation2prime.toJSON(), // What was built for op2'?
+        });
+        throw new Error(
+          "Cannot transform operations: second operation is too short."
         );
       }
 
-      this.validateOperation(transformedOperation);
+      let minLength;
+      if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
+        // Simple case: retain/retain
+        let op1Retain = op1 as number;
+        let op2Retain = op2 as number;
+        if (op1Retain > op2Retain) {
+          minLength = op2Retain;
+          op1 = op1Retain - op2Retain;
+          op2 = ops2[i2++];
+        } else if (op1Retain === op2Retain) {
+          minLength = op2Retain;
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          minLength = op1Retain;
+          op2 = op2Retain - op1Retain;
+          op1 = ops1[i1++];
+        }
+        operation1prime.retain(minLength);
+        operation2prime.retain(minLength);
+      } else if (TextOperation.isDelete(op1) && TextOperation.isDelete(op2)) {
+        // Both operations delete the same string
+        let op1Delete = op1 as number;
+        let op2Delete = op2 as number;
+        if (-op1Delete > -op2Delete) {
+          op1 = op1Delete - op2Delete;
+          op2 = ops2[i2++];
+        } else if (-op1Delete === -op2Delete) {
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          op2 = op2Delete - op1Delete;
+          op1 = ops1[i1++];
+        }
+      } else if (TextOperation.isDelete(op1) && TextOperation.isRetain(op2)) {
+        let op1Delete = op1 as number;
+        let op2Retain = op2 as number;
+        if (-op1Delete > op2Retain) {
+          minLength = op2Retain;
+          op1 = op1Delete + op2Retain;
+          op2 = ops2[i2++];
+        } else if (-op1Delete === op2Retain) {
+          minLength = op2Retain;
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          minLength = -op1Delete;
+          op2 = op2Retain + op1Delete;
+          op1 = ops1[i1++];
+        }
+        operation1prime.delete(minLength);
+      } else if (TextOperation.isRetain(op1) && TextOperation.isDelete(op2)) {
+        let op1Retain = op1 as number;
+        let op2Delete = op2 as number;
+        if (op1Retain > -op2Delete) {
+          minLength = -op2Delete;
+          op1 = op1Retain + op2Delete;
+          op2 = ops2[i2++];
+        } else if (op1Retain === -op2Delete) {
+          minLength = op1Retain;
+          op1 = ops1[i1++];
+          op2 = ops2[i2++];
+        } else {
+          minLength = op1Retain;
+          op2 = op2Delete + op1Retain;
+          op1 = ops1[i1++];
+        }
+        operation2prime.delete(minLength);
+      } else {
+        throw new Error("Unrecognized case in transform.");
+      }
+    }
+    return [operation1prime, operation2prime];
+  }
 
-      // Apply the transformed operation
-      this.isApplyingExternalOperation = true;
-      try {
-        const edits: editor.IIdentifiedSingleEditOperation[] = [];
-        const range = this.getOperationRange(transformedOperation);
+  // Pretty printing.
+  toString(): string {
+    return this.ops
+      .map((op) => {
+        if (TextOperation.isRetain(op)) {
+          return "retain " + op;
+        } else if (TextOperation.isInsert(op)) {
+          return "insert '" + op + "'";
+        } else {
+          return "delete " + -op;
+        }
+      })
+      .join(", ");
+  }
+}
 
-        if (transformedOperation.type === OperationType.INSERT) {
+// #############################################################################
+// ## Monaco Adapter Logic (based on ot.js CodeMirrorAdapter)
+// #############################################################################
+
+// Helper functions (keep implementations)
+function positionToOffset(
+  model: editor.ITextModel,
+  position: Position
+): number {
+  return model.getOffsetAt(position);
+}
+function offsetToPosition(model: editor.ITextModel, offset: number): Position {
+  const maxOffset = getModelLength(model);
+  const clampedOffset = Math.max(0, Math.min(offset, maxOffset));
+  // if (offset !== clampedOffset) {
+  //     console.warn(`Clamped offset from ${offset} to ${clampedOffset}`);
+  // }
+  return model.getPositionAt(clampedOffset);
+}
+function getModelLength(model: editor.ITextModel): number {
+  const lastLine = model.getLineCount();
+  const lastCol = model.getLineMaxColumn(lastLine);
+  return model.getOffsetAt(new Position(lastLine, lastCol));
+}
+
+export class MonacoAdapter {
+  private editor: editor.IStandaloneCodeEditor;
+  private model: editor.ITextModel;
+  public ignoreNextChange: boolean = false;
+  private changeInProgress: boolean = false;
+  private selectionChanged: boolean = false;
+  private callbacks: { [key: string]: Function } = {};
+  private lastValue: string = ""; // Restore lastValue
+  private contentChangeListener: IDisposable | null = null;
+  private cursorChangeListener: IDisposable | null = null;
+  private focusListener: IDisposable | null = null;
+  private blurListener: IDisposable | null = null;
+
+  constructor(editorInstance: editor.IStandaloneCodeEditor) {
+    this.editor = editorInstance;
+    this.model = editorInstance.getModel()!;
+    this.lastValue = this.model.getValue(); // Initialize lastValue
+
+    this.onDidContentChange = this.onDidContentChange.bind(this);
+    this.onDidCursorPositionChange = this.onDidCursorPositionChange.bind(this);
+    this.onDidFocusEditorText = this.onDidFocusEditorText.bind(this);
+    this.onDidBlurEditorText = this.onDidBlurEditorText.bind(this);
+
+    // Debounce content change handler to aggregate rapid changes
+    // const debouncedHandler = debounce(this.onDidContentChange, 50); // 50ms debounce window
+
+    this.contentChangeListener =
+      // this.editor.onDidChangeModelContent(debouncedHandler);
+      this.editor.onDidChangeModelContent(this.onDidContentChange); // Remove debounce
+    // No debounce for cursor needed, handled by Client state/debounced sender
+    this.cursorChangeListener = this.editor.onDidChangeCursorPosition(
+      this.onDidCursorPositionChange
+    );
+    this.focusListener = this.editor.onDidFocusEditorText(
+      this.onDidFocusEditorText
+    );
+    this.blurListener = this.editor.onDidBlurEditorText(
+      this.onDidBlurEditorText
+    );
+  }
+
+  detach(): void {
+    this.contentChangeListener?.dispose();
+    this.cursorChangeListener?.dispose();
+    this.focusListener?.dispose();
+    this.blurListener?.dispose();
+    console.log("MonacoAdapter detached listeners.");
+  }
+
+  // Convert Monaco change events to a TextOperation
+  // Attempts to derive old value for inverse calculation
+  static operationFromMonacoChanges(
+    changes: editor.IModelContentChangedEvent["changes"],
+    previousDocValue: string // Doc state BEFORE the change
+  ): [TextOperation, TextOperation] {
+    const oldDocLength = previousDocValue.length; // Calculate from previous value
+
+    // Reconstruct approximate old value by reversing changes (VERY HARD TO GET RIGHT)
+    // For simplicity, we'll use the *current* value to generate the inverse later.
+    // This means the `invert` function needs the *current* doc state, not the old one.
+    const valueForInvert = previousDocValue; // Let's try using the previous value for invert too
+
+    // Sort changes by offset for sequential processing
+    const sortedChanges = [...changes].sort(
+      (a, b) => a.rangeOffset - b.rangeOffset
+    );
+
+    const forwardOperation = new TextOperation();
+    let runningOffset = 0; // Tracks position in the *old* document state
+
+    for (const change of sortedChanges) {
+      const retainLength = change.rangeOffset - runningOffset;
+      if (retainLength < 0) {
+        console.error(
+          "Negative retain detected in operationFromMonacoChanges",
+          { change, runningOffset, oldDocLength }
+        );
+        throw new Error("Negative retain in forward operation calculation");
+      }
+      if (retainLength > 0) forwardOperation.retain(retainLength);
+
+      const deletedLength = change.rangeLength;
+      const insertedText = change.text;
+
+      if (deletedLength > 0) {
+        forwardOperation.delete(deletedLength);
+      }
+      if (insertedText.length > 0) {
+        forwardOperation.insert(insertedText);
+      }
+      // Advance offset based on the length processed in the *old* document
+      runningOffset += retainLength + deletedLength;
+    }
+
+    const finalRetain = oldDocLength - runningOffset;
+    if (finalRetain < 0) {
+      console.error(
+        "Negative final retain detected in operationFromMonacoChanges",
+        { oldDocLength, runningOffset, previousDocValue, changes }
+      );
+      throw new Error("Negative final retain in forward operation calculation");
+    }
+    if (finalRetain > 0) forwardOperation.retain(finalRetain);
+
+    // Add sanity check:
+    if (forwardOperation.baseLength !== oldDocLength) {
+      console.error(
+        `CALCULATION MISMATCH in operationFromMonacoChanges! forwardOp.baseLength=${forwardOperation.baseLength}, calcOldDocLength=${oldDocLength}`,
+        {
+          changes: changes,
+          previousDocValue: previousDocValue,
+        }
+      );
+      // Potentially throw an error here or handle it, as this indicates a bug
+      // throw new Error("Internal error: Mismatch in operation baseLength calculation.");
+    }
+
+    // Generate inverse based on the value BEFORE the change
+    const inverseOperation = forwardOperation.invert(valueForInvert);
+
+    return [forwardOperation, inverseOperation];
+  }
+
+  applyOperation(operation: TextOperation): void {
+    if (operation.isNoop()) return;
+
+    this.ignoreNextChange = true;
+    const model = this.editor.getModel();
+    if (!model) {
+      console.error("Cannot apply operation: Monaco model not found.");
+      this.ignoreNextChange = false; // Reset flag if we can't apply
+      return;
+    }
+
+    const edits: editor.IIdentifiedSingleEditOperation[] = [];
+    let currentIndex = 0;
+
+    try {
+      for (const op of operation.ops) {
+        if (TextOperation.isRetain(op)) {
+          currentIndex += op;
+        } else if (TextOperation.isInsert(op)) {
+          const pos = offsetToPosition(model, currentIndex);
           edits.push({
-            range,
-            text: transformedOperation.text || "",
+            range: new MonacoRange(
+              pos.lineNumber,
+              pos.column,
+              pos.lineNumber,
+              pos.column
+            ),
+            text: op,
             forceMoveMarkers: true,
           });
-        } else if (transformedOperation.type === OperationType.DELETE) {
+        } else if (TextOperation.isDelete(op)) {
+          const deleteCount = -op;
+          const startPos = offsetToPosition(model, currentIndex);
+          const endPos = offsetToPosition(model, currentIndex + deleteCount);
           edits.push({
-            range,
+            range: new MonacoRange(
+              startPos.lineNumber,
+              startPos.column,
+              endPos.lineNumber,
+              endPos.column
+            ),
             text: "",
             forceMoveMarkers: true,
           });
-        } else if (transformedOperation.type === OperationType.REPLACE) {
-          edits.push({
-            range,
-            text: transformedOperation.text || "",
-            forceMoveMarkers: true,
-          });
+          currentIndex += deleteCount;
+        } else {
+          throw new Error("Invalid OP type in applyOperation");
         }
-
-        // Transform selections against the operation
-        const transformedSelections = this.transformSelections(
-          previousSelections,
-          transformedOperation
-        );
-
-        this.model.pushEditOperations(
-          previousSelections,
-          edits,
-          () => transformedSelections
-        );
-      } finally {
-        this.isApplyingExternalOperation = false;
       }
-    }
 
-    // Update version vector for both local and remote operations
-    if (operation.id && this.pendingOperations.has(operation.id)) {
-      // This handles the case where a local operation is echoed back
-      // We remove it from pending, but the main vector update happens in acknowledgeOperation
-      this.pendingOperations.delete(operation.id);
-      console.log(`Removed echoed local op ${operation.id} from pending.`);
-    }
-
-    // We merge the vector state *associated with the incoming operation*
-    // This advances our knowledge of the state of other clients as represented
-    // by the incoming operation's base vector.
-    // For acknowledged local operations, the vector update happens in `acknowledgeOperation`.
-    // For remote operations, we merge their base vector here.
-    if (operation.userId !== this.userId) {
-      this.updateVersionVector(operation.baseVersionVector);
-      console.log(
-        `Merged incoming remote op ${operation.id}'s base vector. New local vector:`,
-        this.localVersionVector.toString()
+      model.pushEditOperations([], edits, () => null);
+    } catch (e) {
+      console.error(
+        "Error applying operation:",
+        e,
+        "Op:",
+        operation.toString(),
+        "Edits:",
+        edits
       );
-    } else {
-      console.log(
-        `Local echo ${operation.id}. Vector update deferred to acknowledgeOperation.`
-      );
+      this.ignoreNextChange = false; // Reset on error
+    }
+    // ignoreNextChange is reset in the change handler
+  }
+
+  registerCallbacks(cb: { [key: string]: Function }): void {
+    this.callbacks = cb;
+  }
+
+  trigger(event: string, ...args: any[]): void {
+    const action = this.callbacks && this.callbacks[event];
+    if (action) {
+      action.apply(null, args);
     }
   }
 
-  private transformSelections(
-    selections: Selection[],
-    operation: TextOperation
-  ): Selection[] {
-    if (!selections || selections.length === 0) {
-      return [];
-    }
+  private onDidContentChange(e: editor.IModelContentChangedEvent): void {
+    const currentValue = this.model.getValue(); // Get value AFTER the change
 
-    return selections.map((selection) => {
-      const startOffset = this.model.getOffsetAt({
-        lineNumber: selection.startLineNumber,
-        column: selection.startColumn,
-      });
-      const endOffset = this.model.getOffsetAt({
-        lineNumber: selection.endLineNumber,
-        column: selection.endColumn,
-      });
-
-      // Transform start and end positions
-      let newStartOffset = this.transformCursorPosition(startOffset, operation);
-      let newEndOffset = this.transformCursorPosition(endOffset, operation);
-
-      // Convert back to line/column positions
-      const newStartPos = this.model.getPositionAt(newStartOffset);
-      const newEndPos = this.model.getPositionAt(newEndOffset);
-
-      return new Selection(
-        newStartPos.lineNumber,
-        newStartPos.column,
-        newEndPos.lineNumber,
-        newEndPos.column
-      );
-    });
-  }
-
-  private transformCursorPosition(
-    cursorOffset: number,
-    operation: TextOperation
-  ): number {
-    switch (operation.type) {
-      case OperationType.INSERT:
-        if (cursorOffset < operation.position) {
-          // Cursor is before the insert point - no change
-          return cursorOffset;
-        } else if (cursorOffset === operation.position) {
-          // Cursor is exactly at the insert point - use the same tie-breaking logic
-          // as operation transformation for consistency
-          if (this.userId === operation.userId) {
-            // Same user, place after insert
-            return cursorOffset + (operation.text?.length || 0);
-          } else {
-            const comparison = this.userId.localeCompare(operation.userId);
-            if (comparison <= 0) {
-              // Our ID is smaller, place before
-              return cursorOffset;
-            } else {
-              // Our ID is larger, place after
-              return cursorOffset + (operation.text?.length || 0);
-            }
-          }
-        } else {
-          // Cursor is after the insert point - shift it
-          return cursorOffset + (operation.text?.length || 0);
-        }
-
-      case OperationType.DELETE:
-        if (!operation.length) return cursorOffset;
-
-        if (cursorOffset <= operation.position) {
-          // Cursor is before or at the delete start - no change
-          return cursorOffset;
-        } else if (cursorOffset <= operation.position + operation.length) {
-          // Cursor is within the deleted range - move to the start of deletion
-          return operation.position;
-        } else {
-          // Cursor is after the deletion - shift it left
-          return cursorOffset - operation.length;
-        }
-
-      case OperationType.REPLACE:
-        if (!operation.length) return cursorOffset;
-
-        if (cursorOffset <= operation.position) {
-          // Cursor is before the replace - no change
-          return cursorOffset;
-        } else if (cursorOffset <= operation.position + operation.length) {
-          // Cursor is within the replaced region - move to the end of the new text
-          // This is a common strategy for replace operations
-          return operation.position + (operation.text?.length || 0);
-        } else {
-          // Cursor is after the replaced region - adjust by the difference in length
-          const lengthDiff = (operation.text?.length || 0) - operation.length;
-          return cursorOffset + lengthDiff;
-        }
-    }
-
-    return cursorOffset;
-  }
-
-  private getOperationRange(operation: TextOperation): IRange {
-    const startPosition = this.model.getPositionAt(operation.position);
-    let endPosition =
-      operation.length && operation.length > 0
-        ? this.model.getPositionAt(operation.position + operation.length)
-        : startPosition;
-
-    return {
-      startLineNumber: startPosition.lineNumber,
-      startColumn: startPosition.column,
-      endLineNumber: endPosition.lineNumber,
-      endColumn: endPosition.column,
-    };
-  }
-
-  public acknowledgeOperation(ack: OperationAck): void {
-    console.log("Operation acknowledged:", ack);
-    if (this.pendingOperations.has(ack.operationId)) {
-      this.pendingOperations.delete(ack.operationId);
-    }
-    this.updateVersionVector(ack.versionVector.versions);
-    console.log(
-      "Updated local version vector:",
-      this.localVersionVector.toString()
-    );
-  }
-
-  public getVersionVector(): { [userId: string]: number } {
-    return this.localVersionVector.getVersions();
-  }
-
-  public setVersionVector(vector: { [userId: string]: number }): void {
-    this.localVersionVector = new VersionVector(vector);
-    console.log("Version vector set to:", this.localVersionVector.toString());
-  }
-
-  private findConcurrentPendingOperations(
-    incomingOp: TextOperation
-  ): TextOperation[] {
-    const concurrent: TextOperation[] = [];
-    // Use the versions map directly from the incoming operation's base vector
-    const incomingVectorMap = (incomingOp.baseVersionVector?.versions ||
-      incomingOp.baseVersionVector ||
-      {}) as { [userId: string]: number };
-
-    console.log(
-      `Finding concurrent PENDING ops for incoming ${incomingOp.id} (User ${
-        incomingOp.userId
-      }) with VV ${JSON.stringify(incomingVectorMap)}`
-    );
-
-    const checkConcurrency = (opToCheck: TextOperation, source: string) => {
-      // Skip transforming an incoming op against itself (redundant check)
-      if (
-        incomingOp.id &&
-        opToCheck.id === incomingOp.id &&
-        incomingOp.userId === opToCheck.userId
-      ) {
+    if (this.ignoreNextChange) {
+      console.log("Adapter: Ignoring change caused by applyOperation.");
+      this.ignoreNextChange = false;
+      // Update lastValue to reflect the state AFTER the ignored server change
+      this.lastValue = currentValue;
+      if (this.selectionChanged) {
         console.log(
-          ` - Skipping ${source} op ${opToCheck.id} (matches incoming op)`
+          "Adapter: Triggering deferred selectionChange after ignored content change."
         );
+        this.trigger("selectionChange");
+        this.selectionChanged = false;
+      }
+      return;
+    }
+
+    console.log("Adapter: Processing user change event.");
+    // currentLength is calculated from currentValue, so it's AFTER the change
+    // const currentLength = getModelLength(this.model); // Not directly needed here
+
+    // --- Estimate previous value --- START
+    // REMOVE estimation logic - rely on this.lastValue
+    // let estimatedPreviousValue = currentValue;
+    // try { ... } catch { ... }
+    // --- Estimate previous value --- END
+
+    const valueBeforeChange = this.lastValue; // Use the tracked value
+    console.log(
+      "Calling operationFromMonacoChanges with previousDocValue:",
+      JSON.stringify(valueBeforeChange) // Log valueBeforeChange
+    );
+
+    try {
+      // Use the reliable previous value
+      const [operation, inverse] = MonacoAdapter.operationFromMonacoChanges(
+        e.changes,
+        // currentLength, // Not needed
+        valueBeforeChange // Pass the value *before* this change
+      );
+
+      // Update lastValue for the *next* change event AFTER successfully processing this one
+      this.lastValue = currentValue;
+
+      console.log(
+        "Local change -> Op:",
+        operation.toString(),
+        "Inverse:",
+        inverse.toString()
+      );
+      if (!operation.isNoop()) {
+        this.trigger("change", operation, inverse);
+      }
+    } catch (err) {
+      console.error(
+        "Error creating operation from Monaco changes:",
+        err,
+        e.changes
+      );
+      // Restore lastValue on error? Or just leave it as currentValue?
+      // Leaving it as currentValue seems safer if an error occurred during op generation.
+      // this.lastValue = currentValue; // No longer used
+    }
+
+    if (this.selectionChanged) {
+      console.log(
+        "Adapter: Triggering deferred selectionChange after user content change."
+      );
+      this.trigger("selectionChange");
+      this.selectionChanged = false;
+    }
+    this.changeInProgress = false;
+  }
+
+  private onDidCursorPositionChange(): void {
+    if (this.ignoreNextChange) {
+      // console.log("Adapter: Ignoring cursor change during programmatic update.");
+      // Still mark selection as potentially changed, to be triggered after ignore flag reset
+      this.selectionChanged = true;
+      return;
+    }
+    // console.log("Adapter: User cursor/selection change detected.");
+    if (this.changeInProgress) {
+      // Should not happen if debounced
+      this.selectionChanged = true;
+    } else {
+      this.trigger("selectionChange");
+      this.selectionChanged = false;
+    }
+  }
+
+  private onDidFocusEditorText(): void {
+    console.log("Adapter: Editor focused.");
+    this.onDidCursorPositionChange();
+  }
+
+  private onDidBlurEditorText(): void {
+    console.log("Adapter: Editor blurred.");
+    const selection = this.editor.getSelection();
+    if (!selection || selection.isEmpty()) {
+      this.trigger("blur");
+    }
+  }
+
+  getSelection(): OTSelection | null {
+    const selections = this.editor.getSelections();
+    if (!selections || selections.length === 0) return null;
+
+    const model = this.model;
+    if (!model) return null;
+
+    try {
+      const ranges = selections.map((sel) => {
+        const startOffset = positionToOffset(model, sel.getStartPosition());
+        const endOffset = positionToOffset(model, sel.getEndPosition());
+        let anchor = sel.getSelectionStart().equals(sel.getStartPosition())
+          ? startOffset
+          : endOffset;
+        let head = sel.getSelectionStart().equals(sel.getStartPosition())
+          ? endOffset
+          : startOffset;
+        return new OTSelection.SelectionRange(anchor, head);
+      });
+      return new OTSelection(ranges);
+    } catch (e) {
+      console.error("Error getting selection:", e);
+      return null;
+    }
+  }
+
+  setSelection(selection: OTSelection | null): void {
+    this.ignoreNextChange = true; // Ignore potential cursor change event
+    try {
+      const model = this.model;
+      if (!model) return;
+
+      if (!selection || selection.ranges.length === 0) {
+        const currentPos = this.editor.getPosition() || new Position(1, 1);
+        this.editor.setSelection(
+          new Selection(
+            currentPos.lineNumber,
+            currentPos.column,
+            currentPos.lineNumber,
+            currentPos.column
+          )
+        );
+        // console.log("Adapter: Cleared selection / collapsed cursor.");
         return;
       }
 
-      // Defensive access: Try .versions first, then direct map
-      const opToCheckBaseMap = (opToCheck.baseVersionVector?.versions ||
-        opToCheck.baseVersionVector ||
-        {}) as { [userId: string]: number };
-      const incomingBaseMap = (incomingOp.baseVersionVector?.versions ||
-        incomingOp.baseVersionVector ||
-        {}) as { [userId: string]: number };
-
-      const opToCheckUserId = opToCheck.userId;
-
-      // Get the version of the opToCheck's user as known by the *incoming operation's base state*
-      const opToCheckUserVersionInIncoming =
-        incomingBaseMap[opToCheckUserId] || 0; // Use derived incomingBaseMap
-
-      // Get the version of the opToCheck's user *when opToCheck was created/applied*
-      // This is the sequence number component relevant for concurrency check.
-      const opToCheckSequenceNumber =
-        (opToCheckBaseMap[opToCheckUserId] || 0) + 1; // Use derived opToCheckBaseMap
-
-      // Log for debugging (using the calculated values)
-      console.log(
-        `  vs ${source} Op ${
-          opToCheck.id?.substring(0, 8) ?? "N/A"
-        } (User ${opToCheckUserId}): IncomingKnowsVer(${opToCheckUserId})=${opToCheckUserVersionInIncoming}, OpToCheckCreatesVer(${opToCheckUserId})=${opToCheckSequenceNumber}`
-      );
-
-      // Concurrency Check
-      if (opToCheckUserVersionInIncoming < opToCheckSequenceNumber) {
-        console.log(
-          `   -> CONCURRENT: Incoming state for User ${opToCheckUserId} (${opToCheckUserVersionInIncoming}) < OpToCheck's resulting version (${opToCheckSequenceNumber})`
+      const monacoSelections = selection.ranges.map((range) => {
+        const anchorPos = offsetToPosition(model, range.anchor);
+        const headPos = offsetToPosition(model, range.head);
+        return new Selection(
+          anchorPos.lineNumber,
+          anchorPos.column,
+          headPos.lineNumber,
+          headPos.column
         );
-        concurrent.push(this.cloneOperation(opToCheck)); // Add a clone
-      } else {
-        console.log(
-          `   -> NOT CONCURRENT: Incoming state for User ${opToCheckUserId} (${opToCheckUserVersionInIncoming}) >= OpToCheck's resulting version (${opToCheckSequenceNumber})`
-        );
-      }
-    };
-
-    // Check against pending operations
-    console.log(" Checking against PENDING operations:");
-    for (const [_, pendingOp] of this.pendingOperations) {
-      // Pass the correct incoming map for comparison
-      checkConcurrency(pendingOp, "Pending");
+      });
+      // console.log("Adapter: Setting Monaco selections:", monacoSelections);
+      this.editor.setSelections(monacoSelections);
+    } catch (e) {
+      console.error("Error setting selection:", e, selection);
+    } finally {
+      setTimeout(() => {
+        this.ignoreNextChange = false;
+        this.selectionChanged = false; // Clear deferred flag
+        // console.log("Adapter: Reset ignoreNextChange after setSelection timeout.");
+      }, 0);
     }
-
-    // No need to sort here, sortOperations is called in applyOperation
-    if (concurrent.length > 0) {
-      console.log(
-        ` -> Incoming op ${incomingOp.id} (User ${
-          incomingOp.userId
-        }) will be transformed against ${
-          concurrent.length
-        } PENDING operations: [${concurrent
-          .map((op) => `${op.id?.substring(0, 8)}`)
-          .join(", ")}]`
-      );
-    } else {
-      console.log(
-        ` -> Incoming op ${incomingOp.id} (User ${incomingOp.userId}) requires no transformation against PENDING ops.`
-      );
-    }
-
-    return concurrent;
   }
 
-  private updateVersionVector(
-    newVersions: { [userId: string]: number } | null
-  ): void {
-    if (!newVersions) {
-      console.warn(
-        "Received null or undefined version vector map to merge.",
-        new Error().stack
-      );
-      return;
-    }
-    const cleanVectorData =
-      typeof newVersions.versions === "object" && newVersions.versions !== null
-        ? newVersions.versions
-        : newVersions;
+  setOtherSelection(
+    selection: OTSelection,
+    color: string,
+    clientId: string
+  ): { clear: () => void } {
+    // ... (implementation requires CSS and decoration management) ...
+    console.warn("setOtherSelection not fully implemented for Monaco");
+    return { clear: () => {} }; // Placeholder
+  }
+}
 
-    const vectorToMerge = new VersionVector(cleanVectorData);
-    this.localVersionVector = this.localVersionVector.merge(vectorToMerge);
+// #############################################################################
+// ## Selection Logic (based on ot.js Selection)
+// #############################################################################
+
+export class OTSelection {
+  // Define the Range class *inside* OTSelection, renamed to SelectionRange
+  static SelectionRange = class SelectionRange {
+    // Renamed Range to SelectionRange
+    anchor: number;
+    head: number;
+
+    constructor(anchor: number, head: number) {
+      this.anchor = anchor;
+      this.head = head;
+    }
+
+    static fromJSON(obj: { anchor: number; head: number }): SelectionRange {
+      // Renamed Range to SelectionRange
+      return new SelectionRange(obj.anchor, obj.head); // Renamed Range to SelectionRange
+    }
+
+    equals(other: SelectionRange): boolean {
+      // Renamed Range to SelectionRange
+      return this.anchor === other.anchor && this.head === other.head;
+    }
+
+    isEmpty(): boolean {
+      return this.anchor === this.head;
+    }
+
+    private transformIndex(index: number, operation: TextOperation): number {
+      let newIndex = index;
+      let currentOffset = 0;
+      for (const op of operation.ops) {
+        if (TextOperation.isRetain(op)) {
+          if (index <= currentOffset + op) {
+            return newIndex;
+          }
+          currentOffset += op;
+        } else if (TextOperation.isInsert(op)) {
+          if (currentOffset <= index) {
+            newIndex += op.length;
+          }
+        } else if (TextOperation.isDelete(op)) {
+          const deleteCount = -op;
+          if (index <= currentOffset) {
+            /* Before delete */
+          } else if (index <= currentOffset + deleteCount) {
+            return currentOffset; /* Within delete */
+          } else {
+            newIndex -= deleteCount; /* After delete */
+          }
+          currentOffset += deleteCount;
+        } else {
+          throw new Error("Invalid op type during selection index transform");
+        }
+      }
+      return newIndex;
+    }
+
+    transform(operation: TextOperation): SelectionRange {
+      // Renamed Range to SelectionRange
+      const newAnchor = this.transformIndex(this.anchor, operation);
+      const newHead =
+        this.anchor === this.head
+          ? newAnchor
+          : this.transformIndex(this.head, operation);
+      return new SelectionRange(newAnchor, newHead); // Renamed Range to SelectionRange
+    }
+  }; // End of static SelectionRange class definition // Renamed Range to SelectionRange
+
+  ranges: InstanceType<typeof OTSelection.SelectionRange>[]; // Use InstanceType for the instance type
+
+  constructor(ranges?: InstanceType<typeof OTSelection.SelectionRange>[]) {
+    // Use InstanceType for the instance type
+    // Renamed Range to SelectionRange
+    // Ensure OTSelection.SelectionRange is used here if needed, check constructor logic // Renamed Range to SelectionRange
+    this.ranges =
+      ranges && ranges.length > 0
+        ? ranges.map((r) => new OTSelection.SelectionRange(r.anchor, r.head)) // Renamed Range to SelectionRange
+        : [new OTSelection.SelectionRange(0, 0)]; // Renamed Range to SelectionRange
+  }
+
+  static createCursor(position: number): OTSelection {
+    // Use the static inner class SelectionRange directly // Renamed Range to SelectionRange
+    return new OTSelection([
+      new OTSelection.SelectionRange(position, position),
+    ]); // Renamed Range to SelectionRange
+  }
+
+  static fromJSON(
+    obj: { ranges?: { anchor: number; head: number }[] } | null
+  ): OTSelection {
+    if (!obj || !obj.ranges || obj.ranges.length === 0) {
+      // Use the static inner class constructor
+      return new OTSelection([new OTSelection.SelectionRange(0, 0)]); // Renamed Range to SelectionRange
+    }
+    // Use the static inner class constructor directly
+    return new OTSelection(
+      obj.ranges.map((r) => new OTSelection.SelectionRange(r.anchor, r.head))
+    ); // Renamed Range to SelectionRange
+  }
+
+  equals(other: OTSelection | null): boolean {
+    if (!other) return false;
+    if (this.ranges.length !== other.ranges.length) return false;
+    for (let i = 0; i < this.ranges.length; i++) {
+      if (!this.ranges[i].equals(other.ranges[i])) return false;
+    }
+    return true;
+  }
+
+  somethingSelected(): boolean {
+    return this.ranges.some((range) => !range.isEmpty()); // range is now SelectionRange
+  }
+
+  compose(other: OTSelection | null): OTSelection | null {
+    return other;
+  }
+
+  transform(operation: TextOperation): OTSelection {
+    const newRanges = this.ranges.map((range) => range.transform(operation)); // range is now SelectionRange
+    // Ensure the constructor uses the static inner class correctly
+    return new OTSelection(newRanges);
+  }
+
+  toJSON(): { ranges: { anchor: number; head: number }[] } | null {
+    return {
+      ranges: this.ranges.map((r) => ({ anchor: r.anchor, head: r.head })),
+    };
+  }
+}
+
+// #############################################################################
+// ## Client State Machine Logic (based on ot.js Client)
+// #############################################################################
+
+export interface IClientCallbacks {
+  sendOperation: (revision: number, operation: TextOperation) => void;
+  applyOperation: (operation: TextOperation) => void;
+  sendSelection?: (selection: OTSelection | null) => void;
+  getSelection?: () => OTSelection | null;
+  setSelection?: (selection: OTSelection | null) => void;
+}
+
+interface IClientState {
+  applyClient(client: Client, operation: TextOperation): IClientState;
+  applyServer(client: Client, operation: TextOperation): IClientState;
+  serverAck(client: Client): IClientState;
+  transformSelection(selection: OTSelection): OTSelection;
+  resend?(client: Client): void;
+}
+
+class Synchronized implements IClientState {
+  applyClient(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] Synchronized -> Sending Op (rev ${client.revision})`);
+    client.callbacks.sendOperation(client.revision, operation);
+    return new AwaitingConfirm(operation);
+  }
+  applyServer(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] Synchronized -> Applying Server Op`);
+    client.callbacks.applyOperation(operation);
+    return this;
+  }
+  serverAck(client: Client): IClientState {
+    console.error(
+      `[${client.userId}] Received unexpected ACK in Synchronized state.`
+    );
+    return this;
+  }
+  transformSelection(selection: OTSelection): OTSelection {
+    return selection;
+  }
+}
+const synchronized_ = new Synchronized();
+
+class AwaitingConfirm implements IClientState {
+  outstanding: TextOperation;
+  constructor(outstanding: TextOperation) {
+    this.outstanding = outstanding;
+  }
+
+  applyClient(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] AwaitingConfirm -> Buffering Op`);
+    return new AwaitingWithBuffer(this.outstanding, operation);
+  }
+  applyServer(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] AwaitingConfirm -> Applying Server Op & Transforming Outstanding`);
+    const [newOutstanding, transformedOperation] = TextOperation.transform(
+      this.outstanding,
+      operation
+    );
+    client.callbacks.applyOperation(transformedOperation);
+    return new AwaitingConfirm(newOutstanding);
+  }
+  serverAck(client: Client): IClientState {
+    // console.log(`[${client.userId}] AwaitingConfirm -> ACK received -> Synchronized`);
+    return synchronized_;
+  }
+  transformSelection(selection: OTSelection): OTSelection {
+    return selection.transform(this.outstanding);
+  }
+  resend(client: Client): void {
+    // console.log(`[${client.userId}] AwaitingConfirm -> Resending Outstanding Op (rev ${client.revision})`);
+    client.callbacks.sendOperation(client.revision, this.outstanding);
+  }
+}
+
+class AwaitingWithBuffer implements IClientState {
+  outstanding: TextOperation;
+  buffer: TextOperation;
+  constructor(outstanding: TextOperation, buffer: TextOperation) {
+    this.outstanding = outstanding;
+    this.buffer = buffer;
+  }
+
+  applyClient(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> Composing Buffer`);
+    const newBuffer = this.buffer.compose(operation);
+    return new AwaitingWithBuffer(this.outstanding, newBuffer);
+  }
+  applyServer(client: Client, operation: TextOperation): IClientState {
+    // Detailed logging before the potentially failing transform calls
+    console.log(`[AWB ApplyServer] State Before Transform:`, {
+      outstanding_ops: this.outstanding.toJSON(),
+      outstanding_base: this.outstanding.baseLength,
+      outstanding_target: this.outstanding.targetLength, // Added target
+      buffer_ops: this.buffer.toJSON(),
+      buffer_base: this.buffer.baseLength,
+      buffer_target: this.buffer.targetLength, // Added target
+      server_op_ops: operation.toJSON(),
+      server_op_base: operation.baseLength,
+      server_op_target: operation.targetLength, // Added target
+      // Log full objects for deeper inspection
+      outstanding_obj: this.outstanding,
+      buffer_obj: this.buffer,
+      server_op_obj: operation,
+      client_revision: client.revision, // Added client revision
+    });
+
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> Applying Server Op & Transforming Outstanding/Buffer`);
+    // The error occurs in this first transform call
+    const [newOutstanding, transformedOperation1] = TextOperation.transform(
+      this.outstanding,
+      operation
+    );
+    const [newBuffer, transformedOperation2] = TextOperation.transform(
+      this.buffer,
+      transformedOperation1
+    );
+    console.log(`[AWB ApplyServer] State After Transforms:`, {
+      newOutstanding_ops: newOutstanding.toJSON(),
+      newOutstanding_base: newOutstanding.baseLength,
+      transformedOp1_ops: transformedOperation1.toJSON(),
+      transformedOp1_base: transformedOperation1.baseLength,
+      newBuffer_ops: newBuffer.toJSON(),
+      newBuffer_base: newBuffer.baseLength,
+      transformedOp2_ops: transformedOperation2.toJSON(),
+      transformedOp2_base: transformedOperation2.baseLength,
+    });
+    client.callbacks.applyOperation(transformedOperation2);
+    return new AwaitingWithBuffer(newOutstanding, newBuffer);
+  }
+  serverAck(client: Client): IClientState {
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> ACK received -> Sending Buffer (rev ${client.revision})`);
+    client.callbacks.sendOperation(client.revision, this.buffer);
+    return new AwaitingConfirm(this.buffer);
+  }
+  transformSelection(selection: OTSelection): OTSelection {
+    return selection.transform(this.outstanding).transform(this.buffer);
+  }
+  resend(client: Client): void {
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> Resending Outstanding Op (rev ${client.revision})`);
+    client.callbacks.sendOperation(client.revision, this.outstanding);
+  }
+}
+
+export class Client {
+  revision: number;
+  state: IClientState;
+  userId: string;
+  callbacks: IClientCallbacks;
+
+  constructor(revision: number, userId: string, callbacks: IClientCallbacks) {
+    this.revision = revision;
+    this.userId = userId;
+    this.callbacks = callbacks;
+    this.state = synchronized_;
     console.log(
-      "Merged vector, new local vector:",
-      this.localVersionVector.toString()
+      `[${this.userId}] Client initialized with revision ${revision}`
     );
   }
 
-  private sortOperations(operations: TextOperation[]): void {
-    operations.sort((a, b) => {
-      // First compare by user ID for consistency
-      const userCompare = a.userId.localeCompare(b.userId);
-      if (userCompare !== 0) return userCompare;
+  setState(newState: IClientState): void {
+    const oldStateName = this.state.constructor.name;
+    const newStateName = newState.constructor.name;
 
-      // Then by version number if from same user
-      const aVersion = a.baseVersionVector[a.userId] || 0;
-      const bVersion = b.baseVersionVector[b.userId] || 0;
-      return aVersion - bVersion;
-    });
-  }
-
-  private transformOperation(
-    a: TextOperation,
-    b: TextOperation
-  ): TextOperation {
-    let transformedA = this.cloneOperation(a);
-
-    // No need to transform if same op ID (already handled by concurrency check generally)
-    // Although IDs might differ if backend reconstructs ops, rely on VV check mostly
-    if (a.id === b.id && a.userId === b.userId) {
-      console.warn("Attempting to transform operation against itself:", a.id);
-      return transformedA;
-    }
-
-    switch (
-      transformedA.type // Use transformedA here to modify the clone
+    // Add specific logging for AWB -> AWB transitions
+    if (
+      oldStateName === "AwaitingWithBuffer" &&
+      newStateName === "AwaitingWithBuffer"
     ) {
-      case OperationType.INSERT:
-        if (b.type === OperationType.INSERT) {
-          transformedA.position = this.transformPosition(
-            transformedA.position,
-            b.position,
-            b.text?.length || 0,
-            true, // isInsert flag (for b)
-            a.userId, // client user id (a's user)
-            b.userId // server user id (b's user)
-          );
-        } else if (b.type === OperationType.DELETE && b.length !== undefined) {
-          transformedA.position = this.transformPositionAgainstDelete(
-            transformedA.position,
-            b.position,
-            b.length
-          );
-        } else if (b.type === OperationType.REPLACE && b.length !== undefined) {
-          // Decompose concurrent REPLACE (b) into Delete then Insert
-          const deletePartOfB: TextOperation = {
-            type: OperationType.DELETE,
-            position: b.position,
-            length: b.length,
-            baseVersionVector: { ...b.baseVersionVector },
-            userId: b.userId,
-            id: b.id ? `${b.id}-delete` : undefined,
-          };
-          const insertPartOfB: TextOperation = {
-            type: OperationType.INSERT,
-            position: b.position,
-            text: b.text || "",
-            baseVersionVector: { ...b.baseVersionVector },
-            userId: b.userId,
-            id: b.id ? `${b.id}-insert` : undefined,
-          };
-          // Transform against delete part first
-          let tempTransformedA = this.transformOperation(
-            this.cloneOperation(transformedA),
-            deletePartOfB
-          );
-          // Then transform the result against the insert part
-          transformedA = this.transformOperation(
-            tempTransformedA,
-            insertPartOfB
-          );
-        }
-        break;
-
-      case OperationType.DELETE:
-        if (transformedA.length === undefined) {
-          console.warn("DELETE operation has undefined length:", transformedA);
-          transformedA.length = 0; // Avoid break, try to recover
-        }
-
-        if (b.type === OperationType.INSERT) {
-          // Store original position before transforming position
-          const originalPosForLengthCalc = transformedA.position;
-          // Adjust delete position based on the concurrent insert
-          transformedA.position = this.transformPosition(
-            transformedA.position,
-            b.position,
-            b.text?.length || 0,
-            true, // isInsert flag (for b)
-            a.userId, // client user id (a's user)
-            b.userId // server user id (b's user)
-          );
-          // Adjust delete length if the insert happened inside the delete range
-          // Use the original position to determine overlap correctly before position was shifted
-          transformedA.length = this.transformLengthForInsert(
-            originalPosForLengthCalc,
-            transformedA.length || 0, // Use current length
-            b.position,
-            b.text?.length || 0
-          );
-        } else if (b.type === OperationType.DELETE && b.length !== undefined) {
-          // Store original position before transforming position
-          const originalPosForLengthCalc = transformedA.position;
-          // Adjust delete position based on concurrent delete
-          transformedA.position = this.transformPositionAgainstDelete(
-            transformedA.position,
-            b.position,
-            b.length
-          );
-          // Adjust length based on overlap with concurrent delete
-          // Use the original position to determine overlap correctly
-          transformedA.length = this.transformLengthAgainstDelete(
-            originalPosForLengthCalc,
-            transformedA.length || 0, // Use current length
-            b.position,
-            b.length
-          );
-        } else if (b.type === OperationType.REPLACE && b.length !== undefined) {
-          // Decompose concurrent REPLACE (b) into Delete then Insert
-          const deletePartOfB: TextOperation = {
-            type: OperationType.DELETE,
-            position: b.position,
-            length: b.length,
-            baseVersionVector: { ...b.baseVersionVector },
-            userId: b.userId,
-            id: b.id ? `${b.id}-delete` : undefined,
-          };
-          const insertPartOfB: TextOperation = {
-            type: OperationType.INSERT,
-            position: b.position,
-            text: b.text || "",
-            baseVersionVector: { ...b.baseVersionVector },
-            userId: b.userId,
-            id: b.id ? `${b.id}-insert` : undefined,
-          };
-          // Transform against delete part first
-          let tempTransformedA = this.transformOperation(
-            this.cloneOperation(transformedA),
-            deletePartOfB
-          );
-          // Then transform the result against the insert part
-          transformedA = this.transformOperation(
-            tempTransformedA,
-            insertPartOfB
-          );
-        }
-
-        // If length becomes 0, it might become a no-op
-        if (transformedA.length !== undefined && transformedA.length <= 0) {
-          transformedA.length = 0;
-          // Note: An operation with length 0 might still be relevant if its position changed
-        }
-        break;
-
-      case OperationType.REPLACE:
-        // Decompose the operation being transformed (a) into Delete and Insert parts
-        // Ensure original parts have length/text defined if they exist
-        const deletePartOfA: TextOperation = {
-          id: a.id ? `${a.id}-del` : undefined,
-          type: OperationType.DELETE,
-          position: a.position,
-          length: a.length || 0, // Ensure length is defined
-          baseVersionVector: { ...a.baseVersionVector },
-          userId: a.userId,
-        };
-        const insertPartOfA: TextOperation = {
-          id: a.id ? `${a.id}-ins` : undefined,
-          type: OperationType.INSERT,
-          position: a.position,
-          text: a.text || "", // Ensure text is defined
-          baseVersionVector: { ...a.baseVersionVector },
-          userId: a.userId,
-        };
-
-        // Transform the delete part of A against B
-        const transformedDeletePart = this.transformOperation(
-          this.cloneOperation(deletePartOfA),
-          this.cloneOperation(b)
-        );
-
-        // Transform the insert part of A against B
-        const transformedInsertPart = this.transformOperation(
-          this.cloneOperation(insertPartOfA),
-          this.cloneOperation(b)
-        );
-
-        // Reconstruct the transformed Replace operation
-        transformedA.position = transformedDeletePart.position; // Use position from transformed delete part
-        transformedA.length = transformedDeletePart.length; // Use length from transformed delete part
-        transformedA.text = transformedInsertPart.text; // Use text from transformed insert part
-
-        // --- Determine final type based on transformed parts ---
-
-        // If the delete part's length became 0 AND insert text exists: operation is now an Insert
-        if (
-          transformedA.length !== undefined &&
-          transformedA.length <= 0 &&
-          transformedA.text &&
-          transformedA.text.length > 0
-        ) {
-          transformedA.type = OperationType.INSERT;
-          transformedA.length = undefined; // No length for insert
-          transformedA.position = transformedInsertPart.position; // Use insert's transformed position for clarity
-        }
-        // If the insert part's text became empty AND delete length > 0: operation is now a Delete
-        else if (
-          (!transformedA.text || transformedA.text.length === 0) &&
-          transformedA.length !== undefined &&
-          transformedA.length > 0
-        ) {
-          transformedA.type = OperationType.DELETE;
-          transformedA.text = undefined; // No text for delete
-        }
-        // If BOTH delete length is 0 AND insert text is empty: it's a NO-OP in content.
-        // We might still need to apply it if the position changed relative to other ops,
-        // but often can be discarded. For now, keep it as REPLACE with 0 length/empty text.
-        // Application logic should ideally handle this gracefully.
-        else if (
-          transformedA.length !== undefined &&
-          transformedA.length <= 0 &&
-          (!transformedA.text || transformedA.text.length === 0)
-        ) {
-          // Mark as effectively NO-OP? Or let apply handle it.
-          transformedA.length = 0;
-          transformedA.text = "";
-        }
-        // Otherwise, it remains a REPLACE
-
-        break;
-    }
-
-    return transformedA;
-  }
-
-  // Helper function added to match backend logic for transforming DELETE/REPLACE length against INSERT
-  private transformLengthForInsert(
-    opPos: number,
-    opLen: number,
-    insertPos: number,
-    insertLen: number
-  ): number {
-    if (opLen === undefined) return 0; // Safety check
-
-    if (insertPos <= opPos) {
-      // Insert before op starts: length unchanged
-      return opLen;
-    } else if (insertPos >= opPos && insertPos < opPos + opLen) {
-      // Insert strictly within op's range (inclusive start, exclusive end): length increases
-      return opLen + insertLen;
-    } else {
-      // Insert at or after op ends: length unchanged
-      return opLen;
-    }
-  }
-
-  private transformPosition(
-    position: number,
-    otherPosition: number,
-    otherLength: number,
-    isInsert: boolean,
-    clientUserId: string,
-    serverUserId: string
-  ): number {
-    if (position < otherPosition) {
-      return position;
-    } else if (position === otherPosition) {
-      // Use exact same comparison as backend for consistency
-      const comparison = clientUserId.localeCompare(serverUserId, "en"); // Force 'en' locale for consistent behavior
-      return comparison <= 0 ? position : position + otherLength;
-    } else {
-      return position + otherLength;
-    }
-  }
-
-  private transformPositionAgainstDelete(
-    position: number,
-    deletePos: number,
-    deleteLen: number
-  ): number {
-    if (position <= deletePos) {
-      return position;
-    } else if (position >= deletePos + deleteLen) {
-      return position - deleteLen;
-    } else {
-      return deletePos;
-    }
-  }
-
-  private transformLengthAgainstDelete(
-    pos: number,
-    len: number,
-    deletePos: number,
-    deleteLen: number
-  ): number {
-    const endPos = pos + len;
-    const deleteEndPos = deletePos + deleteLen;
-
-    // No overlap
-    if (endPos <= deletePos || pos >= deleteEndPos) {
-      return len;
-    }
-
-    // Delete entirely contains operation
-    if (pos >= deletePos && endPos <= deleteEndPos) {
-      return 0;
-    }
-
-    // Operation entirely contains delete
-    if (pos <= deletePos && endPos >= deleteEndPos) {
-      return len - deleteLen;
-    }
-
-    // Delete overlaps with start of operation
-    if (pos < deletePos && endPos > deletePos && endPos <= deleteEndPos) {
-      return deletePos - pos;
-    }
-
-    // Delete overlaps with end of operation
-    if (pos >= deletePos && pos < deleteEndPos && endPos > deleteEndPos) {
-      return endPos - deleteEndPos;
-    }
-
-    // Shouldn't get here
-    return 0;
-  }
-
-  private validateOperation(operation: TextOperation): void {
-    const maxPos = this.model.getValueLength();
-
-    // Ensure operation has valid ID
-    if (!operation.id) {
-      operation.id = uuidv4();
-      console.warn(`Generated missing operation ID: ${operation.id}`);
-    }
-
-    // Ensure user ID is valid
-    if (!operation.userId) {
-      operation.userId = "anonymous";
-      console.warn("Set missing user ID to anonymous");
-    }
-
-    // Position validation
-    if (operation.position < 0) {
-      operation.position = 0;
-      console.warn("Adjusted negative position to 0");
-    }
-
-    if (operation.position > maxPos) {
-      operation.position = maxPos;
-      console.warn(
-        `Adjusted out-of-bounds position to document length: ${maxPos}`
+      // Type assertion needed to access state-specific properties
+      const oldOutstandingBase = (this.state as AwaitingWithBuffer).outstanding
+        ?.baseLength;
+      const newOutstandingBase = (newState as AwaitingWithBuffer).outstanding
+        ?.baseLength;
+      console.log(
+        `[AWB->AWB setState] Updating outstanding. Base length: ${oldOutstandingBase} -> ${newOutstandingBase}`
       );
     }
 
-    // Length validation for DELETE and REPLACE
+    console.log(
+      `[${this.userId}] State transition: ${oldStateName} -> ${newStateName}`
+    );
+    this.state = newState;
+  }
+
+  applyClient(operation: TextOperation): void {
+    if (operation.isNoop()) return;
+    // console.log(`[${this.userId}] applyClient called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
+    this.setState(this.state.applyClient(this, operation));
+    // Send selection immediately after local change (debouncing handled by caller if needed)
+    // this.sendSelection(this.callbacks.getSelection ? this.callbacks.getSelection() : null);
+  }
+
+  applyServer(operation: TextOperation): void {
+    if (operation.isNoop()) return;
+    // console.log(`[${this.userId}] applyServer called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
+    this.revision++;
+    this.setState(this.state.applyServer(this, operation));
+  }
+
+  serverAck(): void {
+    // console.log(`[${this.userId}] serverAck called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
+    this.revision++;
+    this.setState(this.state.serverAck(this));
     if (
-      operation.type === OperationType.DELETE ||
-      operation.type === OperationType.REPLACE
+      this.state instanceof Synchronized ||
+      this.state instanceof AwaitingConfirm
     ) {
-      if (operation.length === undefined) {
-        operation.length = 0;
-        console.warn("Set undefined length to 0");
-      }
-
-      if (operation.length < 0) {
-        operation.length = 0;
-        console.warn("Adjusted negative length to 0");
-      }
-
-      const endPos = operation.position + operation.length;
-      if (endPos > maxPos) {
-        operation.length = maxPos - operation.position;
-        console.warn(`Adjusted out-of-bounds length to: ${operation.length}`);
-      }
-    }
-
-    // Text validation for INSERT and REPLACE
-    if (
-      operation.type === OperationType.INSERT ||
-      operation.type === OperationType.REPLACE
-    ) {
-      if (operation.text === undefined) {
-        operation.text = "";
-        console.warn("Set undefined text to empty string");
-      }
-    }
-
-    // Make sure base version vector exists
-    if (!operation.baseVersionVector) {
-      operation.baseVersionVector = {};
-      console.warn("Created missing base version vector");
+      this.sendSelection(
+        this.callbacks.getSelection ? this.callbacks.getSelection() : null
+      );
     }
   }
 
-  private cloneOperation(op: TextOperation): TextOperation {
-    const clone = { ...op };
-    clone.baseVersionVector = op.baseVersionVector
-      ? { ...op.baseVersionVector }
-      : {};
-    return clone;
+  serverReconnect(): void {
+    console.log(
+      `[${this.userId}] serverReconnect called (State: ${this.state.constructor.name}, rev: ${this.revision})`
+    );
+    if (typeof this.state.resend === "function") {
+      this.state.resend(this);
+    }
+  }
+
+  transformSelection(selection: OTSelection): OTSelection {
+    return this.state.transformSelection(selection);
+  }
+
+  selectionChanged(): void {
+    this.sendSelection(
+      this.callbacks.getSelection ? this.callbacks.getSelection() : null
+    );
+  }
+
+  blur(): void {
+    this.sendSelection(null);
+  }
+
+  sendSelection(selection: OTSelection | null): void {
+    if (
+      this.state instanceof Synchronized ||
+      this.state instanceof AwaitingConfirm
+    ) {
+      if (this.callbacks.sendSelection) {
+        // console.log(`[${this.userId}] Sending selection (State: ${this.state.constructor.name}):`, selection?.toJSON());
+        this.callbacks.sendSelection(selection);
+      } else {
+        console.warn(`[${this.userId}] sendSelection callback not provided.`);
+      }
+    } else {
+      // console.log(`[${this.userId}] Selection change suppressed in AwaitingWithBuffer state.`);
+    }
   }
 }

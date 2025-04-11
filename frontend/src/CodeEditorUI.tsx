@@ -33,20 +33,21 @@ interface TerminalRef {
   writeToTerminal: (text: string) => void;
 }
 
+// Define type for language keys
+type LanguageKey = keyof typeof LANGUAGE_VERSIONS;
+
 const CodeEditorUI = () => {
   const [code, setCode] = useState(
     '// Start coding here\nfunction helloWorld() {\n  console.log("Hello, world!");\n}\n'
   );
   const [activeIcon, setActiveIcon] = useState("files");
-  const [isLoading, setIsLoading] = useState(false);
-  const [editorLanguage] = useState("javascript");
+  const [editorLanguage] = useState<LanguageKey>("javascript");
 
   // Create a ref for the terminal
   const terminalRef = useRef<TerminalRef>();
 
   // Handle code execution
   const handleRunCode = async () => {
-    setIsLoading(true);
     try {
       const requestBody: CodeExecutionRequest = {
         language: editorLanguage,
@@ -79,8 +80,6 @@ const CodeEditorUI = () => {
       }`;
       // Write errors directly to terminal
       terminalRef.current?.writeToTerminal(errorOutput);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -90,21 +89,20 @@ const CodeEditorUI = () => {
       <div className="flex items-center justify-between bg-stone-800 bg-opacity-80 p-2 border-b border-stone-600">
         <div className="flex items-center">
           <div className="flex space-x-2">
-            <button className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
+            <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
               File
             </button>
-            <button className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
+            <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
               Edit
             </button>
-            <button className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400">
+            <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
               View
             </button>
             <button
-              className="px-2 py-1 text-sm rounded hover:bg-neutral-900 active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-400"
+              className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
               onClick={handleRunCode}
-              disabled={isLoading}
             >
-              {isLoading ? "Running..." : "Run"}
+              Run
             </button>
           </div>
         </div>
