@@ -519,8 +519,8 @@ const App = () => {
   const handleSimulateTyping = () => {
     if (editorRef.current && adapterRef.current && clientRef.current) {
       const textToSimulate =
-        "Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing...";
-      const simulationDelay = 10;
+        "Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... ";
+      const simulationDelay = 0.25;
       simulateRapidTyping(
         editorRef.current,
         adapterRef.current,

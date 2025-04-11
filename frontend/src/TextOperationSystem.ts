@@ -377,6 +377,19 @@ export class TextOperation {
         continue;
       }
 
+      // --- BEGIN RESTORED CHECKS ---
+      if (typeof op1 === "undefined") {
+        throw new Error(
+          "Cannot transform operations: first operation is too short."
+        );
+      }
+      if (typeof op2 === "undefined") {
+        throw new Error(
+          "Cannot transform operations: second operation is too short."
+        );
+      }
+      // --- END RESTORED CHECKS ---
+
       let minLength;
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
         // Simple case: retain/retain
@@ -446,17 +459,20 @@ export class TextOperation {
         }
         operation2prime.delete(minLength);
       } else {
-        // Add logging to see the unexpected combination
-        console.error("Unrecognized transform case hit!", {
-          current_op1: op1,
-          current_op2: op2,
-          index1: i1,
-          index2: i2,
-          initial_ops1: ops1,
-          initial_ops2: ops2,
-          prime1_so_far: operation1prime.toJSON(),
-          prime2_so_far: operation2prime.toJSON(),
-        });
+        // This console.error should ideally not be reachable now if the "too short" checks are correct
+        console.error(
+          "Unrecognized transform case hit! Should have been caught by 'too short' checks.",
+          {
+            current_op1: op1,
+            current_op2: op2,
+            index1: i1,
+            index2: i2,
+            initial_ops1: ops1,
+            initial_ops2: ops2,
+            prime1_so_far: operation1prime.toJSON(),
+            prime2_so_far: operation2prime.toJSON(),
+          }
+        );
         throw new Error("Unrecognized case in transform.");
       }
     }
