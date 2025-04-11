@@ -179,6 +179,14 @@ public class TextOperation {
     // --- Setters (Needed for deserialization frameworks like Jackson) ---
     // Be cautious using these directly, prefer builder methods.
 
+    public void setOps(List<Object> ops) {
+        // WARNING: This bypasses the length calculations done by builder methods.
+        // Consider using the @JsonCreator constructor or builder methods instead.
+        this.ops = new ArrayList<>(ops); // Use a copy
+        // TODO: Optionally recalculate baseLength and targetLength here if needed.
+        // this.recalculateLengths();
+    }
+
     public void setBaseLength(int baseLength) {
         this.baseLength = baseLength;
     }
@@ -186,6 +194,7 @@ public class TextOperation {
     public void setTargetLength(int targetLength) {
         this.targetLength = targetLength;
     }
+
 
     // Optional: Add a method to recalculate lengths based on ops
     // private void recalculateLengths() {

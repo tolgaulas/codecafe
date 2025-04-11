@@ -1,459 +1,418 @@
-import { MockEditor } from "../mocks/monaco-editor.mock";
 import {
-  OperationType,
   TextOperation,
-  TextOperationManager,
-  VersionVector,
+  Client,
+  OTSelection,
+  IClientCallbacks,
 } from "../../TextOperationSystem";
 
-describe("TextOperationSystem", () => {
-  // Test for VersionVector
-  describe("VersionVector", () => {
-    test("should correctly initialize version vector", () => {
-      const vector = new VersionVector({ user1: 1, user2: 2 });
-      expect(vector.getVersions()).toEqual({ user1: 1, user2: 2 });
-    });
+// Helper to compare TextOperations (relies on your TextOperation having a similar structure/equality check)
+// For Jest/Vitest, `toEqual` often performs deep equality checks.
+const expectOpsEqual = (
+  actual: TextOperation,
+  expected: TextOperation,
+  message: string
+) => {
+  expect(actual.ops).toEqual(expected.ops);
+  expect(actual.baseLength).toEqual(expected.baseLength);
+  expect(actual.targetLength).toEqual(expected.targetLength);
+  // Or simply: expect(actual).toEqual(expected); if deep equality works
+};
 
-    test("should update version correctly", () => {
-      const vector = new VersionVector();
-      vector.update("user1", 5);
-      expect(vector.getVersions()["user1"]).toBe(5);
-    });
-
-    test("should correctly merge version vectors", () => {
-      const vector1 = new VersionVector({ user1: 1, user2: 2 });
-      const vector2 = new VersionVector({ user2: 3, user3: 4 });
-      const merged = vector1.merge(vector2);
-      expect(merged.getVersions()).toEqual({ user1: 1, user2: 3, user3: 4 });
-    });
-
-    test("should correctly detect concurrent operations", () => {
-      const vector1 = new VersionVector({ user1: 1, user2: 2 });
-      const vector2 = new VersionVector({ user1: 2, user2: 1 });
-      expect(vector1.concurrent(vector2)).toBe(true);
-
-      const vector3 = new VersionVector({ user1: 2, user2: 3 });
-      expect(vector1.concurrent(vector3)).toBe(false);
-    });
+describe("TextOperation", () => {
+  // --- Apply Tests ---
+  test("Apply: Basic Insert", () => {
+    const op = new TextOperation().insert("Hello");
+    const result = op.apply("");
+    expect(result).toEqual("Hello");
   });
 
-  // Test TextOperationManager focusing on the position calculation issues
-  describe("TextOperationManager - Position Handling", () => {
-    let mockEditor: MockEditor;
-    let operationManager: TextOperationManager;
-    let operations: TextOperation[] = [];
+  test("Apply: Basic Retain and Insert", () => {
+    const op = new TextOperation().retain(5).insert(" World");
+    const result = op.apply("Hello");
+    expect(result).toEqual("Hello World");
+  });
 
-    const captureOperation = (op: TextOperation) => {
-      operations.push(op);
+  test("Apply: Basic Delete", () => {
+    const op = new TextOperation().retain(5).delete(6); // Delete " World"
+    // Note: The TS implementation doesn't have the initial baseLength check
+    // const initialDoc = "Hello World";
+    // op.baseLength = initialDoc.length; // Manually set baseLength if needed for testing stricter apply
+    const result = op.apply("Hello World");
+    expect(result).toEqual("Hello");
+  });
+
+  test("Apply: Insert, Retain, Delete", () => {
+    // Base: "Hello" (len 5)
+    // Op: insert("Start "), retain(2), delete(1), retain(2)
+    const op = new TextOperation()
+      .insert("Start ")
+      .retain(2)
+      .delete(1)
+      .retain(2);
+    const result = op.apply("Hello");
+    expect(result).toEqual("Start Helo");
+  });
+
+  // TODO: Add apply tests for error conditions (past end, etc.) if needed,
+  // keeping in mind the TS implementation might not throw the same errors as Java/ot.js reference apply.
+
+  // --- Invert Tests ---
+  test("Invert: Insert", () => {
+    const op = new TextOperation().insert("Test");
+    const expected = new TextOperation().delete(4);
+    const actual = op.invert(""); // Base doc "" needed for insert
+    expectOpsEqual(actual, expected, "Invert insert should be delete");
+  });
+
+  test("Invert: Delete", () => {
+    const op = new TextOperation().retain(2).delete(3).retain(1); // Delete "llo" from "Hello"
+    const expected = new TextOperation().retain(2).insert("llo").retain(1);
+    const actual = op.invert("Hello"); // Base doc "Hello" needed for delete
+    expectOpsEqual(actual, expected, "Invert delete should be insert");
+  });
+
+  test("Invert: Retain", () => {
+    const op = new TextOperation().retain(5);
+    const expected = new TextOperation().retain(5);
+    const actual = op.invert("Hello");
+    expectOpsEqual(actual, expected, "Invert retain should be retain");
+  });
+
+  test("Invert: Mixed", () => {
+    const op = new TextOperation().retain(2).insert("XXX").delete(2).retain(1); // "Hello" -> "HeXXXo"
+    const expected = new TextOperation()
+      .retain(2)
+      .delete(3)
+      .insert("ll")
+      .retain(1);
+    const actual = op.invert("Hello");
+    expectOpsEqual(actual, expected, "Invert mixed op failed");
+  });
+
+  // --- Compose Tests ---
+  test("Compose: Insert then Insert", () => {
+    const op1 = new TextOperation().insert("A"); // "" -> "A"
+    const op2 = new TextOperation().retain(1).insert("B"); // "A" -> "AB"
+    const expected = new TextOperation().insert("AB"); // "" -> "AB"
+    const actual = op1.compose(op2);
+    expectOpsEqual(actual, expected, "Compose Insert/Insert failed");
+  });
+
+  test("Compose: Delete then Delete", () => {
+    const op1 = new TextOperation().retain(1).delete(2).retain(2); // "Hello" -> "Hlo"
+    const op2 = new TextOperation().retain(1).delete(1).retain(1); // "Hlo" -> "Ho"
+    const expected = new TextOperation().retain(1).delete(3).retain(1); // "Hello" -> "Ho"
+    const actual = op1.compose(op2);
+    expectOpsEqual(actual, expected, "Compose Delete/Delete failed");
+  });
+
+  test("Compose: Insert then Delete", () => {
+    const op1 = new TextOperation().retain(2).insert("XXX").retain(3); // "Hello" -> "HeXXXllo"
+    const op2 = new TextOperation().retain(4).delete(2).retain(2); // "HeXXXllo" -> "HeXXlo" (delete Xl)
+    const expected = new TextOperation()
+      .retain(2)
+      .insert("XX")
+      .delete(1)
+      .retain(2); // "Hello" -> "HeXXlo"
+    const actual = op1.compose(op2);
+    expectOpsEqual(actual, expected, "Compose Insert/Delete failed");
+  });
+
+  test("Compose: Delete then Insert", () => {
+    const op1 = new TextOperation().retain(1).delete(2).retain(2); // "Hello" -> "Hlo"
+    const op2 = new TextOperation().retain(1).insert("EY").retain(2); // "Hlo" -> "HEYlo"
+    const expected = new TextOperation()
+      .retain(1)
+      .delete(2)
+      .insert("EY")
+      .retain(2); // "Hello" -> "HEYlo"
+    const actual = op1.compose(op2);
+    expectOpsEqual(actual, expected, "Compose Delete/Insert failed");
+  });
+
+  test("Compose: Throws on length mismatch", () => {
+    const op1 = new TextOperation().insert("A"); // target 1
+    const op2 = new TextOperation().retain(2); // base 2
+    expect(() => {
+      op1.compose(op2);
+    }).toThrow(/The base length.*second operation/);
+  });
+
+  // --- Transform Tests ---
+  test("Transform: Identity", () => {
+    const op1 = new TextOperation().insert("abc").retain(5).delete(2); // base 7, target 8
+    const op2 = new TextOperation().retain(op1.baseLength); // base 7, target 7
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+
+    const expectedOp2Prime = new TextOperation().retain(op1.targetLength); // Should retain 8
+
+    expectOpsEqual(op1Prime, op1, "Op1' should equal Op1");
+    expectOpsEqual(
+      op2Prime,
+      expectedOp2Prime,
+      "Op2' should be retain(op1.targetLength)"
+    );
+  });
+
+  test("Transform: Concurrent Inserts at Different Positions", () => {
+    const op1 = new TextOperation().retain(5).insert(" Beautiful ").retain(5); // Base 10
+    const op2 = new TextOperation().insert("Hi ").retain(10); // Base 10
+
+    const expectedOp1Prime = new TextOperation()
+      .retain(3)
+      .retain(5)
+      .insert(" Beautiful ")
+      .retain(5);
+    const expectedOp2Prime = new TextOperation()
+      .insert("Hi ")
+      .retain(5)
+      .retain(11)
+      .retain(5);
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+    expectOpsEqual(op1Prime, expectedOp1Prime, "Op1' transformed incorrectly");
+    expectOpsEqual(op2Prime, expectedOp2Prime, "Op2' transformed incorrectly");
+  });
+
+  test("Transform: Concurrent Inserts at Same Position", () => {
+    const op1 = new TextOperation().retain(5).insert("A").retain(5); // Base 10
+    const op2 = new TextOperation().retain(5).insert("B").retain(5); // Base 10
+
+    const expectedOp1Prime = new TextOperation()
+      .retain(5)
+      .insert("A")
+      .retain(1)
+      .retain(5);
+    const expectedOp2Prime = new TextOperation()
+      .retain(5)
+      .retain(1)
+      .insert("B")
+      .retain(5);
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+    expectOpsEqual(op1Prime, expectedOp1Prime, "Op1' transformed incorrectly");
+    expectOpsEqual(op2Prime, expectedOp2Prime, "Op2' transformed incorrectly");
+  });
+
+  test("Transform: Delete vs Insert", () => {
+    const op1 = new TextOperation().retain(2).delete(3).retain(5); // Base 10
+    const op2 = new TextOperation().retain(5).insert("XXX").retain(5); // Base 10
+
+    const expectedOp1Prime = new TextOperation().retain(2).delete(3).retain(8);
+    const expectedOp2Prime = new TextOperation()
+      .retain(2)
+      .insert("XXX")
+      .retain(5);
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+    expectOpsEqual(
+      op1Prime,
+      expectedOp1Prime,
+      "Op1' (delete) transformed incorrectly"
+    );
+    expectOpsEqual(
+      op2Prime,
+      expectedOp2Prime,
+      "Op2' (insert) transformed incorrectly"
+    );
+  });
+
+  test("Transform: Insert vs Delete", () => {
+    const op1 = new TextOperation().retain(5).insert("XXX").retain(5); // Base 10
+    const op2 = new TextOperation().retain(2).delete(3).retain(5); // Base 10
+
+    const expectedOp1Prime = new TextOperation()
+      .retain(2)
+      .insert("XXX")
+      .retain(5);
+    const expectedOp2Prime = new TextOperation().retain(2).delete(3).retain(8);
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+    expectOpsEqual(
+      op1Prime,
+      expectedOp1Prime,
+      "Op1' (insert) transformed incorrectly"
+    );
+    expectOpsEqual(
+      op2Prime,
+      expectedOp2Prime,
+      "Op2' (delete) transformed incorrectly"
+    );
+  });
+
+  test("Transform: Concurrent Deletes Overlapping", () => {
+    const op1 = new TextOperation().retain(1).delete(4).retain(5); // Base 10
+    const op2 = new TextOperation().retain(3).delete(4).retain(3); // Base 10
+
+    const expectedOp1Prime = new TextOperation().retain(1).delete(2).retain(3);
+    const expectedOp2Prime = new TextOperation().retain(1).delete(2).retain(3);
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+    expectOpsEqual(op1Prime, expectedOp1Prime, "Op1' transformed incorrectly");
+    expectOpsEqual(op2Prime, expectedOp2Prime, "Op2' transformed incorrectly");
+  });
+
+  test("Transform: Throws exception for mismatched base lengths", () => {
+    const op1 = new TextOperation().retain(10); // baseLength 10
+    const op2 = new TextOperation().retain(11); // baseLength 11
+
+    // The TS code *does* have the baseLength check from ot.js
+    expect(() => {
+      TextOperation.transform(op1, op2);
+    }).toThrow(/Cannot transform operations: first operation is too short/);
+  });
+
+  test("Transform: Insert at start vs Delete spanning start", () => {
+    const op1 = new TextOperation().insert("XXX").retain(5); // Base 5
+    const op2 = new TextOperation().delete(2).retain(3); // Base 5
+
+    const expectedOp1Prime = new TextOperation().insert("XXX").retain(3);
+    const expectedOp2Prime = new TextOperation().retain(3).delete(2).retain(3);
+
+    const [op1Prime, op2Prime] = TextOperation.transform(op1, op2);
+    expectOpsEqual(
+      op1Prime,
+      expectedOp1Prime,
+      "Op1' (insert) transformed incorrectly"
+    );
+    expectOpsEqual(
+      op2Prime,
+      expectedOp2Prime,
+      "Op2' (delete) transformed incorrectly"
+    );
+  });
+});
+
+describe("Client State Machine", () => {
+  let client: Client;
+  let revision: number;
+  let mockCallbacks: jest.Mocked<IClientCallbacks>; // Use jest.Mocked for type safety
+
+  beforeEach(() => {
+    revision = 5; // Example starting revision
+    // Create mock functions for callbacks
+    mockCallbacks = {
+      sendOperation: jest.fn(),
+      applyOperation: jest.fn(),
+      sendSelection: jest.fn(),
+      getSelection: jest.fn(() => OTSelection.createCursor(0)), // Example selection
+      setSelection: jest.fn(),
     };
+    client = new Client(revision, "user-test-id", mockCallbacks);
+  });
 
-    beforeEach(() => {
-      // Initialize with empty content
-      mockEditor = new MockEditor("");
-      operationManager = new TextOperationManager(
-        mockEditor as any,
-        "user1",
-        { user1: 0 },
-        captureOperation
-      );
-      operations = [];
-    });
+  test("Initial state is Synchronized", () => {
+    expect(client.state.constructor.name).toBe("Synchronized");
+  });
 
-    // Helper to simulate local content change
-    const simulateLocalContentChange = (
-      position: number,
-      text: string,
-      rangeLength: number = 0
-    ) => {
-      const event = {
-        changes: [
-          {
-            range: {
-              startLineNumber: 1,
-              startColumn: position + 1,
-              endLineNumber: 1,
-              endColumn: position + rangeLength + 1,
-            },
-            rangeOffset: position,
-            rangeLength,
-            text,
-          },
-        ],
-      };
+  test("Synchronized: applyClient sends op and changes state to AwaitingConfirm", () => {
+    const op = new TextOperation().insert("A");
+    client.applyClient(op);
 
-      // Access the private method directly for testing
-      (operationManager as any).handleModelContentChange(event);
+    expect(client.state.constructor.name).toBe("AwaitingConfirm");
+    expect((client.state as any).outstanding).toBe(op); // Check outstanding op
+    expect(mockCallbacks.sendOperation).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.sendOperation).toHaveBeenCalledWith(revision, op);
+  });
 
-      return operations[operations.length - 1];
-    };
+  test("Synchronized: applyServer applies op and stays Synchronized", () => {
+    const op = new TextOperation().insert("B");
+    client.applyServer(op);
 
-    test("should correctly handle insert operations", () => {
-      // First insert
-      const op1 = simulateLocalContentChange(0, "Hello");
+    expect(client.state.constructor.name).toBe("Synchronized");
+    expect(mockCallbacks.applyOperation).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.applyOperation).toHaveBeenCalledWith(op);
+    expect(client.revision).toBe(revision + 1); // Revision increments
+  });
 
-      expect(op1.type).toBe(OperationType.INSERT);
-      expect(op1.position).toBe(0);
-      expect(op1.text).toBe("Hello");
-      expect(op1.userId).toBe("user1");
+  test("AwaitingConfirm: applyClient buffers op and changes state to AwaitingWithBuffer", () => {
+    const op1 = new TextOperation().insert("A"); // Outstanding
+    const op2 = new TextOperation().retain(1).insert("B"); // Buffered
 
-      // Second insert at end
-      const op2 = simulateLocalContentChange(5, " World");
+    client.applyClient(op1); // Go to AwaitingConfirm
+    expect(client.state.constructor.name).toBe("AwaitingConfirm");
 
-      expect(op2.type).toBe(OperationType.INSERT);
-      expect(op2.position).toBe(5);
-      expect(op2.text).toBe(" World");
+    client.applyClient(op2); // Apply second op
 
-      // Insert in the middle
-      const op3 = simulateLocalContentChange(5, ", beautiful");
+    expect(client.state.constructor.name).toBe("AwaitingWithBuffer");
+    expect((client.state as any).outstanding).toBe(op1);
+    // Check buffer is op2 (or composed if applicable, but not here)
+    expectOpsEqual((client.state as any).buffer, op2, "Buffer op incorrect");
+    expect(mockCallbacks.sendOperation).toHaveBeenCalledTimes(1); // Only first op sent
+  });
 
-      expect(op3.type).toBe(OperationType.INSERT);
-      expect(op3.position).toBe(5);
-      expect(op3.text).toBe(", beautiful");
-    });
+  test("AwaitingConfirm: applyServer transforms outstanding/server op, applies, stays AwaitingConfirm", () => {
+    const opOutstanding = new TextOperation().retain(5).insert("A"); // Base 5, Target 6
+    const opServer = new TextOperation().insert("Hi").retain(5); // Base 5, Target 7
 
-    test("should correctly transform concurrent insert operations from different users", () => {
-      // Initial state: empty document
-      mockEditor.setValue("");
+    client.applyClient(opOutstanding); // State: AwaitingConfirm
+    const initialOutstanding = (client.state as any).outstanding;
+    expect(initialOutstanding).toBe(opOutstanding);
 
-      // User 1 inserts 'Hello'
-      const op1: TextOperation = {
-        id: "op1",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "Hello",
-        baseVersionVector: { user1: 0 },
-        userId: "user1",
-      };
+    client.applyServer(opServer);
 
-      // Apply operation
-      operationManager.applyOperation(op1);
-      expect(mockEditor.getValue()).toBe("Hello");
+    // apply(S, opOutstanding) = "Base A"
+    // apply(S, opServer) = "HiBase"
 
-      // User 2 inserts ' World' - concurrent with User 1's operation
-      const op2: TextOperation = {
-        id: "op2",
-        type: OperationType.INSERT,
-        position: 0,
-        text: " World",
-        baseVersionVector: { user2: 0 },
-        userId: "user2",
-      };
+    // transform(opOutstanding, opServer)
+    // opOutstanding': retain(2).retain(5).insert("A") => Retain "Hi", Retain "Base", Insert "A"
+    // opServer': insert("Hi").retain(5).retain(1) => Insert "Hi", Retain "Base", Retain "A"
 
-      // Apply operation
-      operationManager.applyOperation(op2);
+    const expectedNewOutstanding = new TextOperation()
+      .retain(2)
+      .retain(5)
+      .insert("A");
+    const expectedAppliedOp = new TextOperation()
+      .insert("Hi")
+      .retain(5)
+      .retain(1);
 
-      // Since user IDs are compared lexicographically for tie-breaking,
-      // 'user1' < 'user2', so user2's text should go after user1's
-      expect(mockEditor.getValue()).toBe("Hello World");
-    });
+    expect(client.state.constructor.name).toBe("AwaitingConfirm");
+    expectOpsEqual(
+      (client.state as any).outstanding,
+      expectedNewOutstanding,
+      "Outstanding op not transformed correctly"
+    );
+    expect(mockCallbacks.applyOperation).toHaveBeenCalledTimes(1);
+    expectOpsEqual(
+      mockCallbacks.applyOperation.mock.calls[0][0],
+      expectedAppliedOp,
+      "Server op not transformed/applied correctly"
+    );
+    expect(client.revision).toBe(revision + 1);
+  });
 
-    test("should correctly handle deletion operations", () => {
-      // Setup initial text
-      mockEditor.setValue("Hello World");
+  test("AwaitingConfirm: serverAck changes state to Synchronized", () => {
+    const op1 = new TextOperation().insert("A");
+    client.applyClient(op1); // State: AwaitingConfirm
+    client.serverAck();
 
-      // Delete 'World'
-      const op = simulateLocalContentChange(6, "", 5);
+    expect(client.state.constructor.name).toBe("Synchronized");
+    expect(client.revision).toBe(revision + 1);
+  });
 
-      expect(op.type).toBe(OperationType.DELETE);
-      expect(op.position).toBe(6);
-      expect(op.length).toBe(5);
-    });
+  // TODO: Add tests for AwaitingWithBuffer state transitions (applyClient, applyServer, serverAck)
+  // These are more complex due to the buffer composition and double transforms.
 
-    test("should correctly handle replacement operations", () => {
-      // Setup initial text
-      mockEditor.setValue("Hello World");
+  test("transformSelection transforms based on state", () => {
+    const selection = OTSelection.createCursor(10);
+    const opOutstanding = new TextOperation().insert("Start").retain(20); // base 20, target 25
+    const opBuffer = new TextOperation().retain(25).insert("End"); // base 25, target 28
 
-      // Replace 'World' with 'Universe'
-      const op = simulateLocalContentChange(6, "Universe", 5);
+    // Synchronized
+    expect(client.transformSelection(selection).ranges[0].head).toBe(10);
 
-      expect(op.type).toBe(OperationType.REPLACE);
-      expect(op.position).toBe(6);
-      expect(op.text).toBe("Universe");
-      expect(op.length).toBe(5);
-    });
+    // AwaitingConfirm
+    client.applyClient(opOutstanding);
+    expect(client.state.constructor.name).toBe("AwaitingConfirm");
+    // selection should be shifted by opOutstanding insert
+    expect(client.transformSelection(selection).ranges[0].head).toBe(10 + 5); // 15
 
-    test("should correctly transform position when insertions happen before cursor", () => {
-      mockEditor.setValue("abc");
-
-      // Set cursor at position 3 (after 'c')
-      mockEditor.setSelections([
-        {
-          startLineNumber: 1,
-          startColumn: 4,
-          endLineNumber: 1,
-          endColumn: 4,
-        } as any,
-      ]);
-
-      // Another user inserts 'xyz' at the beginning
-      const op: TextOperation = {
-        id: "op1",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "xyz",
-        baseVersionVector: { user2: 0 },
-        userId: "user2",
-      };
-
-      operationManager.applyOperation(op);
-
-      // Document should now be 'xyzabc'
-      expect(mockEditor.getValue()).toBe("xyzabc");
-
-      // Cursor should now be at position 6 (after 'c')
-      const selections = mockEditor.getSelections();
-      expect(selections[0].startColumn).toBe(7); // 1-indexed
-    });
-
-    test("should correctly transform position when insertions happen at same position from different users", () => {
-      mockEditor.setValue("");
-
-      // User1 inserts 'abc'
-      const op1: TextOperation = {
-        id: "op1",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "abc",
-        baseVersionVector: { user1: 0 },
-        userId: "user1",
-      };
-
-      operationManager.applyOperation(op1);
-      expect(mockEditor.getValue()).toBe("abc");
-
-      // User2 inserts 'xyz' at the same position (0) concurrently
-      const op2: TextOperation = {
-        id: "op2",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "xyz",
-        baseVersionVector: { user2: 0 },
-        userId: "user2",
-      };
-
-      operationManager.applyOperation(op2);
-
-      // Since user1 < user2 lexicographically, user1's text should come first
-      expect(mockEditor.getValue()).toBe("abcxyz");
-    });
-
-    test("should correctly transform operation against concurrent operations", () => {
-      // Start with empty document
-      mockEditor.setValue("");
-
-      // User1 inserts 'abc'
-      const op1: TextOperation = {
-        id: "op1",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "abc",
-        baseVersionVector: { user1: 0 },
-        userId: "user1",
-      };
-      // Simulate op1 being pending (created locally but not yet acknowledged)
-      (operationManager as any).pendingOperations.set(op1.id, op1);
-      (operationManager as any).incrementLocalVersion(); // user1: 1
-      mockEditor.setValue("abc"); // Update mock editor state
-
-      // User2 inserts 'xyz' concurrently at position 0
-      const op2: TextOperation = {
-        id: "op2",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "xyz",
-        baseVersionVector: { user2: 0 }, // Based on initial empty state
-        userId: "user2",
-      };
-
-      // Apply User2's operation
-      operationManager.applyOperation(op2);
-
-      // Expected transformation: op2 is transformed against op1
-      // transformPosition(0, 0, 3, true, "user2", "user1") -> 3 (since user2 > user1)
-      // Expected state: "abcxyz"
-      expect(mockEditor.getValue()).toBe("abcxyz");
-    });
-
-    // --- Multi-line Tests ---
-
-    test("should handle local multi-line insert", () => {
-      const op = simulateLocalContentChange(0, "Line1\nLine2");
-      expect(op.type).toBe(OperationType.INSERT);
-      expect(op.position).toBe(0);
-      expect(op.text).toBe("Line1\nLine2");
-    });
-
-    test("should handle local multi-line delete", () => {
-      mockEditor.setValue("Line1\nLine2\nLine3");
-      // Delete "Line2\n" (pos 6, len 6)
-      const op = simulateLocalContentChange(6, "", 6);
-      expect(op.type).toBe(OperationType.DELETE);
-      expect(op.position).toBe(6);
-      expect(op.length).toBe(6);
-    });
-
-    test("should handle local multi-line replace", () => {
-      mockEditor.setValue("Line1\nLine2\nLine3");
-      // Replace "Line2\nLine3" (pos 6, len 12) with "Replacement"
-      const op = simulateLocalContentChange(6, "Replacement", 12);
-      expect(op.type).toBe(OperationType.REPLACE);
-      expect(op.position).toBe(6);
-      expect(op.text).toBe("Replacement");
-      expect(op.length).toBe(12);
-    });
-
-    test("should apply remote multi-line insert", () => {
-      mockEditor.setValue("Existing");
-      const op: TextOperation = {
-        id: "op-remote-ml-ins",
-        type: OperationType.INSERT,
-        position: 8,
-        text: "\nNewLine1\nNewLine2",
-        baseVersionVector: { user2: 0 },
-        userId: "user2",
-      };
-      operationManager.applyOperation(op);
-      expect(mockEditor.getValue()).toBe("Existing\nNewLine1\nNewLine2");
-    });
-
-    test("should apply remote multi-line delete", () => {
-      mockEditor.setValue("Line1\nLine2\nLine3\nLine4");
-      // Delete "Line2\nLine3\n" (pos 6, len 12)
-      const op: TextOperation = {
-        id: "op-remote-ml-del",
-        type: OperationType.DELETE,
-        position: 6,
-        length: 12,
-        baseVersionVector: { user2: 0 },
-        userId: "user2",
-      };
-      operationManager.applyOperation(op);
-      expect(mockEditor.getValue()).toBe("Line1\nLine4");
-    });
-
-    test("should apply remote multi-line replace", () => {
-      mockEditor.setValue("Line1\nLine2\nLine3");
-      // Replace "Line2\nLine3" (pos 6, len 12) with "NewContent"
-      const op: TextOperation = {
-        id: "op-remote-ml-rep",
-        type: OperationType.REPLACE,
-        position: 6,
-        length: 12,
-        text: "NewContent",
-        baseVersionVector: { user2: 0 },
-        userId: "user2",
-      };
-      operationManager.applyOperation(op);
-      expect(mockEditor.getValue()).toBe("Line1\nNewContent");
-    });
-
-    test("should transform remote multi-line insert against local pending insert", () => {
-      // Local pending op: insert "LocalInsert " at pos 0
-      mockEditor.setValue("LocalInsert ");
-      const pendingOp: TextOperation = {
-        id: "local-pending",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "LocalInsert ",
-        baseVersionVector: { user1: 0 },
-        userId: "user1",
-      };
-      (operationManager as any).pendingOperations.set(pendingOp.id, pendingOp);
-      (operationManager as any).incrementLocalVersion(); // user1: 1
-
-      // Remote op: insert "Remote\nLines" at pos 0 (concurrently)
-      const remoteOp: TextOperation = {
-        id: "remote-ml",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "Remote\nLines",
-        baseVersionVector: { user2: 0 }, // Based on empty state
-        userId: "user2",
-      };
-
-      operationManager.applyOperation(remoteOp);
-
-      // Expected: remoteOp transformed against pendingOp.
-      // transformPosition(0, 0, 12, true, "user2", "user1") -> 12 (user2 > user1)
-      // Expected value: "LocalInsert Remote\nLines"
-      expect(mockEditor.getValue()).toBe("LocalInsert Remote\nLines");
-    });
-
-    test("should transform remote multi-line delete against local pending insert", () => {
-      mockEditor.setValue("LocalInsert Line1\nLine2\nLine3");
-      const initialContent = "Line1\nLine2\nLine3";
-      const insertOffset = "LocalInsert ".length; // 12
-
-      // Local pending op: insert "LocalInsert " at pos 0
-      const pendingOp: TextOperation = {
-        id: "local-pending-ins",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "LocalInsert ",
-        baseVersionVector: { user1: 0 },
-        userId: "user1",
-      };
-      (operationManager as any).pendingOperations.set(pendingOp.id, pendingOp);
-      (operationManager as any).incrementLocalVersion(); // user1: 1
-
-      // Remote op: delete "Line2\nLine3" (original pos 6, len 12)
-      const remoteOp: TextOperation = {
-        id: "remote-ml-del",
-        type: OperationType.DELETE,
-        position: 6,
-        length: 12,
-        baseVersionVector: { user2: 0 }, // Based on initial content state
-        userId: "user2",
-      };
-
-      operationManager.applyOperation(remoteOp);
-
-      // Expected: remoteOp transformed against pendingOp.
-      // transformPositionAgainstInsert(6, 0, 12) -> 6 + 12 = 18
-      // transformLengthForInsert(6, 12, 0, 12) -> 12 (insert is before delete)
-      // Transformed remoteOp: delete pos 18, len 12
-      // Expected value: "LocalInsert Line1\n"
-      expect(mockEditor.getValue()).toBe("LocalInsert Line1\n");
-    });
-
-    test("should transform local pending multi-line delete against remote insert", () => {
-      // Initial state: "Line1\nLine2\nLine3\nLine4"
-      mockEditor.setValue("Line1\nLine2\nLine3\nLine4");
-
-      // Local pending op: delete "Line2\nLine3\n" (pos 6, len 12)
-      const pendingOp: TextOperation = {
-        id: "local-pending-del",
-        type: OperationType.DELETE,
-        position: 6,
-        length: 12,
-        baseVersionVector: { user1: 0 },
-        userId: "user1",
-      };
-      (operationManager as any).pendingOperations.set(pendingOp.id, pendingOp);
-      (operationManager as any).incrementLocalVersion(); // user1: 1
-      mockEditor.setValue("Line1\nLine4"); // Reflect local delete
-
-      // Remote op: insert "RemoteInsert " at pos 0 (concurrently)
-      const remoteOp: TextOperation = {
-        id: "remote-ins",
-        type: OperationType.INSERT,
-        position: 0,
-        text: "RemoteInsert ",
-        baseVersionVector: { user2: 0 }, // Based on initial content state
-        userId: "user2",
-      };
-
-      // Apply remote op. It will be transformed against the *pending* op.
-      operationManager.applyOperation(remoteOp);
-
-      // Expected transformation of remoteOp against pendingOp:
-      // transformPosition(0, 6, undefined, false, ...) -> 0 (no change as insert is before delete)
-      // The remote insert applies at pos 0.
-      // Expected document state after remote op: "RemoteInsert Line1\nLine4"
-      expect(mockEditor.getValue()).toBe("RemoteInsert Line1\nLine4");
-
-      // Now, imagine the ACK for the pending delete comes back, or we send it.
-      // The key is that the remote op was correctly applied relative to the local state *before* the remote op arrived.
-    });
+    // AwaitingWithBuffer
+    client.applyClient(opBuffer);
+    expect(client.state.constructor.name).toBe("AwaitingWithBuffer");
+    // selection should be shifted by opOutstanding AND opBuffer
+    expect(client.transformSelection(selection).ranges[0].head).toBe(10 + 5); // Buffer insert is after selection
   });
 });

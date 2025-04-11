@@ -201,6 +201,13 @@ public class OtUtils {
      * @throws IllegalArgumentException If the base lengths of op1 and op2 don't match.
      */
     public static List<TextOperation> transform(TextOperation operation1, TextOperation operation2) throws IllegalArgumentException {
+        // Add explicit base length check like ot.js
+        if (operation1.getBaseLength() != operation2.getBaseLength()) {
+            throw new IllegalArgumentException(
+                String.format("Both operations have to have the same base length (op1: %d, op2: %d)",
+                              operation1.getBaseLength(), operation2.getBaseLength()));
+        }
+
         TextOperation operation1prime = new TextOperation();
         TextOperation operation2prime = new TextOperation();
         List<Object> ops1 = operation1.getOps();
@@ -210,10 +217,6 @@ public class OtUtils {
         Object op2 = (i2 < ops2.size()) ? ops2.get(i2++) : null;
 
         while (op1 != null || op2 != null) {
-            // At every iteration of the loop, the imaginary cursor that both
-            // operation1 and operation2 have that operates on the input string must
-            // have the same position in the input string.
-
             if (op1 == null && op2 == null) { break; } // Should not happen based on loop condition but safe guard
 
             // next two cases: one operation is insert, the other is retain/delete
@@ -231,11 +234,12 @@ public class OtUtils {
                 continue;
             }
 
+            // Debug checks just before the original failure point
             if (op1 == null) {
                 throw new IllegalArgumentException("Cannot transform operations: first operation is too short.");
             }
             if (op2 == null) {
-                throw new IllegalArgumentException("Cannot transform operations: second operation is too short.");
+                throw new IllegalArgumentException("Cannot transform operations: second operation is too short."); // Use specific message
             }
 
             int minLength;

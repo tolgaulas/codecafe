@@ -134,7 +134,7 @@ const App = () => {
     console.log(`Session active (ID: ${sessionId}), connecting WebSocket...`);
     setCode("// Connecting to session...");
 
-    const socket = new SockJS("http://157.230.83.211:8080/ws");
+    const socket = new SockJS("http://localhost:8080/ws");
     const stompClient = Stomp.over(socket);
     stompClientRef.current = stompClient;
 
@@ -405,7 +405,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://157.230.83.211:8080/api/execute",
+        "http://localhost:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -474,7 +474,7 @@ const App = () => {
       setSessionId(sessionIdFromUrl);
       setIsJoiningSession(true);
       axios
-        .get(`http://157.230.83.211:8080/api/sessions/${sessionIdFromUrl}`)
+        .get(`http://localhost:8080/api/sessions/${sessionIdFromUrl}`)
         .then((response) => {
           setSessionCreatorName(response.data.creatorName);
         })
@@ -491,7 +491,7 @@ const App = () => {
   const startSession = async () => {
     try {
       const response = await axios.post(
-        "http://157.230.83.211:8080/api/sessions/create",
+        "http://localhost:8080/api/sessions/create",
         {
           creatorName: name || "Anonymous",
         }
@@ -519,8 +519,8 @@ const App = () => {
   const handleSimulateTyping = () => {
     if (editorRef.current && adapterRef.current && clientRef.current) {
       const textToSimulate =
-        "Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... Typing... ";
-      const simulationDelay = 0.25;
+        "Typing... Typing... Typing... Typing... Typing... ";
+      const simulationDelay = 20;
       simulateRapidTyping(
         editorRef.current,
         adapterRef.current,
