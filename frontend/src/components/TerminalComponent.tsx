@@ -38,6 +38,8 @@ const TerminalComponent = forwardRef((_, ref) => {
     });
 
     if (terminalRef.current) {
+      terminalRef.current.innerHTML = "";
+
       term.open(terminalRef.current);
 
       term.write("Welcome to CodeCafe!\r\n");

@@ -49,7 +49,7 @@ const DEFAULT_TERMINAL_HEIGHT_FRACTION = 0.33; // Corresponds to h-1/3
 const MIN_TERMINAL_HEIGHT_PX = 50;
 const MAX_TERMINAL_HEIGHT_PX = window.innerHeight * 0.8; // Example max
 const TERMINAL_COLLAPSE_THRESHOLD_PX = 25;
-const TERMINAL_HANDLE_HEIGHT = 6; // h-1.5
+const TERMINAL_HANDLE_HEIGHT = 4; // h-1 (was 6)
 
 const CodeEditorUI = () => {
   const [code, setCode] = useState(
@@ -495,7 +495,7 @@ const CodeEditorUI = () => {
           </div>
 
           {/* Code Editor - takes remaining space */}
-          <div className="flex-1 overflow-auto py-6 font-mono text-sm relative bg-neutral-900 min-h-0">
+          <div className="flex-1 overflow-auto pt-6 font-mono text-sm relative bg-neutral-900 min-h-0">
             <CodeEditor
               theme="codeCafeTheme"
               language="javascript"
@@ -526,7 +526,7 @@ const CodeEditorUI = () => {
             <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
               <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
             </div>
-            <div className="flex-1 px-4 py-2 font-mono text-sm overflow-auto">
+            <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-auto min-h-0">
               {!isTerminalCollapsed && <TerminalComponent ref={terminalRef} />}
             </div>
           </div>
