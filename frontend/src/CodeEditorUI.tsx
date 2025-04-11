@@ -40,7 +40,7 @@ const CodeEditorUI = () => {
   const [code, setCode] = useState(
     '// Start coding here\nfunction helloWorld() {\n  console.log("Hello, world!");\n}\n'
   );
-  const [activeIcon, setActiveIcon] = useState("files");
+  const [activeIcon, setActiveIcon] = useState<string | null>("files");
   const [editorLanguage] = useState<LanguageKey>("javascript");
 
   // Create a ref for the terminal
@@ -128,7 +128,9 @@ const CodeEditorUI = () => {
                   ? "text-stone-100"
                   : "text-stone-500 hover:text-stone-200"
               }`}
-              onClick={() => setActiveIcon("files")}
+              onClick={() =>
+                setActiveIcon((prev) => (prev === "files" ? null : "files"))
+              }
             >
               <VscFiles size={24} />
             </button>
@@ -189,26 +191,43 @@ const CodeEditorUI = () => {
           </div>
         </div>
 
-        {/* File Tree */}
-        <div className="w-48 bg-stone-800 bg-opacity-60 overflow-y-auto border-r border-stone-600">
-          <div className="pl-4 py-2 text-xs text-stone-400">EXPLORER</div>
-          <div className="w-full">
-            <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
-              <span className="text-stone-300 w-full pl-4">index.html</span>
+        {/* File Tree - Conditionally rendered based on activeIcon */}
+        <div
+          className={`bg-stone-800 bg-opacity-60 overflow-hidden border-r border-stone-600 flex-shrink-0 ${
+            activeIcon === "files" ? "w-48" : "w-0 border-none"
+          }`}
+        >
+          {activeIcon === "files" && (
+            <div className="w-48 h-full overflow-y-auto">
+              <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
+                EXPLORER
+              </div>
+              <div className="w-full">
+                {/* Example file structure - replace with actual data later */}
+                <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
+                  <span className="text-stone-300 w-full pl-4 truncate">
+                    index.html
+                  </span>
+                </div>
+                <div className="flex items-center text-sm py-1 bg-stone-700 cursor-pointer w-full pl-0 border-y border-stone-500">
+                  <span className="text-stone-200 w-full pl-4 truncate">
+                    script.js
+                  </span>
+                </div>
+                <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
+                  <span className="text-stone-300 w-full pl-4 truncate">
+                    style.css
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center text-sm py-1 bg-stone-700 cursor-pointer w-full pl-0 border border-stone-500">
-              <span className="text-stone-200 w-full pl-4">script.js</span>
-            </div>
-            <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
-              <span className="text-stone-300 w-full pl-4">style.css</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Code and Terminal Area */}
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col overflow-hidden">
           {/* Tabs */}
-          <div className="flex bg-stone-800 bg-opacity-60 border-b border-stone-600 ">
+          <div className="flex bg-stone-800 bg-opacity-60 border-b border-stone-600 flex-shrink-0">
             <div className="px-4 py-2 bg-neutral-900 border-r border-stone-600 flex items-center -mb-1">
               <span className="text-sm text-stone-300 -mt-1">script.js</span>
               <button className="ml-2 text-stone-500 hover:text-stone-400 -mt-1">

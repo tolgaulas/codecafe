@@ -6,6 +6,6 @@ import CodeEditorUI from "./CodeEditorUI.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <CodeEditorUI />
   </StrictMode>
 );
