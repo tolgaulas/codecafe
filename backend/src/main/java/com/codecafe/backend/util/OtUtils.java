@@ -201,10 +201,6 @@ public class OtUtils {
      * @throws IllegalArgumentException If the base lengths of op1 and op2 don't match.
      */
     public static List<TextOperation> transform(TextOperation operation1, TextOperation operation2) throws IllegalArgumentException {
-        if (operation1.getBaseLength() != operation2.getBaseLength()) {
-            throw new IllegalArgumentException("Both operations have to have the same base length");
-        }
-
         TextOperation operation1prime = new TextOperation();
         TextOperation operation2prime = new TextOperation();
         List<Object> ops1 = operation1.getOps();
