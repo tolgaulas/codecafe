@@ -617,7 +617,6 @@ const CodeEditorUI = () => {
                           : "text-stone-300"
                       }`}
                     >
-                      \n
                       {file.name}
                     </span>
                   </div>
@@ -651,14 +650,14 @@ const CodeEditorUI = () => {
           className="flex-1 flex flex-col relative"
         >
           {/* Tabs - Dynamic */}
-          <div className="flex bg-stone-800 bg-opacity-60 border-b border-stone-600 flex-shrink-0 overflow-x-auto">
+          <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
             {openFiles.map((file) => (
               <div
                 key={file.id}
-                className={`px-4 py-2 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 ${
+                className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 ${
                   activeFileId === file.id
-                    ? "bg-neutral-900 -mb-[1px]" // Active tab style
-                    : "bg-stone-700 hover:bg-stone-600" // Inactive tab style
+                    ? "bg-neutral-900 relative z-10"
+                    : "bg-stone-700 hover:bg-stone-600"
                 }`}
                 onClick={() => handleSwitchTab(file.id)}
               >
@@ -669,21 +668,22 @@ const CodeEditorUI = () => {
                       : "text-stone-400"
                   }`}
                 >
-                  \n
                   {file.name}
                 </span>
                 <button
-                  className="text-stone-500 hover:text-stone-300 hover:bg-stone-500 rounded-sm p-0.5 -mt-1"
+                  className="text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-1"
                   onClick={(e) => handleCloseTab(file.id, e)}
                 >
                   ×
                 </button>
               </div>
             ))}
+            {/* Absolute positioned div for the border line */}
+            <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
           </div>
 
           {/* Code Editor - takes remaining space */}
-          <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0">
+          <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
             {/* Render editor only if a file is active */}
             {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
               <CodeEditor
@@ -695,11 +695,10 @@ const CodeEditorUI = () => {
                   ]
                 }
                 showLineNumbers={true}
-                code={fileContents[activeFileId] || ""} // Get content from map
-                onCodeChange={handleCodeChange} // Use new handler
+                code={fileContents[activeFileId] || ""}
+                onCodeChange={handleCodeChange}
               />
             ) : (
-              // Optional: Show a placeholder when no file is open
               <div className="flex items-center justify-center h-full text-stone-500">
                 Select a file to start editing.
               </div>
@@ -709,27 +708,25 @@ const CodeEditorUI = () => {
           {/* Terminal Resizer */}
           <div
             className={`w-full bg-stone-700 flex-shrink-0 ${
-              terminalHeight === 0 // Check height directly
+              terminalHeight === 0
                 ? "cursor-pointer hover:bg-stone-500"
-                : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500" // Change cursor/style when collapsed
+                : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500"
             }`}
             style={{ height: `${TERMINAL_HANDLE_HEIGHT}px` }}
-            onMouseDown={handleTerminalResizeMouseDown} // Attach handler
+            onMouseDown={handleTerminalResizeMouseDown}
           />
 
           {/* Terminal */}
           <div
             className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
-              terminalHeight === 0 ? "hidden" : "flex" // Use height to hide/show
+              terminalHeight === 0 ? "hidden" : "flex"
             }`}
             style={{ height: `${terminalHeight}px` }}
           >
             <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
               <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
             </div>
-            {/* Terminal Content Area */}
             <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
-              {/* Always render TerminalComponent; parent div handles visibility */}
               <TerminalComponent ref={terminalRef} height={terminalHeight} />
             </div>
           </div>
