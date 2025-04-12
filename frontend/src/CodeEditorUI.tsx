@@ -178,21 +178,9 @@ const CodeEditorUI = () => {
 
     // If it WAS collapsed when clicked (height is 0), restore previous height
     if (terminalHeight === 0) {
-      // Determine a sensible height to restore to
-      let heightToRestore = previousTerminalHeight;
-
-      // If previous height is too small or invalid, use a default calculation
-      if (heightToRestore < MIN_TERMINAL_HEIGHT_PX) {
-        heightToRestore = Math.max(
-          window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION,
-          MIN_TERMINAL_HEIGHT_PX
-        );
-      }
-
-      // Ensure the final restored height is at least the minimum required
-      heightToRestore = Math.max(heightToRestore, MIN_TERMINAL_HEIGHT_PX);
-
-      setTerminalHeight(heightToRestore); // Set the calculated restore height
+      // No need to set height here. Just flag resizing as active.
+      // The first mousemove event will calculate the initial height based on cursor position.
+      console.log("[MouseDown] Collapsed. Starting resize.");
     }
     // If not collapsed, just start resizing with the current height
   };
@@ -231,15 +219,13 @@ const CodeEditorUI = () => {
         setTerminalHeight(0);
       } else {
         // Apply constraints only if above threshold
-        newHeight = Math.max(MIN_TERMINAL_HEIGHT_PX, newHeight);
-        newHeight = Math.min(MAX_TERMINAL_HEIGHT_PX, newHeight);
-        // Prevent terminal from overlapping editor too much (leave min height for editor)
-        newHeight = Math.min(
-          newHeight,
+        let constrainedHeight = Math.max(MIN_TERMINAL_HEIGHT_PX, newHeight);
+        constrainedHeight = Math.min(MAX_TERMINAL_HEIGHT_PX, constrainedHeight);
+        constrainedHeight = Math.min(
+          constrainedHeight,
           containerRect.height - MIN_TERMINAL_HEIGHT_PX
         );
-        setTerminalHeight(newHeight);
-        // No need to manage isTerminalCollapsed state
+        setTerminalHeight(constrainedHeight);
       }
     },
     [isTerminalResizing]
