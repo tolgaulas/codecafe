@@ -170,7 +170,7 @@ function SortableTab({
       onPointerDown={() => {
         onSwitchTab(file.id);
       }}
-      className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 relative ${
+      className={`px-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative ${
         activeFileId === file.id
           ? "bg-neutral-900"
           : "bg-stone-700 hover:bg-stone-600"
@@ -179,7 +179,7 @@ function SortableTab({
       <span
         {...attributes}
         {...listeners}
-        className={`text-sm -mt-1 mr-2 select-none cursor-grab ${
+        className={`text-sm -mt-1 mr-2 select-none cursor-default ${
           activeFileId === file.id ? "text-stone-200" : "text-stone-400"
         }`}
       >
@@ -757,7 +757,7 @@ const CodeEditorUI = () => {
         {/* Code and Terminal Area */}
         <div
           ref={editorTerminalAreaRef}
-          className="flex-1 flex flex-col relative"
+          className="flex-1 flex flex-col relative overflow-x-hidden"
         >
           {/* Tabs - Dynamic & Sortable */}
           <DndContext
@@ -765,7 +765,7 @@ const CodeEditorUI = () => {
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
             onDragStart={handleDragStart}
-            modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
+            modifiers={[restrictToHorizontalAxis]}
           >
             <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
               <SortableContext
@@ -784,23 +784,24 @@ const CodeEditorUI = () => {
                 ))}
               </SortableContext>
               {/* Absolute positioned div for the border line */}
-              <DragOverlay>
+              <DragOverlay modifiers={[restrictToParentElement]}>
                 {draggingId
-                  ? (() => {
+                  ? // Find the file data for the dragging item
+                    (() => {
                       const draggedFile = openFiles.find(
                         (f) => f.id === draggingId
                       );
                       if (!draggedFile) return null;
                       return (
                         <div
-                          className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-grabbing flex-shrink-0 relative shadow-lg ${
+                          className={`px-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative shadow-lg ${
                             activeFileId === draggedFile.id
                               ? "bg-neutral-900 z-10"
                               : "bg-stone-700 z-10"
                           }`}
                         >
                           <span
-                            className={`text-sm -mt-1 mr-2 select-none cursor-grab ${
+                            className={`text-sm -mt-1 mr-2 select-none cursor-default ${
                               activeFileId === draggedFile.id
                                 ? "text-stone-200"
                                 : "text-stone-400"

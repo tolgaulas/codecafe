@@ -17,7 +17,6 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 public class EditorController {
 
     // In-memory storage for user cursor info.
-    // (In production you could use Redis here to share across instances.)
     private final ConcurrentMap<String, UserInfo> cursorPositions = new ConcurrentHashMap<>();
 
     // This method handles OT operations (for text changes) as before.
