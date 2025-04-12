@@ -57,10 +57,11 @@ const WebViewPanel: React.FC = () => {
           <ul className="drop">
             <li>
               <input id="panel" type="checkbox" className="none" />
-              <label htmlFor="panel" className="icon-reorder">
-                ☰
-              </label>{" "}
-              {/* Placeholder icon */}
+              <label htmlFor="panel" className="icon-reorder" title="Menu">
+                <svg viewBox="0 0 16 16">
+                  <path d="M1 3h14v2H1zM1 7h14v2H1zM1 11h14v2H1z" />
+                </svg>
+              </label>
               {/* Dropdown content removed for brevity/focus on style */}
             </li>
           </ul>
