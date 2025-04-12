@@ -40,8 +40,8 @@
 /* main - Scoped body styles to the container */
 #web-view-content {
   font: normal 12px/1.3 Arial, sans-serif;
-  color: #333;
-  background: #eee; /* Changed background for panel */
+  color: #d1ccc6; /* Lighter stone text for darker background */
+  background: #4a443f; /* Darker stone/brown background for the whole panel */
 }
 
 /* frame - Styles for the browser chrome itself */
@@ -49,11 +49,11 @@
   /* width: 90%; */ /* Remove fixed width, let container control it */
   /* min-width: 900px; */ /* Remove min-width */
   /* margin: 40px 5%; */ /* Remove margin */
-  background: #ccc;
+  background: #5c5650; /* Medium-dark stone for browser chrome */
   /* border-radius: 5px; */ /* Remove outer radius */
   /* overflow: hidden; */ /* Managed by parent */
   /* box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 0 60px rgba(0,0,0,.6); */ /* Remove outer shadow */
-  border-bottom: 1px solid #666; /* Restore the border here */
+  border-bottom: 1px solid #3b3632; /* Very dark stone border */
 }
 
 /* tabs */
@@ -68,7 +68,7 @@
   cursor: default;
   z-index: 1;
   position: relative;
-  border: 1px solid #aaa;
+  border: 1px solid #3b3632; /* Match browser chrome border */
   border-bottom: 0;
   transform: skewX(25deg);
   float: left;
@@ -77,8 +77,9 @@
   padding: 0 15px;
   width: 160px;
   border-radius: 5px 5px 0 0;
-  box-shadow: inset -1px 1px 0 rgba(255, 255, 255, 0.5);
-  background: #ddd;
+  box-shadow: inset -1px 1px 0 rgba(255, 255, 255, 0.1),
+    /* Existing light inner top shadow */ 0 1px 1px rgba(0, 0, 0, 0.2); /* Subtle drop shadow for inactive tab */
+  background: #6e675f; /* Dark stone for inactive tabs */
 }
 
 #web-view-content .tabs li:nth-child(1) {
@@ -95,10 +96,11 @@
 #web-view-content .tabs li.active,
 #web-view-content .tabs li.active:before {
   z-index: 9 !important;
-  background: #eee;
+  background: #4a443f; /* Match panel background for active tab */
   height: 26px; /* Reduced active tab height */
   margin-bottom: -1px; /* Restore negative margin */
-  border-color: #888;
+  border-color: #3b3632; /* Dark border to match others */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08); /* Very subtle lighter inner top shadow */
 }
 
 #web-view-content .tabs li:before {
@@ -112,7 +114,7 @@
   padding: 0;
   width: 30px;
   border-radius: 5px 0 0 0;
-  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.1); /* Match tab shadow */
 }
 
 #web-view-content .tabs li img {
@@ -132,7 +134,7 @@
   right: 10px;
   top: 7px;
   font-size: 18px;
-  color: #777;
+  color: #a19a92; /* Lighter stone for close icon */
   width: 15px;
   height: 15px;
   line-height: 16px;
@@ -143,12 +145,12 @@
 
 #web-view-content .tabs li a.close:hover {
   color: #fff;
-  background-color: #e05d68;
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.4);
+  background-color: #8c6d5e; /* Muted brown hover */
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); /* Keep inner shadow */
 }
 
 #web-view-content .tabs li a.close:active {
-  background-color: #d83240;
+  background-color: #75584a; /* Darker muted brown active */
 }
 
 #web-view-content .tabs li span {
@@ -158,6 +160,11 @@
   transform: skewX(-25deg);
   white-space: nowrap;
   overflow: hidden;
+  color: #b6afa9; /* Lighter text for inactive tab */
+}
+
+#web-view-content .tabs li.active span {
+  color: #e0dcd8; /* Brightest text for active tab */
 }
 
 /* Fade effect - may need adjustment */
@@ -168,20 +175,22 @@
   position: absolute;
   right: 0;
   top: 1px;
+  /* Use inactive tab background color for gradient */
   background: linear-gradient(
     to right,
-    hsla(0, 0%, 87%, 0) 0%,
-    hsla(0, 0%, 87%, 1) 77%,
-    hsla(0, 0%, 87%, 1) 100%
+    hsla(33, 7%, 40%, 0) 0%,
+    /* Corresponds to #6e675f */ hsla(33, 7%, 40%, 1) 77%,
+    hsla(33, 7%, 40%, 1) 100%
   );
 }
 
 #web-view-content .tabs li.active span:after {
+  /* Use active tab background color for gradient */
   background: linear-gradient(
     to right,
-    hsla(0, 0%, 93%, 0) 0%,
-    hsla(0, 0%, 93%, 1) 77%,
-    hsla(0, 0%, 93%, 1) 100%
+    hsla(26, 5%, 27%, 0) 0%,
+    /* Corresponds to #4a443f */ hsla(26, 5%, 27%, 1) 77%,
+    hsla(26, 5%, 27%, 1) 100%
   );
 }
 
@@ -191,22 +200,24 @@
   margin: 12px 5px 0; /* Adjusted margin again */
   width: 23px;
   height: 16px;
-  background: #ddd;
+  background: #6e675f; /* Match inactive tab */
   border-radius: 5px;
-  border: 1px solid #aaa;
+  border: 1px solid #3b3632; /* Match tab border */
   transform: skewX(25deg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15),
+    /* Subtle inner */ 0 1px 1px rgba(0, 0, 0, 0.1); /* Subtle drop */
   cursor: pointer;
 }
 
 #web-view-content .add:hover {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1);
-  background: #f8f8f8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    /* Slightly brighter inner shadow */ 0 1px 1px rgba(0, 0, 0, 0.1);
+  background: #7a736c; /* Lighter stone hover */
 }
 
 #web-view-content .add:active {
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
-  background: #ccc;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2); /* Deeper inner shadow */
+  background: #5c5650; /* Darker stone */
 }
 
 /* bar */
@@ -215,8 +226,8 @@
   position: relative;
   clear: both;
   padding: 6px;
-  background: #eee;
-  border-top: 1px solid #aaa;
+  background: #4a443f; /* Match panel background */
+  border-top: 1px solid #3b3632; /* Match browser chrome border */
 }
 
 #web-view-content .bar ul {
@@ -239,24 +250,24 @@
   line-height: 26px;
   font-size: 16px; /* Adjusted for better icon fit */
   border-radius: 4px;
-  border: 1px solid #eee;
+  border: 1px solid #4a443f; /* Transparent border vs background */
   cursor: pointer;
+  color: #b6afa9; /* Light stone icon color */
 }
 
 #web-view-content .bar > ul > li > a:hover,
 #web-view-content .bar ul li label:hover {
-  border: 1px solid #ccc;
-  background: #eee;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 1px 1px rgba(0, 0, 0, 0.1);
+  border: 1px solid #6e675f; /* Medium stone border */
+  background: #5c5650; /* Darker stone hover */
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1); /* Subtle shadow on hover */
 }
 
 #web-view-content .bar > ul > li > a:active,
 #web-view-content .bar ul li label:active,
 #web-view-content .bar ul.drop li input:checked ~ label {
-  border: 1px solid #bbb;
-  background: #ccc;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid #3b3632; /* Darker stone border */
+  background: #6e675f; /* Medium stone active */
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2); /* Inner shadow on active */
 }
 
 #web-view-content .bar .favorite {
@@ -266,7 +277,7 @@
   top: 8px;
   width: 26px;
   height: 26px;
-  color: #888;
+  color: #a19a92; /* Medium stone icon color */
   text-align: center;
   line-height: 26px;
   font-size: 20px; /* Adjusted */
@@ -274,8 +285,8 @@
 }
 
 #web-view-content .bar input:checked ~ .favorite {
-  color: #e8bc02;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+  color: #e6cb83; /* Brighter gold/brown color */
+  text-shadow: 0 0 5px rgba(230, 203, 131, 0.5); /* Add subtle glow */
 }
 
 /* address bar */
@@ -286,13 +297,19 @@
   right: 40px; /* Reduced to allow expansion */
   position: absolute;
   margin-left: 10px;
-  border: 1px solid #bbb;
+  border: 1px solid #3b3632; /* Dark stone border */
   height: 26px;
   font-size: 13px;
   line-height: 26px;
   border-radius: 5px;
   padding: 0 10px;
-  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.08), 0 1px 0 rgba(255, 255, 255, 1);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25); /* Slightly deeper inner shadow */
+  background: #6e675f; /* Dark stone input bg */
+  color: #e0dcd8; /* Light text */
+}
+
+#web-view-content .bar input[type="text"]::placeholder {
+  color: #a19a92; /* Medium stone placeholder */
 }
 
 /* menu .drop */
@@ -307,8 +324,8 @@
   position: relative;
   z-index: 2;
   clear: both;
-  background: #eee;
-  border-bottom: 1px solid #bbb;
+  background: #524c46; /* Slightly darker than main panel for bookmark bar */
+  border-bottom: 1px solid #3b3632; /* Match browser chrome border */
 }
 
 #web-view-content .bookmark ul {
@@ -329,28 +346,27 @@
   padding: 0 8px 0 28px;
   height: 25px;
   line-height: 25px;
-  background: #eee;
+  background: #524c46; /* Match bookmark bar background */
   border-radius: 5px;
-  border: 1px solid #eee;
-  color: #444;
+  border: 1px solid #524c46; /* Transparent border */
+  color: #c8c1ba; /* Medium stone text color */
   text-overflow: ellipsis;
   overflow: hidden;
-  white-space: nowrap;
-  transition: all 0.2s ease;
+  box-shadow: none; /* Default no shadow */
+  transition: all 0.1s ease-in-out; /* Faster transition */
   cursor: pointer;
 }
 
 #web-view-content .bookmark ul li a:hover {
-  border: 1px solid #ccc;
-  background: #eee;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 1px 1px rgba(0, 0, 0, 0.1);
+  border: 1px solid #6e675f; /* Lighter border */
+  background: #615b55; /* Slightly lighter hover */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle shadow */
 }
 
 #web-view-content .bookmark ul li a:active {
-  border: 1px solid #bbb;
-  background: #ddd;
-  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.1);
+  border: 1px solid #3b3632; /* Darker border */
+  background: #5c5650; /* Match browser chrome bg */
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.2); /* Inner shadow */
 }
 
 #web-view-content .bookmark ul li a img {
@@ -365,7 +381,7 @@
 #web-view-content .page {
   clear: both;
   /* height: 550px; */ /* Let flexbox handle height */
-  background: #c5c5c5;
+  background: #7a736c; /* Medium-dark stone for the page content area */
   /* border-radius: 0 0 5px 5px; */ /* Remove rounding if panel is flush */
   overflow: hidden;
 }
