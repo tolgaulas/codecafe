@@ -50,10 +50,10 @@
   /* min-width: 900px; */ /* Remove min-width */
   /* margin: 40px 5%; */ /* Remove margin */
   background: #ccc;
-  border-bottom: 1px solid #666; /* Keep bottom border for separation from iframe */
   /* border-radius: 5px; */ /* Remove outer radius */
   /* overflow: hidden; */ /* Managed by parent */
   /* box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 0 60px rgba(0,0,0,.6); */ /* Remove outer shadow */
+  border-bottom: 1px solid #666; /* Restore the border here */
 }
 
 /* tabs */
@@ -96,8 +96,8 @@
 #web-view-content .tabs li.active:before {
   z-index: 9 !important;
   background: #eee;
-  height: 30px;
-  margin-bottom: -1px;
+  height: 31px;
+  margin-bottom: -1px; /* Restore negative margin */
   border-color: #888;
 }
 
