@@ -25,7 +25,7 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  rectSortingStrategy,
+  horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
@@ -166,27 +166,25 @@ function SortableTab({
       style={style}
       {...attributes}
       {...listeners}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSwitchTab(file.id);
+      }}
       className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 relative ${
         activeFileId === file.id
           ? "bg-neutral-900"
           : "bg-stone-700 hover:bg-stone-600"
       }`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSwitchTab(file.id);
-      }}
     >
       <span
-        {...attributes}
-        {...listeners}
-        className={`text-sm -mt-1 mr-2 select-none cursor-grab ${
+        className={`text-sm -mt-1 mr-2 select-none ${
           activeFileId === file.id ? "text-stone-200" : "text-stone-400"
         }`}
       >
         {file.name}
       </span>
       <button
-        className="text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-1 z-20"
+        className={`text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-1 z-20`}
         onClick={(e) => onCloseTab(file.id, e)}
         onPointerDown={(e) => {
           e.stopPropagation();
@@ -234,7 +232,11 @@ const CodeEditorUI = () => {
 
   // --- dnd-kit Sensors ---
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -769,7 +771,7 @@ const CodeEditorUI = () => {
             <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
               <SortableContext
                 items={openFiles.map((f) => f.id)} // Pass array of IDs
-                strategy={rectSortingStrategy} // Use a strategy suitable for horizontal lists
+                strategy={horizontalListSortingStrategy} // Use the specific horizontal strategy
               >
                 {openFiles.map((file) => (
                   <SortableTab
