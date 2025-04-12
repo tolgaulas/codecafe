@@ -28,7 +28,10 @@ import {
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
+import {
+  restrictToHorizontalAxis,
+  restrictToParentElement,
+} from "@dnd-kit/modifiers";
 
 // Define types for code execution
 interface CodeFile {
@@ -762,7 +765,7 @@ const CodeEditorUI = () => {
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
             onDragStart={handleDragStart}
-            modifiers={[restrictToHorizontalAxis]}
+            modifiers={[restrictToHorizontalAxis, restrictToParentElement]}
           >
             <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
               <SortableContext
