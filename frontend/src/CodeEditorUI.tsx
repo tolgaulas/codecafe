@@ -2,8 +2,13 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import TerminalComponent from "./components/TerminalComponent";
-import { FaRegFolder } from "react-icons/fa";
-import { VscAccount, VscLiveShare, VscSearch } from "react-icons/vsc";
+import { FaRegFolder, FaGlobe } from "react-icons/fa";
+import {
+  VscAccount,
+  VscLiveShare,
+  VscSearch,
+  VscPreview,
+} from "react-icons/vsc";
 import { VscFiles } from "react-icons/vsc";
 import { VscSettingsGear } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
@@ -32,6 +37,7 @@ import {
   restrictToHorizontalAxis,
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
+import WebViewPanel from "./components/WebViewPanel"; // Import the new component
 
 // Define types for code execution
 interface CodeFile {
@@ -90,6 +96,12 @@ const DEFAULT_EXPLORER_WIDTH = 192; // w-48
 const MIN_EXPLORER_WIDTH = 100;
 const MAX_EXPLORER_WIDTH = 500;
 const EXPLORER_HANDLE_WIDTH = 8; // w-2
+
+// Web View Panel (Right)
+const DEFAULT_WEBVIEW_WIDTH = 320; // Example default width
+const MIN_WEBVIEW_WIDTH = 150;
+const MAX_WEBVIEW_WIDTH = 800;
+const WEBVIEW_HANDLE_WIDTH = 8;
 
 // Terminal
 const DEFAULT_TERMINAL_HEIGHT_FRACTION = 0.33; // Corresponds to h-1/3
@@ -210,6 +222,13 @@ const CodeEditorUI = () => {
     DEFAULT_EXPLORER_WIDTH
   );
 
+  // Web View State (Right Panel)
+  const [webViewWidth, setWebViewWidth] = useState<number>(0); // Start collapsed
+  const [isWebViewResizing, setIsWebViewResizing] = useState<boolean>(false);
+  const [previousWebViewWidth, setPreviousWebViewWidth] = useState<number>(
+    DEFAULT_WEBVIEW_WIDTH
+  );
+
   // Terminal State
   const [terminalHeight, setTerminalHeight] = useState<number>(
     window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION // Initial height based on fraction
@@ -231,6 +250,7 @@ const CodeEditorUI = () => {
   const terminalRef = useRef<TerminalRef>();
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const editorTerminalAreaRef = useRef<HTMLDivElement>(null); // Ref for the main editor+terminal vertical area
+  const mainContentRef = useRef<HTMLDivElement>(null); // Ref for the overall main content flex row
 
   // --- dnd-kit Sensors ---
   const sensors = useSensors(
@@ -372,6 +392,65 @@ const CodeEditorUI = () => {
     handleExplorerResizeMouseUp,
   ]);
 
+  // --- Web View Resizing Logic ---
+  const handleWebViewResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsWebViewResizing(true);
+  };
+
+  const handleWebViewResizeMouseUp = useCallback(() => {
+    if (isWebViewResizing) {
+      setIsWebViewResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  }, [isWebViewResizing]);
+
+  const handleWebViewResizeMouseMove = useCallback(
+    (e: MouseEvent) => {
+      requestAnimationFrame(() => {
+        if (!isWebViewResizing || !mainContentRef.current) return;
+        const mainRect = mainContentRef.current.getBoundingClientRect();
+        // Calculate width based on distance from right edge
+        let newWebViewWidth = mainRect.right - e.clientX;
+
+        newWebViewWidth = Math.max(MIN_WEBVIEW_WIDTH, newWebViewWidth);
+        newWebViewWidth = Math.min(MAX_WEBVIEW_WIDTH, newWebViewWidth);
+        // Ensure it doesn't overlap the other content too much (leave min width for editor area)
+        // This calculation might need refinement depending on exact layout
+        // const editorAreaMinWidth = 200; // Example minimum width for the center area
+        // newWebViewWidth = Math.min(newWebViewWidth, mainRect.width - explorerWidth - editorAreaMinWidth);
+
+        setWebViewWidth(newWebViewWidth);
+      });
+    },
+    [isWebViewResizing, explorerWidth] // Depends on explorer width too if constraining overlap
+  );
+
+  useEffect(() => {
+    if (isWebViewResizing) {
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.addEventListener("mousemove", handleWebViewResizeMouseMove);
+      window.addEventListener("mouseup", handleWebViewResizeMouseUp);
+    } else {
+      window.removeEventListener("mousemove", handleWebViewResizeMouseMove);
+      window.removeEventListener("mouseup", handleWebViewResizeMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleWebViewResizeMouseMove);
+      window.removeEventListener("mouseup", handleWebViewResizeMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [
+    isWebViewResizing,
+    handleWebViewResizeMouseMove,
+    handleWebViewResizeMouseUp,
+  ]);
+
   // --- Terminal Resizing Logic ---
   const handleTerminalResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -459,7 +538,7 @@ const CodeEditorUI = () => {
   // --- Explorer Toggle Logic ---
   const toggleExplorer = () => {
     setActiveIcon((prevActiveIcon) => {
-      const isExplorerOpen = prevActiveIcon === "files";
+      const isExplorerOpen = explorerWidth > 0;
       if (isExplorerOpen) {
         if (explorerWidth > MIN_EXPLORER_WIDTH / 2) {
           // Only save substantial width
@@ -475,34 +554,71 @@ const CodeEditorUI = () => {
     });
   };
 
+  // --- Web View Toggle Logic ---
+  const toggleWebView = () => {
+    setActiveIcon((prevActiveIcon) => {
+      const isWebViewOpen = webViewWidth > 0;
+      if (isWebViewOpen) {
+        if (webViewWidth > MIN_WEBVIEW_WIDTH / 2) {
+          setPreviousWebViewWidth(webViewWidth);
+        }
+        setWebViewWidth(0);
+        return null;
+      } else {
+        setWebViewWidth(previousWebViewWidth || DEFAULT_WEBVIEW_WIDTH);
+        return "webView"; // Set activeIcon to webView
+      }
+    });
+  };
+
   // --- Icon Click Logic (Generalized) ---
   const handleIconClick = (iconName: string | null) => {
     setActiveIcon((prevActiveIcon) => {
+      let nextActiveIcon = iconName;
+
       // If clicking the already active 'files' icon, toggle it
       if (iconName === "files" && prevActiveIcon === "files") {
         toggleExplorer();
-        // toggleExplorer handles the state change, so return the current state temporarily
-        return prevActiveIcon;
+        nextActiveIcon = explorerWidth > 0 ? "files" : null; // Update based on toggle result
+      }
+      // If clicking the already active 'webView' icon, toggle it
+      else if (iconName === "webView" && prevActiveIcon === "webView") {
+        toggleWebView();
+        nextActiveIcon = webViewWidth > 0 ? "webView" : null;
+      }
+      // If switching *to* files
+      else if (iconName === "files") {
+        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
+        setWebViewWidth(0); // Collapse web view
+      }
+      // If switching *to* webView
+      else if (iconName === "webView") {
+        setWebViewWidth(previousWebViewWidth || DEFAULT_WEBVIEW_WIDTH);
+        setExplorerWidth(0); // Collapse explorer
+      }
+      // If switching to other icons (search, chat, etc.) or null
+      else {
+        setExplorerWidth(0); // Collapse both
+        setWebViewWidth(0);
       }
 
-      // If switching away from 'files', collapse the explorer
-      if (prevActiveIcon === "files" && iconName !== "files") {
-        if (explorerWidth > MIN_EXPLORER_WIDTH / 2) {
-          // Save width before collapsing
-          setPreviousExplorerWidth(explorerWidth);
-        }
-        setExplorerWidth(0); // Collapse
+      // Save previous widths if collapsing
+      if (
+        iconName !== "files" &&
+        explorerWidth > 0 &&
+        explorerWidth > MIN_EXPLORER_WIDTH / 2
+      ) {
+        setPreviousExplorerWidth(explorerWidth);
       }
-      // If switching *to* 'files' from another icon
-      else if (iconName === "files" && prevActiveIcon !== "files") {
-        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH); // Restore width
-      }
-      // If switching between other non-file icons, explorer remains collapsed
-      else if (iconName !== "files" && prevActiveIcon !== "files") {
-        setExplorerWidth(0); // Ensure collapsed
+      if (
+        iconName !== "webView" &&
+        webViewWidth > 0 &&
+        webViewWidth > MIN_WEBVIEW_WIDTH / 2
+      ) {
+        setPreviousWebViewWidth(webViewWidth);
       }
 
-      return iconName; // Set the new active icon
+      return nextActiveIcon; // Set the new active icon
     });
   };
 
@@ -615,7 +731,7 @@ const CodeEditorUI = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1 min-h-0">
+      <div ref={mainContentRef} className="flex flex-1 min-h-0">
         {/* Combined Sidebar Area */}
         <div
           ref={sidebarContainerRef}
@@ -647,6 +763,16 @@ const CodeEditorUI = () => {
                 onClick={() => handleIconClick("search")}
               >
                 <VscSearch size={24} />
+              </button>
+              <button
+                className={`w-full flex justify-center py-1 ${
+                  activeIcon === "webView"
+                    ? "text-stone-100"
+                    : "text-stone-500 hover:text-stone-200"
+                }`}
+                onClick={() => handleIconClick("webView")}
+              >
+                <VscPreview size={24} />
               </button>
               <button
                 className={`w-full flex justify-center py-1 ${
@@ -868,6 +994,40 @@ const CodeEditorUI = () => {
             <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
               <TerminalComponent ref={terminalRef} height={terminalHeight} />
             </div>
+          </div>
+        </div>
+
+        {/* Right Panel Area */}
+        <div className="flex flex-shrink-0 h-full relative">
+          {/* Web View Resizer Handle */}
+          {activeIcon === "webView" && (
+            <div
+              className={`absolute top-0 h-full cursor-col-resize bg-transparent z-20 ${
+                webViewWidth > 0 ? "block" : "hidden"
+              }`}
+              style={{
+                width: `${WEBVIEW_HANDLE_WIDTH}px`,
+                // Position handle just to the left of the panel
+                left: `-${WEBVIEW_HANDLE_WIDTH / 2}px`,
+                pointerEvents:
+                  activeIcon === "webView" && webViewWidth > 0
+                    ? "auto"
+                    : "none",
+              }}
+              onMouseDown={handleWebViewResizeMouseDown}
+            ></div>
+          )}
+
+          {/* Web View Panel */}
+          <div
+            className={`overflow-hidden h-full flex-shrink-0 ${
+              activeIcon === "webView" && webViewWidth > 0
+                ? "visible"
+                : "invisible"
+            }`}
+            style={{ width: `${webViewWidth}px` }}
+          >
+            <WebViewPanel />
           </div>
         </div>
       </div>
