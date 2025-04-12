@@ -60,7 +60,7 @@
 #web-view-content .tabs {
   float: left;
   margin-left: 20px;
-  height: 31px; /* Increased height to push .bar down */
+  height: 40px;
 }
 
 #web-view-content .tabs li,
@@ -72,8 +72,8 @@
   border-bottom: 0;
   transform: skewX(25deg);
   float: left;
-  height: 29px; /* Reduced tab height */
-  margin: 6px 0 0 12px; /* Removed top margin */
+  height: 29px;
+  margin: 10px 0 0 12px;
   padding: 0 15px;
   width: 160px;
   border-radius: 5px 5px 0 0;
@@ -96,7 +96,7 @@
 #web-view-content .tabs li.active:before {
   z-index: 9 !important;
   background: #eee;
-  height: 26px; /* Reduced active tab height */
+  height: 31px;
   margin-bottom: -1px; /* Restore negative margin */
   border-color: #888;
 }
@@ -164,7 +164,7 @@
 #web-view-content .tabs li span:after {
   content: "";
   width: 25px;
-  height: 25px; /* Adjust fade height */
+  height: 28px;
   position: absolute;
   right: 0;
   top: 1px;
@@ -188,7 +188,7 @@
 /* tab add */
 #web-view-content .add {
   float: left;
-  margin: 12px 5px 0; /* Adjusted margin again */
+  margin: 18px 6px 0; /* Nudge top margin down slightly */
   width: 23px;
   height: 16px;
   background: #ddd;
@@ -282,8 +282,8 @@
 #web-view-content .bar input[type="text"] {
   display: block;
   float: left;
-  left: 130px; /* Adjust based on icon widths */
-  right: 80px; /* Adjust based on icon widths */
+  left: 95px; /* Reduced to allow expansion */
+  right: 40px; /* Reduced to allow expansion */
   position: absolute;
   margin-left: 10px;
   border: 1px solid #bbb;
@@ -373,8 +373,8 @@
 /* Added styles for SVG icons in bar buttons */
 #web-view-content .bar > ul > li > a svg {
   display: block; /* Helps with alignment */
-  width: 16px; /* Adjust size as needed */
-  height: 16px; /* Adjust size as needed */
-  margin: 5px auto 0; /* Center horizontally, adjust top margin */
+  width: 12px; /* Reduced size */
+  height: 12px; /* Reduced size */
+  margin: 7px auto 0; /* Re-centered margin */
   fill: currentColor; /* Use the text color defined for the link */
 }

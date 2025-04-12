@@ -47,17 +47,7 @@ const WebViewPanel: React.FC = () => {
                 </svg>
               </a>
             </li>
-            <li>
-              <a className="icon-home" href="#">
-                ⌂
-              </a>
-            </li>
           </ul>
-          <input id="favorite" type="checkbox" className="none" />
-          <label htmlFor="favorite" className="favorite icon-star-empty">
-            ☆
-          </label>{" "}
-          {/* Placeholder icon */}
           <input
             placeholder="Search"
             defaultValue="http://example.com/"
