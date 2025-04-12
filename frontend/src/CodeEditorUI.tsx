@@ -35,7 +35,30 @@ interface TerminalRef {
 }
 
 // Define type for language keys
-type LanguageKey = keyof typeof LANGUAGE_VERSIONS;
+type ExecutableLanguageKey = keyof typeof LANGUAGE_VERSIONS; // Languages the backend can run
+type EditorLanguageKey = ExecutableLanguageKey | "css" | "html" | "plaintext"; // Languages the editor supports
+
+// Map Monaco language identifiers if they differ (optional, but good practice)
+const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
+  javascript: "javascript",
+  typescript: "typescript",
+  python: "python",
+  java: "java",
+  c: "c",
+  cplusplus: "cpp", // Monaco uses 'cpp'
+  go: "go",
+  rust: "rust",
+  ruby: "ruby",
+  css: "css",
+  html: "html",
+  plaintext: "plaintext",
+};
+
+interface OpenFile {
+  id: string; // Unique ID, e.g., file path or generated UUID
+  name: string;
+  language: EditorLanguageKey; // Use the broader editor language type
+}
 
 // --- Constants ---
 // Explorer
@@ -52,12 +75,39 @@ const MAX_TERMINAL_HEIGHT_PX = window.innerHeight * 0.8; // Example max
 const TERMINAL_COLLAPSE_THRESHOLD_PX = 25;
 const TERMINAL_HANDLE_HEIGHT = 4; // h-1 (was 6)
 
+// --- Mock File Data (Replace with actual data fetching/structure later) ---
+const MOCK_FILES: {
+  [id: string]: { name: string; language: EditorLanguageKey; content: string };
+} = {
+  "script.js": {
+    name: "script.js",
+    language: "javascript",
+    content:
+      '// Start coding in script.js\nfunction helloWorld() {\n  console.log("Hello from script.js!");\n}\nhelloWorld();\n',
+  },
+  "style.css": {
+    name: "style.css",
+    language: "css",
+    content:
+      "/* Start coding in style.css */\nbody {\n  background-color: #2d2d2d;\n}\n",
+  },
+  "index.html": {
+    name: "index.html",
+    language: "html",
+    content:
+      '<!DOCTYPE html>\n<html>\n<head>\n  <title>Code Editor</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Hello from index.html!</h1>\n  <script src="script.js"></script>\n</body>\n</html>\n',
+  },
+};
+
+// Helper function to check if a language is executable
+const isExecutableLanguage = (
+  lang: EditorLanguageKey
+): lang is ExecutableLanguageKey => {
+  return lang in LANGUAGE_VERSIONS;
+};
+
 const CodeEditorUI = () => {
-  const [code, setCode] = useState(
-    '// Start coding here\nfunction helloWorld() {\n  console.log("Hello, world!");\n}\n'
-  );
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
-  const [editorLanguage] = useState<LanguageKey>("javascript");
 
   // Explorer State
   const [explorerWidth, setExplorerWidth] = useState<number>(
@@ -77,6 +127,13 @@ const CodeEditorUI = () => {
     window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
   );
 
+  // Tab / File Management State
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
+    {}
+  );
+
   // Create a ref for the terminal
   const terminalRef = useRef<TerminalRef>();
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
@@ -85,10 +142,33 @@ const CodeEditorUI = () => {
   // Handle code execution
   const handleRunCode = async () => {
     try {
+      if (!activeFileId) {
+        terminalRef.current?.writeToTerminal("No active file to run.\n");
+        return;
+      }
+
+      const activeFile = openFiles.find((f) => f.id === activeFileId);
+      const contentToRun = fileContents[activeFileId];
+
+      if (!activeFile || contentToRun === undefined) {
+        terminalRef.current?.writeToTerminal(
+          "Error: Active file data not found.\n"
+        );
+        return;
+      }
+
+      // Check if the language is executable
+      if (!isExecutableLanguage(activeFile.language)) {
+        terminalRef.current?.writeToTerminal(
+          `Cannot execute files of type '${activeFile.language}'.\n`
+        );
+        return;
+      }
+
       const requestBody: CodeExecutionRequest = {
-        language: editorLanguage,
-        version: LANGUAGE_VERSIONS[editorLanguage].version,
-        files: [{ content: code }],
+        language: activeFile.language,
+        version: LANGUAGE_VERSIONS[activeFile.language].version, // Safe access
+        files: [{ content: contentToRun }], // Send content of the active file
       };
 
       const response = await axios.post<CodeExecutionResponse>(
@@ -180,7 +260,6 @@ const CodeEditorUI = () => {
     if (terminalHeight === 0) {
       // No need to set height here. Just flag resizing as active.
       // The first mousemove event will calculate the initial height based on cursor position.
-      console.log("[MouseDown] Collapsed. Starting resize.");
     }
     // If not collapsed, just start resizing with the current height
   };
@@ -304,6 +383,92 @@ const CodeEditorUI = () => {
 
       return iconName; // Set the new active icon
     });
+  };
+
+  // --- File Handling Logic ---
+  const handleOpenFile = (fileId: string) => {
+    if (!MOCK_FILES[fileId]) return; // Ignore if file doesn't exist in mock data
+
+    const fileData = MOCK_FILES[fileId];
+
+    // Check if already open
+    if (!openFiles.some((f) => f.id === fileId)) {
+      // Add to open files
+      const newOpenFile: OpenFile = {
+        id: fileId,
+        name: fileData.name,
+        language: fileData.language,
+      };
+      setOpenFiles((prev) => [...prev, newOpenFile]);
+
+      // Add content to fileContents map
+      setFileContents((prev) => ({ ...prev, [fileId]: fileData.content }));
+    }
+    // Set as active
+    setActiveFileId(fileId);
+  };
+
+  const handleSwitchTab = (fileId: string) => {
+    setActiveFileId(fileId);
+  };
+
+  const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent click from switching to the tab being closed
+
+    const indexToRemove = openFiles.findIndex((f) => f.id === fileIdToClose);
+    if (indexToRemove === -1) return;
+
+    // Determine the next active tab
+    let nextActiveId: string | null = null;
+    if (activeFileId === fileIdToClose) {
+      if (openFiles.length > 1) {
+        // Try activating the previous tab, otherwise the next one
+        nextActiveId =
+          openFiles[indexToRemove - 1]?.id ??
+          openFiles[indexToRemove + 1]?.id ??
+          null;
+        // If the only tab remaining is the one after the closed one, it might be the same index after removal
+        if (!nextActiveId && indexToRemove < openFiles.length - 1) {
+          nextActiveId = openFiles[indexToRemove + 1]?.id;
+        }
+        // Final check: if the next active ID determined is STILL the one we are closing (edge case, single tab left maybe?)
+        // Let's rethink the next active ID logic. A simpler way:
+        const remainingFiles = openFiles.filter((f) => f.id !== fileIdToClose);
+        if (remainingFiles.length > 0) {
+          // If closing the active tab, try to activate the one to the left
+          // If closing the first tab, activate the new first tab (which was the second)
+          nextActiveId =
+            remainingFiles[Math.max(0, indexToRemove - 1)]?.id ??
+            remainingFiles[0]?.id;
+        } else {
+          nextActiveId = null; // No tabs left
+        }
+      }
+    } else {
+      // If closing a background tab, keep the current active tab active
+      nextActiveId = activeFileId;
+    }
+
+    setActiveFileId(nextActiveId);
+
+    // Remove from openFiles
+    setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
+
+    // Remove content (optional, could keep for session restore later)
+    setFileContents((prev) => {
+      const newContents = { ...prev };
+      delete newContents[fileIdToClose];
+      return newContents;
+    });
+  };
+
+  const handleCodeChange = (newCode: string) => {
+    if (activeFileId) {
+      setFileContents((prev) => ({
+        ...prev,
+        [activeFileId]: newCode,
+      }));
+    }
   };
 
   return (
@@ -434,21 +599,29 @@ const CodeEditorUI = () => {
               </div>
               <div className="w-full">
                 {/* File items */}
-                <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
-                  <span className="text-stone-300 w-full pl-4 truncate">
-                    index.html very long file name test test test test test test
-                  </span>
-                </div>
-                <div className="flex items-center text-sm py-1 bg-stone-700 cursor-pointer w-full pl-0 border-y border-stone-500">
-                  <span className="text-stone-200 w-full pl-4 truncate">
-                    script.js
-                  </span>
-                </div>
-                <div className="flex items-center text-sm py-1 hover:bg-stone-700 cursor-pointer w-full pl-0">
-                  <span className="text-stone-300 w-full pl-4 truncate">
-                    style.css
-                  </span>
-                </div>
+                {Object.entries(MOCK_FILES).map(([id, file]) => (
+                  <div
+                    key={id}
+                    className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
+                      activeFileId === id && openFiles.some((f) => f.id === id) // Check if open AND active for highlight
+                        ? "bg-stone-600 border-y border-stone-500"
+                        : "hover:bg-stone-700"
+                    }`}
+                    onClick={() => handleOpenFile(id)}
+                  >
+                    <span
+                      className={`w-full pl-4 truncate ${
+                        activeFileId === id &&
+                        openFiles.some((f) => f.id === id)
+                          ? "text-stone-100"
+                          : "text-stone-300"
+                      }`}
+                    >
+                      \n
+                      {file.name}
+                    </span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -477,27 +650,60 @@ const CodeEditorUI = () => {
           ref={editorTerminalAreaRef}
           className="flex-1 flex flex-col relative"
         >
-          {/* Tabs - Restored */}
-          <div className="flex bg-stone-800 bg-opacity-60 border-b border-stone-600 flex-shrink-0">
-            {/* Example Tab - replace with dynamic tabs later */}
-            <div className="px-4 py-2 bg-neutral-900 border-r border-stone-600 flex items-center -mb-[1px]">
-              <span className="text-sm text-stone-300 -mt-1">script.js</span>
-              <button className="ml-2 text-stone-500 hover:text-stone-400 -mt-1">
-                ×
-              </button>
-            </div>
-            {/* Add more tabs here as needed */}
+          {/* Tabs - Dynamic */}
+          <div className="flex bg-stone-800 bg-opacity-60 border-b border-stone-600 flex-shrink-0 overflow-x-auto">
+            {openFiles.map((file) => (
+              <div
+                key={file.id}
+                className={`px-4 py-2 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 ${
+                  activeFileId === file.id
+                    ? "bg-neutral-900 -mb-[1px]" // Active tab style
+                    : "bg-stone-700 hover:bg-stone-600" // Inactive tab style
+                }`}
+                onClick={() => handleSwitchTab(file.id)}
+              >
+                <span
+                  className={`text-sm -mt-1 mr-2 ${
+                    activeFileId === file.id
+                      ? "text-stone-200"
+                      : "text-stone-400"
+                  }`}
+                >
+                  \n
+                  {file.name}
+                </span>
+                <button
+                  className="text-stone-500 hover:text-stone-300 hover:bg-stone-500 rounded-sm p-0.5 -mt-1"
+                  onClick={(e) => handleCloseTab(file.id, e)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
 
           {/* Code Editor - takes remaining space */}
-          <div className="flex-1 overflow-auto pt-6 font-mono text-sm relative bg-neutral-900 min-h-0">
-            <CodeEditor
-              theme="codeCafeTheme"
-              language="javascript"
-              showLineNumbers={true}
-              code={code}
-              onCodeChange={setCode}
-            />
+          <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0">
+            {/* Render editor only if a file is active */}
+            {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
+              <CodeEditor
+                theme="codeCafeTheme"
+                language={
+                  editorLanguageMap[
+                    openFiles.find((f) => f.id === activeFileId)?.language ||
+                      "plaintext"
+                  ]
+                }
+                showLineNumbers={true}
+                code={fileContents[activeFileId] || ""} // Get content from map
+                onCodeChange={handleCodeChange} // Use new handler
+              />
+            ) : (
+              // Optional: Show a placeholder when no file is open
+              <div className="flex items-center justify-center h-full text-stone-500">
+                Select a file to start editing.
+              </div>
+            )}
           </div>
 
           {/* Terminal Resizer */}
@@ -533,7 +739,11 @@ const CodeEditorUI = () => {
       {/* Status Bar */}
       <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-center px-4 py-1 text-xs border-t border-stone-600 flex-shrink-0">
         <div className="flex items-center space-x-4">
-          <span>{editorLanguage}</span>
+          <span>
+            {activeFileId && openFiles.find((f) => f.id === activeFileId)
+              ? openFiles.find((f) => f.id === activeFileId)?.language
+              : "plaintext"}
+          </span>
           <span>UTF-8</span>
         </div>
         <div className="flex items-center space-x-4">
