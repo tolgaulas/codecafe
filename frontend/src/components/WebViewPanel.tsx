@@ -27,19 +27,24 @@ const WebViewPanel: React.FC = () => {
         <div className="bar clear">
           <ul>
             <li>
-              <a className="icon-arrow-left" href="#">
-                {"<"}
-              </a>
-            </li>{" "}
-            {/* Placeholder icons */}
-            <li>
-              <a className="icon-arrow-right" href="#">
-                {">"}
+              <a className="icon-arrow-left" href="#" title="Back">
+                <svg viewBox="0 0 16 16">
+                  <path d="M16,7H3.8l5.6-5.6L8,0L0,8l8,8l1.4-1.4L3.8,9H16V7z" />
+                </svg>
               </a>
             </li>
             <li>
-              <a className="icon-refresh" href="#">
-                ⟳
+              <a className="icon-arrow-right" href="#" title="Forward">
+                <svg viewBox="0 0 16 16">
+                  <path d="M8,0L6.6,1.4L12.2,7H0v2h12.2l-5.6,5.6L8,16l8-8L8,0z" />
+                </svg>
+              </a>
+            </li>
+            <li>
+              <a className="icon-refresh" href="#" title="Refresh">
+                <svg viewBox="0 0 16 16">
+                  <path d="M13.6,2.3C12.2,0.9,10.2,0,8,0C3.6,0,0,3.6,0,8s3.6,8,8,8c3.7,0,6.8-2.5,7.7-6h-2.1c-0.8,2.3-3,4-5.6,4c-3.3,0-6-2.7-6-6 s2.7-6,6-6c1.7,0,3.1,0.7,4.2,1.8L9,7h7V0L13.6,2.3z" />
+                </svg>
               </a>
             </li>
             <li>

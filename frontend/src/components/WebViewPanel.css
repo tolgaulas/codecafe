@@ -369,3 +369,12 @@
   /* border-radius: 0 0 5px 5px; */ /* Remove rounding if panel is flush */
   overflow: hidden;
 }
+
+/* Added styles for SVG icons in bar buttons */
+#web-view-content .bar > ul > li > a svg {
+  display: block; /* Helps with alignment */
+  width: 16px; /* Adjust size as needed */
+  height: 16px; /* Adjust size as needed */
+  margin: 5px auto 0; /* Center horizontally, adjust top margin */
+  fill: currentColor; /* Use the text color defined for the link */
+}
