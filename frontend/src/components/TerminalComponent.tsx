@@ -140,21 +140,6 @@ const TerminalComponent = forwardRef<any, TerminalComponentProps>(
       };
     }, []);
 
-    // Effect to resize terminal when height prop changes
-    useEffect(() => {
-      // Debounce fit call slightly using requestAnimationFrame
-      const animationFrameId = requestAnimationFrame(() => {
-        if (fitAddonRef.current) {
-          try {
-            fitAddonRef.current.fit();
-          } catch (error) {
-            console.error("Terminal fit error:", error);
-          }
-        }
-      });
-      return () => cancelAnimationFrame(animationFrameId);
-    }, [height]);
-
     // Helper function to write the prompt with the correct color
     const writePrompt = (term: Terminal) => {
       term.write(`${ANSI_COLORS.PROMPT_COLOR}$ ${ANSI_COLORS.RESET}`);
@@ -164,8 +149,7 @@ const TerminalComponent = forwardRef<any, TerminalComponentProps>(
       writeToTerminal: (output: string) => {
         if (terminalInstance.current) {
           const term = terminalInstance.current;
-          term.write("\x1b[2K\r"); // Clear the current line
-
+          term.write("\x1b[2K\r");
           const lines = output.split("\n");
           lines.forEach((line, index) => {
             if (index > 0) {
@@ -175,18 +159,23 @@ const TerminalComponent = forwardRef<any, TerminalComponentProps>(
               `${ANSI_COLORS.OUTPUT_COLOR}${line}${ANSI_COLORS.RESET}`
             );
           });
-
           if (!output.endsWith("\n")) {
             term.write("\r\n");
           }
           writePrompt(term);
         }
       },
-
       clear: () => {
         if (terminalInstance.current) {
           terminalInstance.current.clear();
           writePrompt(terminalInstance.current);
+        }
+      },
+      fit: () => {
+        try {
+          fitAddonRef.current?.fit();
+        } catch (error) {
+          console.error("Imperative fit error:", error);
         }
       },
     }));

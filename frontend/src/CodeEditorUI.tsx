@@ -31,6 +31,7 @@ interface CodeExecutionResponse {
 // Define the Terminal ref interface
 interface TerminalRef {
   writeToTerminal: (text: string) => void;
+  fit: () => void;
 }
 
 // Define type for language keys
@@ -75,8 +76,6 @@ const CodeEditorUI = () => {
   const [previousTerminalHeight, setPreviousTerminalHeight] = useState<number>(
     window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
   );
-  const [isTerminalCollapsed, setIsTerminalCollapsed] =
-    useState<boolean>(false);
 
   // Create a ref for the terminal
   const terminalRef = useRef<TerminalRef>();
@@ -157,6 +156,8 @@ const CodeEditorUI = () => {
     } else {
       window.removeEventListener("mousemove", handleExplorerResizeMouseMove);
       window.removeEventListener("mouseup", handleExplorerResizeMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     }
     return () => {
       window.removeEventListener("mousemove", handleExplorerResizeMouseMove);
@@ -173,19 +174,27 @@ const CodeEditorUI = () => {
   // --- Terminal Resizing Logic ---
   const handleTerminalResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    // If currently collapsed, expand it on click/drag start
-    if (isTerminalCollapsed) {
-      // Reset height to previous or default, start resizing
-      setTerminalHeight(
-        previousTerminalHeight ||
-          window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
-      );
-      setIsTerminalCollapsed(false);
-      setIsTerminalResizing(true); // Immediately start resizing after expanding
-    } else {
-      // Otherwise, just start resizing
-      setIsTerminalResizing(true);
+    setIsTerminalResizing(true); // Always start resizing on mouse down
+
+    // If it WAS collapsed when clicked (height is 0), restore previous height
+    if (terminalHeight === 0) {
+      // Determine a sensible height to restore to
+      let heightToRestore = previousTerminalHeight;
+
+      // If previous height is too small or invalid, use a default calculation
+      if (heightToRestore < MIN_TERMINAL_HEIGHT_PX) {
+        heightToRestore = Math.max(
+          window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION,
+          MIN_TERMINAL_HEIGHT_PX
+        );
+      }
+
+      // Ensure the final restored height is at least the minimum required
+      heightToRestore = Math.max(heightToRestore, MIN_TERMINAL_HEIGHT_PX);
+
+      setTerminalHeight(heightToRestore); // Set the calculated restore height
     }
+    // If not collapsed, just start resizing with the current height
   };
 
   const handleTerminalResizeMouseUp = useCallback(() => {
@@ -194,47 +203,46 @@ const CodeEditorUI = () => {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
 
-      // If height ended up at 0, ensure it's marked as collapsed
-      if (
-        terminalHeight <= TERMINAL_COLLAPSE_THRESHOLD_PX &&
-        terminalHeight > 0
-      ) {
-        setTerminalHeight(0);
-        setIsTerminalCollapsed(true);
-      } else if (terminalHeight === 0) {
-        setIsTerminalCollapsed(true);
+      // Call fit ONLY if terminal height is > 0 after resizing
+      if (terminalHeight > 0) {
+        terminalRef.current?.fit();
+        // Update previous height only when finishing a resize with the terminal open
+        setPreviousTerminalHeight(terminalHeight);
       }
     }
-  }, [isTerminalResizing, terminalHeight]); // Add terminalHeight dependency
+  }, [isTerminalResizing, terminalHeight]);
 
   const handleTerminalResizeMouseMove = useCallback(
     (e: MouseEvent) => {
-      requestAnimationFrame(() => {
-        if (!isTerminalResizing || !editorTerminalAreaRef.current) return;
+      if (!isTerminalResizing || !editorTerminalAreaRef.current) return;
 
-        const containerRect =
-          editorTerminalAreaRef.current.getBoundingClientRect();
-        let newHeight = containerRect.bottom - e.clientY;
+      const containerRect =
+        editorTerminalAreaRef.current.getBoundingClientRect();
+      let newHeight = containerRect.bottom - e.clientY;
+      newHeight = Math.max(0, newHeight); // Ensure non-negative
 
-        // Check for collapse threshold during drag
-        if (newHeight < TERMINAL_COLLAPSE_THRESHOLD_PX) {
-          // If dragging below threshold, visually snap to 0 height
-          // but don't finalize collapse state until mouse up
-          setTerminalHeight(0);
-        } else {
-          // Apply constraints only if above threshold
-          newHeight = Math.max(MIN_TERMINAL_HEIGHT_PX, newHeight);
-          newHeight = Math.min(MAX_TERMINAL_HEIGHT_PX, newHeight);
-          // Prevent terminal from overlapping editor too much (leave min height for editor)
-          newHeight = Math.min(
-            newHeight,
-            containerRect.height - MIN_TERMINAL_HEIGHT_PX
-          );
-          setTerminalHeight(newHeight);
+      // Check for collapse threshold during drag
+      if (newHeight < TERMINAL_COLLAPSE_THRESHOLD_PX) {
+        // If dragging below threshold, visually snap to 0 height
+        // Store the current height *before* setting it to 0, if it wasn't already 0
+        if (terminalHeight > 0) {
+          setPreviousTerminalHeight(terminalHeight);
         }
-      });
+        setTerminalHeight(0);
+      } else {
+        // Apply constraints only if above threshold
+        newHeight = Math.max(MIN_TERMINAL_HEIGHT_PX, newHeight);
+        newHeight = Math.min(MAX_TERMINAL_HEIGHT_PX, newHeight);
+        // Prevent terminal from overlapping editor too much (leave min height for editor)
+        newHeight = Math.min(
+          newHeight,
+          containerRect.height - MIN_TERMINAL_HEIGHT_PX
+        );
+        setTerminalHeight(newHeight);
+        // No need to manage isTerminalCollapsed state
+      }
     },
-    [isTerminalResizing] // Keep dependencies minimal for move handler
+    [isTerminalResizing]
   );
 
   // Effect for Terminal Resizing Listeners
@@ -247,11 +255,12 @@ const CodeEditorUI = () => {
     } else {
       window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
       window.removeEventListener("mouseup", handleTerminalResizeMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
     }
     return () => {
       window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
       window.removeEventListener("mouseup", handleTerminalResizeMouseUp);
-      // Ensure styles are reset on unmount or if resizing stops unexpectedly
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
@@ -345,7 +354,7 @@ const CodeEditorUI = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex flex-1">
+      <div className="flex flex-1 min-h-0">
         {/* Combined Sidebar Area */}
         <div
           ref={sidebarContainerRef}
@@ -508,7 +517,7 @@ const CodeEditorUI = () => {
           {/* Terminal Resizer */}
           <div
             className={`w-full bg-stone-700 flex-shrink-0 ${
-              isTerminalCollapsed
+              terminalHeight === 0 // Check height directly
                 ? "cursor-pointer hover:bg-stone-500"
                 : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500" // Change cursor/style when collapsed
             }`}
@@ -519,18 +528,17 @@ const CodeEditorUI = () => {
           {/* Terminal */}
           <div
             className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
-              isTerminalCollapsed ? "hidden" : "flex"
+              terminalHeight === 0 ? "hidden" : "flex" // Use height to hide/show
             }`}
-            style={{ height: `${terminalHeight}px` }} // Apply dynamic height
+            style={{ height: `${terminalHeight}px` }}
           >
             <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
               <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
             </div>
             {/* Terminal Content Area */}
             <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
-              {!isTerminalCollapsed && (
-                <TerminalComponent ref={terminalRef} height={terminalHeight} />
-              )}
+              {/* Always render TerminalComponent; parent div handles visibility */}
+              <TerminalComponent ref={terminalRef} height={terminalHeight} />
             </div>
           </div>
         </div>
