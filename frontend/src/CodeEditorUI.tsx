@@ -164,10 +164,7 @@ function SortableTab({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      onClick={(e) => {
-        e.stopPropagation();
+      onPointerDown={() => {
         onSwitchTab(file.id);
       }}
       className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 relative ${
@@ -177,7 +174,9 @@ function SortableTab({
       }`}
     >
       <span
-        className={`text-sm -mt-1 mr-2 select-none ${
+        {...attributes}
+        {...listeners}
+        className={`text-sm -mt-1 mr-2 select-none cursor-grab ${
           activeFileId === file.id ? "text-stone-200" : "text-stone-400"
         }`}
       >
@@ -232,11 +231,7 @@ const CodeEditorUI = () => {
 
   // --- dnd-kit Sensors ---
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
+    useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -244,7 +239,8 @@ const CodeEditorUI = () => {
 
   // --- Drag Start Handler ---
   const handleDragStart = (event: DragStartEvent) => {
-    setDraggingId(event.active.id as string);
+    const draggedId = event.active.id as string;
+    setDraggingId(draggedId);
   };
 
   // --- Drag End Handler ---
@@ -801,7 +797,7 @@ const CodeEditorUI = () => {
                           }`}
                         >
                           <span
-                            className={`text-sm -mt-1 mr-2 select-none ${
+                            className={`text-sm -mt-1 mr-2 select-none cursor-grab ${
                               activeFileId === draggedFile.id
                                 ? "text-stone-200"
                                 : "text-stone-400"
