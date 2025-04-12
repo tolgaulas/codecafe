@@ -9,6 +9,26 @@ import { VscSettingsGear } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import { HiOutlineShare } from "react-icons/hi2";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { restrictToHorizontalAxis } from "@dnd-kit/modifiers";
 
 // Define types for code execution
 interface CodeFile {
@@ -106,6 +126,78 @@ const isExecutableLanguage = (
   return lang in LANGUAGE_VERSIONS;
 };
 
+// --- Sortable Tab Component ---
+interface SortableTabProps {
+  file: OpenFile;
+  activeFileId: string | null;
+  draggingId: string | null;
+  onSwitchTab: (id: string) => void;
+  onCloseTab: (id: string, e: React.MouseEvent) => void;
+}
+
+function SortableTab({
+  file,
+  activeFileId,
+  draggingId,
+  onSwitchTab,
+  onCloseTab,
+}: SortableTabProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: file.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 20 : activeFileId === file.id ? 10 : "auto",
+    visibility: (isDragging
+      ? "hidden"
+      : "visible") as React.CSSProperties["visibility"],
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 relative ${
+        activeFileId === file.id
+          ? "bg-neutral-900"
+          : "bg-stone-700 hover:bg-stone-600"
+      }`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSwitchTab(file.id);
+      }}
+    >
+      <span
+        {...attributes}
+        {...listeners}
+        className={`text-sm -mt-1 mr-2 select-none cursor-grab ${
+          activeFileId === file.id ? "text-stone-200" : "text-stone-400"
+        }`}
+      >
+        {file.name}
+      </span>
+      <button
+        className="text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-1 z-20"
+        onClick={(e) => onCloseTab(file.id, e)}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 const CodeEditorUI = () => {
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
 
@@ -133,11 +225,39 @@ const CodeEditorUI = () => {
   const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
     {}
   );
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   // Create a ref for the terminal
   const terminalRef = useRef<TerminalRef>();
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const editorTerminalAreaRef = useRef<HTMLDivElement>(null); // Ref for the main editor+terminal vertical area
+
+  // --- dnd-kit Sensors ---
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  // --- Drag Start Handler ---
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggingId(event.active.id as string);
+  };
+
+  // --- Drag End Handler ---
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      setOpenFiles((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id);
+        const newIndex = items.findIndex((item) => item.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+    setDraggingId(null);
+  };
 
   // Handle code execution
   const handleRunCode = async () => {
@@ -422,17 +542,6 @@ const CodeEditorUI = () => {
     let nextActiveId: string | null = null;
     if (activeFileId === fileIdToClose) {
       if (openFiles.length > 1) {
-        // Try activating the previous tab, otherwise the next one
-        nextActiveId =
-          openFiles[indexToRemove - 1]?.id ??
-          openFiles[indexToRemove + 1]?.id ??
-          null;
-        // If the only tab remaining is the one after the closed one, it might be the same index after removal
-        if (!nextActiveId && indexToRemove < openFiles.length - 1) {
-          nextActiveId = openFiles[indexToRemove + 1]?.id;
-        }
-        // Final check: if the next active ID determined is STILL the one we are closing (edge case, single tab left maybe?)
-        // Let's rethink the next active ID logic. A simpler way:
         const remainingFiles = openFiles.filter((f) => f.id !== fileIdToClose);
         if (remainingFiles.length > 0) {
           // If closing the active tab, try to activate the one to the left
@@ -649,38 +758,66 @@ const CodeEditorUI = () => {
           ref={editorTerminalAreaRef}
           className="flex-1 flex flex-col relative"
         >
-          {/* Tabs - Dynamic */}
-          <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
-            {openFiles.map((file) => (
-              <div
-                key={file.id}
-                className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-pointer flex-shrink-0 ${
-                  activeFileId === file.id
-                    ? "bg-neutral-900 relative z-10"
-                    : "bg-stone-700 hover:bg-stone-600"
-                }`}
-                onClick={() => handleSwitchTab(file.id)}
+          {/* Tabs - Dynamic & Sortable */}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+            onDragStart={handleDragStart}
+            modifiers={[restrictToHorizontalAxis]}
+          >
+            <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
+              <SortableContext
+                items={openFiles.map((f) => f.id)} // Pass array of IDs
+                strategy={rectSortingStrategy} // Use a strategy suitable for horizontal lists
               >
-                <span
-                  className={`text-sm -mt-1 mr-2 ${
-                    activeFileId === file.id
-                      ? "text-stone-200"
-                      : "text-stone-400"
-                  }`}
-                >
-                  {file.name}
-                </span>
-                <button
-                  className="text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-1"
-                  onClick={(e) => handleCloseTab(file.id, e)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-            {/* Absolute positioned div for the border line */}
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
-          </div>
+                {openFiles.map((file) => (
+                  <SortableTab
+                    key={file.id}
+                    file={file} // Pass the whole file object
+                    activeFileId={activeFileId}
+                    draggingId={draggingId}
+                    onSwitchTab={handleSwitchTab} // Pass handlers down
+                    onCloseTab={handleCloseTab}
+                  />
+                ))}
+              </SortableContext>
+              {/* Absolute positioned div for the border line */}
+              <DragOverlay>
+                {draggingId
+                  ? (() => {
+                      const draggedFile = openFiles.find(
+                        (f) => f.id === draggingId
+                      );
+                      if (!draggedFile) return null;
+                      return (
+                        <div
+                          className={`px-4 py-1 border-r border-stone-600 flex items-center cursor-grabbing flex-shrink-0 relative shadow-lg ${
+                            activeFileId === draggedFile.id
+                              ? "bg-neutral-900 z-10"
+                              : "bg-stone-700 z-10"
+                          }`}
+                        >
+                          <span
+                            className={`text-sm -mt-1 mr-2 select-none ${
+                              activeFileId === draggedFile.id
+                                ? "text-stone-200"
+                                : "text-stone-400"
+                            }`}
+                          >
+                            {draggedFile.name}
+                          </span>
+                          <span className="text-stone-500 p-0.5 -mt-1 opacity-50">
+                            ×
+                          </span>
+                        </div>
+                      );
+                    })()
+                  : null}
+              </DragOverlay>
+              <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
+            </div>
+          </DndContext>
 
           {/* Code Editor - takes remaining space */}
           <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
