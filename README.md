@@ -1,9 +1,10 @@
-# CodeCafé: Code Together, Instantly. 🚀
+# CodeCafé: Code Together, Instantly.
 
 A hyper-collaborative, real-time development environment right in your browser. CodeCafé makes pair programming, teaching, and building web projects together as fluid and instant as sharing a thought.
 
-![demo (2)](https://github.com/user-attachments/assets/e3752a5d-492f-4af9-b85e-dbe7b8a11510)
-[Click here to watch the demo video!](https://youtu.be/dvediMrxoQg)
+<img width="1920" alt="Screenshot 2025-04-13 at 4 55 37 PM" src="https://github.com/user-attachments/assets/a24f29fb-3179-4ec4-ae20-bf22f905583f" />
+[Click here to watch the demo video!](https://youtu.be/FL0qg1Uo-MQ?si=czYlT2vyO6qMIyL1)
+
 
 ## Why CodeCafé?
 
