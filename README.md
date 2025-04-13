@@ -1,4 +1,4 @@
-# CodeCafé: Where Code Comes Alive, Together. 🚀
+# CodeCafé: Code Together, Instantly. 🚀
 
 A hyper-collaborative, real-time development environment right in your browser. CodeCafé makes pair programming, teaching, and building web projects together as fluid and instant as sharing a thought.
 
@@ -11,10 +11,9 @@ We saw coding classes juggling tools built for essays, not engineers. Existing s
 
 ## Core Features
 
-- **Pixel-Perfect Live Preview:** See your HTML, CSS, and JavaScript changes render _instantly_ in an integrated iframe view. What you code is what you see!
+- **Pixel-Perfect Live Preview:** See your HTML, CSS, and JavaScript changes render _instantly_ in an integrated Web View. What you code is what you see!
 - **True Real-Time Collaboration:** Powered by Operational Transformation, multiple users can type in the same files simultaneously, with conflicts resolved seamlessly.
 - **VS Code Feel:** Enjoy a familiar, rich editing experience (via Monaco Editor) with syntax highlighting, smart suggestions, and error checking.
-- **Multi-Language Backend Execution:** Run Python, Java, C++, and more server-side using the robust Piston API (results appear in the integrated terminal).
 - **Zero Setup:** Dive straight into coding. Everything runs in the browser.
 
 ## Tech Stack
@@ -22,7 +21,6 @@ We saw coding classes juggling tools built for essays, not engineers. Existing s
 - **Frontend:** React + TypeScript, Monaco Editor, Framer Motion
 - **Backend:** Java Spring Boot
 - **Real-time Collaboration:** WebSocket + Operational Transformation (OT)
-- **Code Execution (Backend):** Piston API
 
 ## Quick Start
 
