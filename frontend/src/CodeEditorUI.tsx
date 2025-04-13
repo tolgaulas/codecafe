@@ -50,6 +50,7 @@ import {
   Client,
   IClientCallbacks,
 } from "./TextOperationSystem";
+import JoinSessionPanel from "./components/JoinSessionPanel"; // Import the new component
 
 // Define types for code execution
 interface CodeFile {
@@ -78,6 +79,9 @@ interface TerminalRef {
 // Define type for language keys
 type ExecutableLanguageKey = keyof typeof LANGUAGE_VERSIONS; // Languages the backend can run
 type EditorLanguageKey = ExecutableLanguageKey | "css" | "html" | "plaintext"; // Languages the editor supports
+
+// Add new state type for join process
+type JoinStateType = "idle" | "prompting" | "joined";
 
 // Map Monaco language identifiers if they differ (optional, but good practice)
 const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
@@ -108,6 +112,9 @@ const DEFAULT_EXPLORER_WIDTH = 192; // w-48
 const MIN_EXPLORER_WIDTH = 100;
 const MAX_EXPLORER_WIDTH = 500;
 const EXPLORER_HANDLE_WIDTH = 8; // w-2
+
+// Minimum width specifically for the Join Session panel
+const MIN_JOIN_PANEL_WIDTH = 256; // New constant
 
 // Terminal
 const DEFAULT_TERMINAL_HEIGHT_FRACTION = 0.33; // Corresponds to h-1/3
@@ -352,6 +359,9 @@ const CodeEditorUI = () => {
   // Flag to control editor readiness for OT
   const [isEditorReadyForOT, setIsEditorReadyForOT] = useState(false);
 
+  // Add new state for join process
+  const [joinState, setJoinState] = useState<JoinStateType>("idle");
+
   // 3. HANDLERS / FUNCTIONS THIRD
 
   // Editor Mount Handler
@@ -583,6 +593,14 @@ const CodeEditorUI = () => {
   };
 
   const handleIconClick = (iconName: string | null) => {
+    // --- Add this check ---
+    // If we are prompting the user to join, don't allow changing sidebar state via icons.
+    if (joinState === "prompting") {
+      console.log("Ignoring icon click while prompting for join details.");
+      return; // Prevent icon clicks from changing state during prompt
+    }
+    // --- End check ---
+
     setActiveIcon((prevActiveIcon) => {
       let nextActiveIcon = iconName;
       const currentExplorerWidth = explorerWidth;
@@ -724,12 +742,17 @@ const CodeEditorUI = () => {
 
   const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setUserName(event.target.value);
-    setIsColorPickerOpen(false);
+    setIsColorPickerOpen(false); // Close picker on name change in either context
   };
 
   const handleColorSelect = (color: string) => {
     setUserColor(color);
-    setIsColorPickerOpen(false);
+    setIsColorPickerOpen(false); // Close picker on color select in either context
+  };
+
+  // Add handler to specifically toggle the color picker state
+  const handleToggleColorPicker = () => {
+    setIsColorPickerOpen((prev) => !prev);
   };
 
   const handleStartSession = async () => {
@@ -846,6 +869,19 @@ const CodeEditorUI = () => {
           // Optional: Show an error message to the user
         });
     }
+  };
+
+  // NEW Handler for confirming join from the Join Panel
+  const handleConfirmJoin = () => {
+    if (!userName.trim()) {
+      alert("Please enter a display name to join."); // Simple validation
+      return;
+    }
+    console.log(`User ${userName} confirmed join for session ${sessionId}`);
+    setJoinState("joined"); // Mark as joined
+    setIsSessionActive(true); // Activate the session (triggers WS connection)
+    setActiveIcon("files"); // Switch back to file explorer view
+    // Sidebar width should already be open from the prompt state
   };
 
   // WebSocket Connection Effect
@@ -1462,23 +1498,37 @@ const CodeEditorUI = () => {
     const url = new URL(window.location.href);
     const sessionIdFromUrl = url.searchParams.get("session");
 
-    if (sessionIdFromUrl && !isSessionActive) {
-      // Only run if not already active
-      console.log("Detected session ID from URL:", sessionIdFromUrl);
+    // Check if joining via URL AND session isn't already active/joined
+    if (sessionIdFromUrl && !isSessionActive && joinState === "idle") {
+      console.log(
+        `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerWidth}`
+      );
       setSessionId(sessionIdFromUrl);
-      setIsSessionActive(true); // Activate the session immediately for joining
       setIsSessionCreator(false); // Joining user is not the creator
+      setJoinState("prompting"); // Set state to show prompt panel
 
-      // Optional: Clean the URL
-      const cleanUrl = new URL(window.location.href);
-      cleanUrl.searchParams.delete("session");
-      window.history.replaceState({}, "", cleanUrl.toString());
+      // Ensure sidebar is visible for the prompt and meets minimum width
+      let targetWidth = DEFAULT_EXPLORER_WIDTH; // Start with default
+      if (explorerWidth > 0) {
+        // If already open, consider its current width
+        targetWidth = Math.max(targetWidth, explorerWidth);
+      } else if (previousExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
+        // If closed, consider the last known width (if valid)
+        targetWidth = Math.max(targetWidth, previousExplorerWidth);
+      }
+      // Ensure it's at least the minimum required for the join panel
+      targetWidth = Math.max(targetWidth, MIN_JOIN_PANEL_WIDTH);
 
-      // Optional: Automatically open the share menu to prompt for name/color?
-      // setIsShareMenuOpen(true);
+      // Apply the calculated target width
+      setExplorerWidth(targetWidth);
+
+      // Clean the URL
+      const updatedUrl = new URL(window.location.href); // Renamed from cleanUrl
+      updatedUrl.searchParams.delete("session");
+      window.history.replaceState({}, "", updatedUrl.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once on mount
+  }, [isSessionActive, joinState]); // explorerWidth was removed from deps
 
   // 5. RETURN JSX LAST
   return (
@@ -1785,55 +1835,80 @@ const CodeEditorUI = () => {
             </div>
           </div>
 
-          {/* File Tree */}
+          {/* File Tree / Join Panel Area */}
           <div
             className={`bg-stone-800 bg-opacity-60 overflow-hidden flex flex-col h-full border-r border-stone-600 flex-shrink-0 ${
-              activeIcon === "files" && explorerWidth > 0
-                ? "visible"
-                : "invisible"
+              // Show if explorer *should* be visible (width > 0)
+              explorerWidth > 0 ? "visible" : "invisible w-0" // Ensure it truly collapses if width is 0
             }`}
             style={{ width: `${explorerWidth}px` }}
           >
-            <div className="flex-1 overflow-y-auto h-full">
-              <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
-                EXPLORER
-              </div>
-              <div className="w-full">
-                {Object.entries(MOCK_FILES).map(([id, file]) => {
-                  const IconComponent =
-                    languageIconMap[file.language] || VscFile;
-                  const iconColor =
-                    languageColorMap[file.language] || defaultIconColor;
-                  return (
-                    <div
-                      key={id}
-                      className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
-                        activeFileId === id &&
-                        openFiles.some((f) => f.id === id)
-                          ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
-                          : "hover:bg-stone-700"
-                      }`}
-                      onClick={() => handleOpenFile(id)}
-                    >
-                      <IconComponent
-                        size={18}
-                        className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
-                      />
-                      <span
-                        className={`w-full pl-1 truncate ${
-                          activeFileId === id &&
-                          openFiles.some((f) => f.id === id)
-                            ? "text-stone-100"
-                            : "text-stone-300"
-                        }`}
-                      >
-                        {file.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            {/* --- Add Log --- */}
+            {(() => {
+              console.log(
+                `[Sidebar Render] joinState: ${joinState}, explorerWidth: ${explorerWidth}, activeIcon: ${activeIcon}`
+              );
+              return null; // Return null to satisfy React
+            })()}
+            {/* --- End Log --- */}
+            {joinState === "prompting" ? (
+              // Render Join Panel if prompting
+              <JoinSessionPanel
+                userName={userName}
+                userColor={userColor}
+                isColorPickerOpen={isColorPickerOpen}
+                colors={COLORS}
+                onNameChange={handleNameChange}
+                onColorSelect={handleColorSelect}
+                onToggleColorPicker={handleToggleColorPicker} // Pass the toggle handler
+                onConfirmJoin={handleConfirmJoin}
+              />
+            ) : (
+              // Otherwise, render the normal File Tree (only if files icon active)
+              activeIcon === "files" && (
+                <div className="flex-1 overflow-y-auto h-full">
+                  <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
+                    EXPLORER
+                  </div>
+                  <div className="w-full">
+                    {Object.entries(MOCK_FILES).map(([id, file]) => {
+                      const IconComponent =
+                        languageIconMap[file.language] || VscFile;
+                      const iconColor =
+                        languageColorMap[file.language] || defaultIconColor;
+                      return (
+                        <div
+                          key={id}
+                          className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
+                            activeFileId === id &&
+                            openFiles.some((f) => f.id === id)
+                              ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
+                              : "hover:bg-stone-700"
+                          }`}
+                          onClick={() => handleOpenFile(id)}
+                        >
+                          <IconComponent
+                            size={18}
+                            className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
+                          />
+                          <span
+                            className={`w-full pl-1 truncate ${
+                              activeFileId === id &&
+                              openFiles.some((f) => f.id === id)
+                                ? "text-stone-100"
+                                : "text-stone-300"
+                            }`}
+                          >
+                            {file.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )
+              // TODO: Add rendering for other activeIcon states (Search, Share, Chat) here if needed
+            )}
           </div>
 
           {/* Explorer Resizer Handle */}
