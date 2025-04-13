@@ -99,9 +99,9 @@ const EXPLORER_HANDLE_WIDTH = 8; // w-2
 
 // Web View Panel (Right)
 const DEFAULT_WEBVIEW_WIDTH = 320; // Example default width
-const MIN_WEBVIEW_WIDTH = 150;
+const MIN_WEBVIEW_WIDTH = 50; // Reduced minimum width
 const MAX_WEBVIEW_WIDTH = 800;
-const WEBVIEW_HANDLE_WIDTH = 8;
+const WEBVIEW_HANDLE_WIDTH = 12;
 
 // Terminal
 const DEFAULT_TERMINAL_HEIGHT_FRACTION = 0.33; // Corresponds to h-1/3
@@ -356,14 +356,12 @@ const CodeEditorUI = () => {
 
   const handleExplorerResizeMouseMove = useCallback(
     (e: MouseEvent) => {
-      requestAnimationFrame(() => {
-        if (!isExplorerResizing || !sidebarContainerRef.current) return;
-        const sidebarRect = sidebarContainerRef.current.getBoundingClientRect();
-        let newExplorerWidth = e.clientX - sidebarRect.left - ICON_BAR_WIDTH;
-        newExplorerWidth = Math.max(MIN_EXPLORER_WIDTH, newExplorerWidth);
-        newExplorerWidth = Math.min(MAX_EXPLORER_WIDTH, newExplorerWidth);
-        setExplorerWidth(newExplorerWidth);
-      });
+      if (!isExplorerResizing || !sidebarContainerRef.current) return;
+      const sidebarRect = sidebarContainerRef.current.getBoundingClientRect();
+      let newExplorerWidth = e.clientX - sidebarRect.left - ICON_BAR_WIDTH;
+      newExplorerWidth = Math.max(MIN_EXPLORER_WIDTH, newExplorerWidth);
+      newExplorerWidth = Math.min(MAX_EXPLORER_WIDTH, newExplorerWidth);
+      setExplorerWidth(newExplorerWidth);
     },
     [isExplorerResizing]
   );
@@ -373,82 +371,95 @@ const CodeEditorUI = () => {
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       window.addEventListener("mousemove", handleExplorerResizeMouseMove);
-      window.addEventListener("mouseup", handleExplorerResizeMouseUp);
     } else {
       window.removeEventListener("mousemove", handleExplorerResizeMouseMove);
-      window.removeEventListener("mouseup", handleExplorerResizeMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      if (!isWebViewResizing && !isTerminalResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     }
     return () => {
       window.removeEventListener("mousemove", handleExplorerResizeMouseMove);
-      window.removeEventListener("mouseup", handleExplorerResizeMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      if (!isWebViewResizing && !isTerminalResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     };
   }, [
     isExplorerResizing,
     handleExplorerResizeMouseMove,
-    handleExplorerResizeMouseUp,
+    isWebViewResizing,
+    isTerminalResizing,
   ]);
 
   // --- Web View Resizing Logic ---
-  const handleWebViewResizeMouseDown = (e: React.MouseEvent) => {
+  const handleWebViewResizePointerDown = (e: React.PointerEvent) => {
+    // Check if it's the primary button (usually left mouse button)
+    if (e.button !== 0) return;
     e.preventDefault();
+    // Capture the pointer
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setIsWebViewResizing(true);
   };
 
-  const handleWebViewResizeMouseUp = useCallback(() => {
-    if (isWebViewResizing) {
-      setIsWebViewResizing(false);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    }
-  }, [isWebViewResizing]);
+  const handleWebViewResizePointerMove = useCallback(
+    (e: PointerEvent) => {
+      // Use PointerEvent type
+      // No need to check isWebViewResizing here, listener is only active when true
+      if (!mainContentRef.current) return;
 
-  const handleWebViewResizeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      requestAnimationFrame(() => {
-        if (!isWebViewResizing || !mainContentRef.current) return;
-        const mainRect = mainContentRef.current.getBoundingClientRect();
-        // Calculate width based on distance from right edge
-        let newWebViewWidth = mainRect.right - e.clientX;
+      // Existing logic remains the same...
+      const mainRect = mainContentRef.current.getBoundingClientRect();
 
-        newWebViewWidth = Math.max(MIN_WEBVIEW_WIDTH, newWebViewWidth);
-        newWebViewWidth = Math.min(MAX_WEBVIEW_WIDTH, newWebViewWidth);
-        // Ensure it doesn't overlap the other content too much (leave min width for editor area)
-        // This calculation might need refinement depending on exact layout
-        // const editorAreaMinWidth = 200; // Example minimum width for the center area
-        // newWebViewWidth = Math.min(newWebViewWidth, mainRect.width - explorerWidth - editorAreaMinWidth);
+      const mouseX = Math.min(
+        Math.max(e.clientX, mainRect.left),
+        mainRect.right
+      );
 
-        setWebViewWidth(newWebViewWidth);
-      });
+      const newWidth = mainRect.right - mouseX;
+
+      const clampedWidth = Math.max(
+        MIN_WEBVIEW_WIDTH,
+        Math.min(newWidth, MAX_WEBVIEW_WIDTH)
+      );
+
+      setWebViewWidth(clampedWidth);
     },
-    [isWebViewResizing, explorerWidth] // Depends on explorer width too if constraining overlap
+    // Remove isWebViewResizing from dependencies, it's implicitly handled by the listener's existence
+    [MIN_WEBVIEW_WIDTH, MAX_WEBVIEW_WIDTH] // Dependencies are constants now
   );
 
   useEffect(() => {
+    const handlePointerMove = (e: PointerEvent) => {
+      if (isWebViewResizing) {
+        handleWebViewResizePointerMove(e); // Call the memoized handler
+      }
+    };
+
     if (isWebViewResizing) {
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", handleWebViewResizeMouseMove);
-      window.addEventListener("mouseup", handleWebViewResizeMouseUp);
+      // Add pointermove to the window
+      window.addEventListener("pointermove", handlePointerMove);
     } else {
-      window.removeEventListener("mousemove", handleWebViewResizeMouseMove);
-      window.removeEventListener("mouseup", handleWebViewResizeMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      // Removal is handled implicitly by the effect cleanup
     }
+
+    // Cleanup function: ALWAYS removes the listener
     return () => {
-      window.removeEventListener("mousemove", handleWebViewResizeMouseMove);
-      window.removeEventListener("mouseup", handleWebViewResizeMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      window.removeEventListener("pointermove", handlePointerMove);
+      // Reset cursor/select ONLY if no OTHER panel is resizing
+      if (!isExplorerResizing && !isTerminalResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     };
   }, [
-    isWebViewResizing,
-    handleWebViewResizeMouseMove,
-    handleWebViewResizeMouseUp,
+    isWebViewResizing, // Primary dependency
+    handleWebViewResizePointerMove, // Add the actual handler function
+    // Keep these to correctly manage cursor/style resets
+    isExplorerResizing,
+    isTerminalResizing,
   ]);
 
   // --- Terminal Resizing Logic ---
@@ -467,13 +478,8 @@ const CodeEditorUI = () => {
   const handleTerminalResizeMouseUp = useCallback(() => {
     if (isTerminalResizing) {
       setIsTerminalResizing(false);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-
-      // Call fit ONLY if terminal height is > 0 after resizing
       if (terminalHeight > 0) {
         terminalRef.current?.fit();
-        // Update previous height only when finishing a resize with the terminal open
         setPreviousTerminalHeight(terminalHeight);
       }
     }
@@ -507,7 +513,7 @@ const CodeEditorUI = () => {
         setTerminalHeight(constrainedHeight);
       }
     },
-    [isTerminalResizing]
+    [isTerminalResizing, terminalHeight, previousTerminalHeight]
   );
 
   // Effect for Terminal Resizing Listeners
@@ -516,24 +522,75 @@ const CodeEditorUI = () => {
       document.body.style.cursor = "row-resize";
       document.body.style.userSelect = "none";
       window.addEventListener("mousemove", handleTerminalResizeMouseMove);
-      window.addEventListener("mouseup", handleTerminalResizeMouseUp);
     } else {
       window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
-      window.removeEventListener("mouseup", handleTerminalResizeMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      if (!isExplorerResizing && !isWebViewResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     }
     return () => {
       window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
-      window.removeEventListener("mouseup", handleTerminalResizeMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      if (!isExplorerResizing && !isWebViewResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
     };
   }, [
     isTerminalResizing,
     handleTerminalResizeMouseMove,
-    handleTerminalResizeMouseUp,
+    isExplorerResizing,
+    isWebViewResizing,
   ]);
+
+  // --- Global Pointer Up Handler (Replaces Global MouseUp) ---
+  const handleGlobalPointerUp = useCallback(
+    (e: PointerEvent) => {
+      // Check if we were resizing the WebView and release capture
+      if (isWebViewResizing) {
+        try {
+          (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch (err) {
+          // Keep this warning for potential future issues
+          console.warn(
+            "Global PointerUp: Failed to release pointer capture",
+            err
+          );
+        }
+        setIsWebViewResizing(false); // Set state AFTER releasing capture
+      }
+
+      // --- Handle other resizes (Can be refactored later) ---
+      if (isExplorerResizing) {
+        handleExplorerResizeMouseUp();
+      }
+      if (isTerminalResizing) {
+        handleTerminalResizeMouseUp();
+      }
+
+      // Reset cursor/select AFTER checking all states
+      if (isExplorerResizing || isWebViewResizing || isTerminalResizing) {
+      }
+    },
+    [
+      isExplorerResizing,
+      handleExplorerResizeMouseUp,
+      isWebViewResizing,
+      isTerminalResizing,
+      handleTerminalResizeMouseUp,
+    ]
+  );
+
+  // Effect to add/remove the global PointerUp listener
+  useEffect(() => {
+    document.addEventListener("pointerup", handleGlobalPointerUp);
+    document.addEventListener("pointercancel", handleGlobalPointerUp);
+
+    return () => {
+      document.removeEventListener("pointerup", handleGlobalPointerUp);
+      document.removeEventListener("pointercancel", handleGlobalPointerUp);
+    };
+  }, [handleGlobalPointerUp]); // Add handleGlobalPointerUp as dependency
 
   // --- Explorer Toggle Logic ---
   const toggleExplorer = () => {
@@ -883,7 +940,7 @@ const CodeEditorUI = () => {
         {/* Code and Terminal Area */}
         <div
           ref={editorTerminalAreaRef}
-          className="flex-1 flex flex-col relative overflow-x-hidden"
+          className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
         >
           {/* Tabs - Dynamic & Sortable */}
           <DndContext
@@ -1002,27 +1059,28 @@ const CodeEditorUI = () => {
           {/* Web View Resizer Handle */}
           {activeIcon === "webView" && (
             <div
-              className={`absolute top-0 h-full cursor-col-resize bg-transparent z-20 ${
+              className={`absolute top-0 h-full cursor-col-resize bg-transparent z-30 ${
                 webViewWidth > 0 ? "block" : "hidden"
               }`}
               style={{
                 width: `${WEBVIEW_HANDLE_WIDTH}px`,
-                // Position handle just to the left of the panel
                 left: `-${WEBVIEW_HANDLE_WIDTH / 2}px`,
+                touchAction: "none", // Prevent scrolling on touch devices
                 pointerEvents:
                   activeIcon === "webView" && webViewWidth > 0
                     ? "auto"
                     : "none",
               }}
-              onMouseDown={handleWebViewResizeMouseDown}
+              onPointerDown={handleWebViewResizePointerDown} // Use onPointerDown
+              // No need for onMouseDown anymore
             ></div>
           )}
 
           {/* Web View Panel */}
           <div
-            className={`overflow-hidden h-full flex-shrink-0 ${
+            className={`overflow-hidden h-full ${
               activeIcon === "webView" && webViewWidth > 0
-                ? "visible"
+                ? "visible border-l border-stone-600"
                 : "invisible"
             }`}
             style={{ width: `${webViewWidth}px` }}
