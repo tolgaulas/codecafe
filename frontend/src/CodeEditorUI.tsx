@@ -696,11 +696,6 @@ const CodeEditorUI = () => {
     }
     setActiveFileId(nextActiveId);
     setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
-    setFileContents((prev) => {
-      const newContents = { ...prev };
-      delete newContents[fileIdToClose];
-      return newContents;
-    });
   };
 
   const handleCodeChange = (newCode: string) => {
@@ -2308,7 +2303,7 @@ const CodeEditorUI = () => {
                   }
                   showLineNumbers={true}
                   code={fileContents[activeFileId] ?? "// Loading..."}
-                  onCodeChange={() => {}} // OT handles changes
+                  onCodeChange={handleCodeChange} // <<< USE handleCodeChange HERE
                   onEditorDidMount={handleEditorDidMount}
                   users={currentRemoteUsers} // Pass remote user data
                   // *** Add the missing prop here ***
