@@ -13,6 +13,9 @@ import { VscFiles } from "react-icons/vsc";
 import { VscSettingsGear } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import { HiOutlineShare } from "react-icons/hi2";
+import { DiJavascript1, DiCss3Full, DiHtml5 } from "react-icons/di";
+import { VscJson } from "react-icons/vsc";
+import { VscFile } from "react-icons/vsc";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import {
   DndContext,
@@ -37,7 +40,7 @@ import {
   restrictToHorizontalAxis,
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
-import WebViewPanel from "./components/WebViewPanel"; // Import the new component
+import WebViewPanel from "./components/WebViewPanel";
 
 // Define types for code execution
 interface CodeFile {
@@ -98,9 +101,9 @@ const MAX_EXPLORER_WIDTH = 500;
 const EXPLORER_HANDLE_WIDTH = 8; // w-2
 
 // Web View Panel (Right)
-const DEFAULT_WEBVIEW_WIDTH = 320; // Example default width
-const MIN_WEBVIEW_WIDTH = 50; // Reduced minimum width
-const MAX_WEBVIEW_WIDTH = 800;
+const DEFAULT_WEBVIEW_WIDTH = 600; // Example default width
+const MIN_WEBVIEW_WIDTH = 300; // Increased minimum width
+const MAX_WEBVIEW_WIDTH = 850;
 const WEBVIEW_HANDLE_WIDTH = 12;
 
 // Terminal
@@ -141,11 +144,38 @@ const isExecutableLanguage = (
   return lang in LANGUAGE_VERSIONS;
 };
 
+// --- Icon Mapping ---
+const languageIconMap: {
+  [key in EditorLanguageKey]?: React.ComponentType<{
+    size?: number;
+    className?: string;
+  }>;
+} = {
+  javascript: DiJavascript1,
+  css: DiCss3Full,
+  html: DiHtml5,
+  // Add more mappings as needed
+  // json: VscJson,
+  // typescript: DiTypescript // Example REMOVED
+};
+
+// --- Language Color Mapping ---
+const languageColorMap: { [key in EditorLanguageKey]?: string } = {
+  javascript: "text-yellow-400", // Yellow for JS
+  css: "text-blue-500", // Blue for CSS
+  html: "text-orange-600", // Orange for HTML
+  // Add more colors as needed
+};
+
+const defaultIconColor = "text-stone-400"; // Default color for other files/icons
+
 // --- Sortable Tab Component ---
 interface SortableTabProps {
   file: OpenFile;
   activeFileId: string | null;
   draggingId: string | null;
+  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
+  iconColor: string;
   onSwitchTab: (id: string) => void;
   onCloseTab: (id: string, e: React.MouseEvent) => void;
 }
@@ -154,6 +184,8 @@ function SortableTab({
   file,
   activeFileId,
   draggingId,
+  IconComponent,
+  iconColor,
   onSwitchTab,
   onCloseTab,
 }: SortableTabProps) {
@@ -182,23 +214,27 @@ function SortableTab({
       onPointerDown={() => {
         onSwitchTab(file.id);
       }}
-      className={`px-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative ${
+      className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative ${
         activeFileId === file.id
           ? "bg-neutral-900"
           : "bg-stone-700 hover:bg-stone-600"
       }`}
     >
+      <IconComponent
+        size={16}
+        className={`mr-1.5 flex-shrink-0 ${iconColor}`}
+      />
       <span
         {...attributes}
         {...listeners}
-        className={`text-sm -mt-1 mr-2 select-none cursor-default ${
+        className={`text-sm -mt-0.5 select-none cursor-default ${
           activeFileId === file.id ? "text-stone-200" : "text-stone-400"
         }`}
       >
         {file.name}
       </span>
       <button
-        className={`text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-1 z-20`}
+        className={`ml-2 text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-0.5 z-20`}
         onClick={(e) => onCloseTab(file.id, e)}
         onPointerDown={(e) => {
           e.stopPropagation();
@@ -892,28 +928,39 @@ const CodeEditorUI = () => {
               </div>
               <div className="w-full">
                 {/* File items */}
-                {Object.entries(MOCK_FILES).map(([id, file]) => (
-                  <div
-                    key={id}
-                    className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
-                      activeFileId === id && openFiles.some((f) => f.id === id) // Check if open AND active for highlight
-                        ? "bg-stone-600 border-y border-stone-500"
-                        : "hover:bg-stone-700"
-                    }`}
-                    onClick={() => handleOpenFile(id)}
-                  >
-                    <span
-                      className={`w-full pl-4 truncate ${
+                {Object.entries(MOCK_FILES).map(([id, file]) => {
+                  const IconComponent =
+                    languageIconMap[file.language] || VscFile;
+                  const iconColor =
+                    languageColorMap[file.language] || defaultIconColor;
+                  return (
+                    <div
+                      key={id}
+                      className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
                         activeFileId === id &&
                         openFiles.some((f) => f.id === id)
-                          ? "text-stone-100"
-                          : "text-stone-300"
+                          ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
+                          : "hover:bg-stone-700"
                       }`}
+                      onClick={() => handleOpenFile(id)}
                     >
-                      {file.name}
-                    </span>
-                  </div>
-                ))}
+                      <IconComponent
+                        size={18}
+                        className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
+                      />
+                      <span
+                        className={`w-full pl-1 truncate ${
+                          activeFileId === id &&
+                          openFiles.some((f) => f.id === id)
+                            ? "text-stone-100"
+                            : "text-stone-300"
+                        }`}
+                      >
+                        {file.name}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -952,39 +999,54 @@ const CodeEditorUI = () => {
           >
             <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
               <SortableContext
-                items={openFiles.map((f) => f.id)} // Pass array of IDs
-                strategy={horizontalListSortingStrategy} // Use the specific horizontal strategy
+                items={openFiles.map((f) => f.id)}
+                strategy={horizontalListSortingStrategy}
               >
-                {openFiles.map((file) => (
-                  <SortableTab
-                    key={file.id}
-                    file={file} // Pass the whole file object
-                    activeFileId={activeFileId}
-                    draggingId={draggingId}
-                    onSwitchTab={handleSwitchTab} // Pass handlers down
-                    onCloseTab={handleCloseTab}
-                  />
-                ))}
+                {openFiles.map((file) => {
+                  const IconComponent =
+                    languageIconMap[file.language] || VscFile;
+                  const iconColor =
+                    languageColorMap[file.language] || defaultIconColor;
+                  return (
+                    <SortableTab
+                      key={file.id}
+                      file={file}
+                      activeFileId={activeFileId}
+                      draggingId={draggingId}
+                      IconComponent={IconComponent}
+                      iconColor={iconColor}
+                      onSwitchTab={handleSwitchTab}
+                      onCloseTab={handleCloseTab}
+                    />
+                  );
+                })}
               </SortableContext>
-              {/* Absolute positioned div for the border line */}
               <DragOverlay modifiers={[restrictToParentElement]}>
                 {draggingId
-                  ? // Find the file data for the dragging item
-                    (() => {
+                  ? (() => {
                       const draggedFile = openFiles.find(
                         (f) => f.id === draggingId
                       );
                       if (!draggedFile) return null;
+                      const IconComponent =
+                        languageIconMap[draggedFile.language] || VscFile;
+                      const iconColor =
+                        languageColorMap[draggedFile.language] ||
+                        defaultIconColor;
                       return (
                         <div
-                          className={`px-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative shadow-lg ${
+                          className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative shadow-lg ${
                             activeFileId === draggedFile.id
                               ? "bg-neutral-900 z-10"
                               : "bg-stone-700 z-10"
                           }`}
                         >
+                          <IconComponent
+                            size={16}
+                            className={`mr-1.5 flex-shrink-0 ${iconColor}`}
+                          />
                           <span
-                            className={`text-sm -mt-1 mr-2 select-none cursor-default ${
+                            className={`text-sm -mt-0.5 select-none cursor-default ${
                               activeFileId === draggedFile.id
                                 ? "text-stone-200"
                                 : "text-stone-400"
@@ -992,7 +1054,7 @@ const CodeEditorUI = () => {
                           >
                             {draggedFile.name}
                           </span>
-                          <span className="text-stone-500 p-0.5 -mt-1 opacity-50">
+                          <span className="ml-2 text-stone-500 p-0.5 -mt-0.5 opacity-50">
                             ×
                           </span>
                         </div>
