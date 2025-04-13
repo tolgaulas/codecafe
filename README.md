@@ -1,8 +1,9 @@
 # CodeCafé
 A real-time collaborative development environment that makes coding together as easy as sharing a document. Think VS Code, but multiplayer.
 
-![demo (2)](https://github.com/user-attachments/assets/e3752a5d-492f-4af9-b85e-dbe7b8a11510)
+![image](https://github.com/user-attachments/assets/23a34888-35f0-4cea-a7fa-b557008c89e0)
 [Click here to watch the demo video!](https://youtu.be/dvediMrxoQg)
+
 
 
 ## Why CodeCafé?
