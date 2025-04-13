@@ -51,6 +51,7 @@ import {
   IClientCallbacks,
 } from "./TextOperationSystem";
 import JoinSessionPanel from "./components/JoinSessionPanel"; // Import the new component
+import { UserInfo, RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
 
 // Define types for code execution
 interface CodeFile {
@@ -361,6 +362,11 @@ const CodeEditorUI = () => {
 
   // Add new state for join process
   const [joinState, setJoinState] = useState<JoinStateType>("idle");
+
+  // Remote Users State
+  const [remoteUsers, setRemoteUsers] = useState<{
+    [docId: string]: RemoteUser[]; // Use imported RemoteUser type
+  }>({});
 
   // 3. HANDLERS / FUNCTIONS THIRD
 
@@ -992,6 +998,12 @@ const CodeEditorUI = () => {
                 selection: selection?.toJSON() ?? null,
               };
               console.log(`[Client -> Server Sel] /app/selection`, payload);
+              // Send the payload
+              // *** ADD LOGGING HERE ***
+              console.log(
+                "[CodeEditorUI handleSendSelectionData] Sending payload object:",
+                payload
+              );
               stompClientRef.current.send(
                 "/app/selection",
                 {},
@@ -1201,56 +1213,91 @@ const CodeEditorUI = () => {
           })
         );
 
-        // Selections Handling
+        // Selections Handling (Replaces /topic/cursors)
+        const selectionTopic = "/topic/selections";
+        console.log(
+          `[CodeEditorUI WS Setup] Subscribing to ${selectionTopic}...`
+        ); // Log subscription attempt
         subscriptions.push(
-          stompClient.subscribe("/topic/selections", (message: any) => {
+          stompClient.subscribe(selectionTopic, (message: any) => {
             try {
               const payload = JSON.parse(message.body);
-              if (!payload || !payload.clientId || !payload.documentId) {
-                // Check documentId
+              // Expecting payload: { documentId: string, userInfo: UserInfo }
+              if (
+                !payload ||
+                !payload.userInfo ||
+                !payload.userInfo.id ||
+                !payload.documentId
+              ) {
                 console.error(
-                  "[Server -> Client Sel] Invalid payload:",
-                  message.body
+                  "[Server -> Client Sel] Invalid payload structure:",
+                  payload
                 );
                 return;
               }
-              // console.log(`[Server -> Client Sel] Received from ${payload.clientId} for ${payload.documentId}:`, payload.selection);
 
-              // *** Ignore if for different file or own message ***
-              if (payload.documentId !== currentActiveFileId) {
-                // console.log(`   Ignoring selection for inactive file: ${payload.documentId}`);
+              const { documentId, userInfo } = payload;
+              const remoteUserId = userInfo.id;
+
+              // *** ADD LOGGING HERE ***
+              console.log(
+                `[CodeEditorUI] Received selection payload for doc ${documentId} from user ${remoteUserId}:`,
+                payload
+              );
+
+              // Ignore own selection broadcasts
+              if (remoteUserId === userId) {
                 return;
               }
-              if (payload.clientId === userId) {
-                return; // Don't process own selection echoes
-              }
 
-              if (clientRef.current && adapterRef.current) {
-                const selection = payload.selection
-                  ? OTSelection.fromJSON(payload.selection)
+              // Update the remoteUsers state
+              setRemoteUsers((prevRemoteUsers) => {
+                const usersForDoc = prevRemoteUsers[documentId] || [];
+                const existingUserIndex = usersForDoc.findIndex(
+                  (u: RemoteUser) => u.id === remoteUserId // Add type hint for 'u'
+                );
+
+                const selectionFromPayload = userInfo.selection
+                  ? OTSelection.fromJSON(userInfo.selection)
                   : null;
-                if (selection) {
-                  try {
-                    // TODO: Implement visual display of remote selections
-                    // For now, just log the transformed selection
-                    const transformedSelection =
-                      clientRef.current.transformSelection(selection);
-                    // console.log(`   Transformed selection for ${payload.clientId} on ${payload.documentId}:`, transformedSelection.toJSON());
-                    // adapterRef.current.setOtherSelection(transformedSelection, remoteUserColor, payload.clientId);
-                  } catch (e) {
-                    console.error(
-                      "[Server -> Client Sel] Error transforming remote selection:",
-                      e,
-                      payload.selection
-                    );
-                  }
+
+                const updatedUserInfo: RemoteUser = {
+                  id: remoteUserId,
+                  name: userInfo.name || `User ${remoteUserId.substring(0, 4)}`,
+                  color: userInfo.color || "#CCCCCC",
+                  cursorPosition: userInfo.cursorPosition,
+                  selection: selectionFromPayload,
+                };
+
+                let newUsersForDoc;
+                if (existingUserIndex > -1) {
+                  newUsersForDoc = [
+                    ...usersForDoc.slice(0, existingUserIndex),
+                    updatedUserInfo,
+                    ...usersForDoc.slice(existingUserIndex + 1),
+                  ];
                 } else {
-                  // Handle cursor blur / selection removal for the remote user
-                  // adapterRef.current.removeOtherSelection(payload.clientId);
+                  newUsersForDoc = [...usersForDoc, updatedUserInfo];
                 }
-              } else {
-                // console.warn(`[Server -> Client Sel] Received selection for ${payload.documentId} before client/adapter init.`);
-              }
+
+                const newState = {
+                  ...prevRemoteUsers,
+                  [documentId]: newUsersForDoc,
+                };
+
+                console.log(
+                  `[CodeEditorUI] Updated remoteUsers state:`,
+                  newState
+                );
+
+                if (
+                  JSON.stringify(prevRemoteUsers) === JSON.stringify(newState)
+                ) {
+                  return prevRemoteUsers;
+                }
+
+                return newState;
+              });
             } catch (error) {
               console.error(
                 "Error processing selections message:",
@@ -1350,6 +1397,11 @@ const CodeEditorUI = () => {
     // Directly access the content from the state, provide default if not found
     return fileContents["script.js"] || "// script.js not loaded";
   }, [fileContents]); // Depend only on fileContents
+
+  // Get remote users for the currently active file (Moved inside component)
+  const currentRemoteUsers = useMemo(() => {
+    return activeFileId ? remoteUsers[activeFileId] || [] : [];
+  }, [remoteUsers, activeFileId]);
 
   // 4. EFFECTS FOURTH
 
@@ -1529,6 +1581,60 @@ const CodeEditorUI = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSessionActive, joinState]); // explorerWidth was removed from deps
+
+  // NEW Handler for sending selection data via STOMP
+  const handleSendSelectionData = useCallback(
+    (data: {
+      cursorPosition: { lineNumber: number; column: number } | null;
+      selection: {
+        startLineNumber: number;
+        startColumn: number;
+        endLineNumber: number;
+        endColumn: number;
+      } | null;
+    }) => {
+      // *** Log the received data object ***
+      console.log(
+        "[CodeEditorUI handleSendSelectionData] Received data from CodeEditor:",
+        data
+      );
+
+      if (
+        stompClientRef.current?.connected &&
+        activeFileId &&
+        sessionId &&
+        userName.trim()
+      ) {
+        // Construct the payload matching CursorMessage.java DTO
+        const payload = {
+          documentId: activeFileId,
+          userInfo: {
+            // Nest user details here
+            id: userId,
+            name: userName.trim(),
+            color: userColor,
+            cursorPosition: data.cursorPosition, // Pass position directly
+            selection: data.selection, // Pass the plain selection object received from CodeEditor directly
+          },
+        };
+
+        // Send the payload
+        console.log(
+          "[CodeEditorUI handleSendSelectionData] Sending payload object:",
+          payload
+        );
+        stompClientRef.current.send(
+          "/app/selection",
+          {},
+          JSON.stringify(payload)
+        );
+      } else {
+        // console.warn(...);
+      }
+    },
+    // @ts-ignore <-- Suppress potentially incorrect linter errors about implicit 'any' for dependencies
+    [activeFileId, sessionId, userId, userName, userColor] // Include dependencies
+  );
 
   // 5. RETURN JSX LAST
   return (
@@ -2023,12 +2129,12 @@ const CodeEditorUI = () => {
                     ]
                   }
                   showLineNumbers={true}
-                  // Pass the specific file content OR a loading state if OT is initializing
                   code={fileContents[activeFileId] ?? "// Loading..."}
-                  // Let OT manage changes, don't pass handleCodeChange directly if OT active
-                  onCodeChange={() => {}} // Add dummy function to satisfy prop type
-                  // Pass the mount handler
+                  onCodeChange={() => {}} // OT handles changes
                   onEditorDidMount={handleEditorDidMount}
+                  users={currentRemoteUsers} // Pass remote user data
+                  // *** Add the missing prop here ***
+                  sendSelectionData={handleSendSelectionData}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-stone-500">

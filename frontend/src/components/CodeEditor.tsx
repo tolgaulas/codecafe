@@ -3,13 +3,18 @@ import { Editor, loader } from "@monaco-editor/react";
 import { CodeEditorProps } from "../types/props";
 import * as monaco from "monaco-editor";
 import { THEMES } from "../constants/themes";
+import {
+  OTSelection,
+  positionToOffset,
+  offsetToPosition,
+} from "../TextOperationSystem";
 
 const CodeEditor = ({
   onCodeChange,
   users = [],
   onCursorPositionChange,
   code,
-  sendCursorData,
+  sendSelectionData,
   onLoadingChange,
   language,
   theme,
@@ -18,7 +23,7 @@ const CodeEditor = ({
   showLineNumbers,
   onEditorDidMount,
 }: CodeEditorProps) => {
-  const editorRef = useRef<any>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorationsRef = useRef<string[]>([]);
   const isUpdatingRef = useRef(false);
   const styleSheetRef = useRef<HTMLStyleElement | null>(null);
@@ -30,6 +35,10 @@ const CodeEditor = ({
     selection: null,
   });
   const prevCodeRef = useRef<string>("");
+
+  useEffect(() => {
+    console.log("[CodeEditor] Received users prop:", users);
+  }, [users]);
 
   // Initialize Monaco theme
   useEffect(() => {
@@ -189,37 +198,98 @@ const CodeEditor = ({
     if (editorRef.current) {
       updateDecorations();
     }
+
+    return () => {
+      if (styleSheetRef.current) {
+        styleSheetRef.current.remove();
+        styleSheetRef.current = null;
+      }
+    };
   }, [users]);
 
+  // Function to apply decorations based on the users prop
   const updateDecorations = () => {
-    if (!editorRef.current) return;
+    const editor = editorRef.current;
+    if (!editor || !users) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    console.log("[CodeEditor updateDecorations] Called with users:", users);
 
     const decorations = users.flatMap((user) => {
+      // @ts-ignore <-- Ignore potential null warning for model in flatMap
       const decorationArray = [];
 
-      if (user.selection) {
-        decorationArray.push({
-          range: new monaco.Range(
-            user.selection.startLineNumber,
-            user.selection.startColumn,
-            user.selection.endLineNumber,
-            user.selection.endColumn
-          ),
-          options: {
-            className: `user-${user.id}-selection`,
-            hoverMessage: { value: `Selected by ${user.name}` },
-          },
-        });
+      // Render Selection
+      if (
+        user.selection &&
+        user.selection.ranges &&
+        user.selection.ranges.length > 0
+      ) {
+        const primaryRange = user.selection.ranges[0];
+        if (primaryRange) {
+          console.log(
+            `[CodeEditor updateDecorations] User ${user.id} - Primary Range Offsets:`,
+            primaryRange
+          );
+          try {
+            // @ts-ignore <-- Ignore potential null warning for model
+            const anchorPos = offsetToPosition(model, primaryRange.anchor);
+            // @ts-ignore <-- Ignore potential null warning for model
+            const headPos = offsetToPosition(model, primaryRange.head);
+            console.log(
+              `[CodeEditor updateDecorations] User ${user.id} - Converted AnchorPos:`,
+              anchorPos,
+              `HeadPos:`,
+              headPos
+            );
+
+            const monacoRange = new monaco.Range(
+              anchorPos.lineNumber,
+              anchorPos.column,
+              headPos.lineNumber,
+              headPos.column
+            );
+            console.log(
+              `[CodeEditor updateDecorations] User ${user.id} - Created Monaco Range:`,
+              monacoRange
+            );
+
+            decorationArray.push({
+              range: monacoRange,
+              options: {
+                className: `user-${user.id}-selection`,
+                hoverMessage: { value: `Selected by ${user.name}` },
+              },
+            });
+          } catch (error) {
+            console.error(
+              "[CodeEditor updateDecorations] Error converting selection offsets:",
+              error,
+              primaryRange
+            );
+          }
+        }
       }
 
+      // Render Cursor
       if (user.cursorPosition) {
+        console.log(
+          `[CodeEditor updateDecorations] User ${user.id} - Cursor Position:`,
+          user.cursorPosition
+        );
+        const cursorPosRange = new monaco.Range(
+          user.cursorPosition.lineNumber,
+          user.cursorPosition.column,
+          user.cursorPosition.lineNumber,
+          user.cursorPosition.column
+        );
+        console.log(
+          `[CodeEditor updateDecorations] User ${user.id} - Created Cursor Range:`,
+          cursorPosRange
+        );
         decorationArray.push({
-          range: new monaco.Range(
-            user.cursorPosition.lineNumber,
-            user.cursorPosition.column,
-            user.cursorPosition.lineNumber,
-            user.cursorPosition.column
-          ),
+          range: cursorPosRange,
           options: {
             className: `user-${user.id}-cursor`,
             beforeContentClassName: "cursor-label",
@@ -234,40 +304,94 @@ const CodeEditor = ({
       return decorationArray;
     });
 
-    decorationsRef.current = editorRef.current.deltaDecorations(
-      decorationsRef.current,
+    console.log(
+      "[CodeEditor updateDecorations] Generated Decorations Array:",
       decorations
     );
+
+    // Apply the decorations
+    try {
+      // @ts-ignore <-- Ignore potential null warning for editor
+      const decorationIds = editor.deltaDecorations(
+        decorationsRef.current,
+        decorations
+      );
+      decorationsRef.current = decorationIds;
+      console.log(
+        "[CodeEditor updateDecorations] Applied Decorations, IDs:",
+        decorationIds
+      );
+    } catch (error) {
+      console.error(
+        "[CodeEditor updateDecorations] Error applying decorations:",
+        error
+      );
+      // @ts-ignore <-- Ignore potential null warning for editor
+      decorationsRef.current = editor.deltaDecorations(
+        decorationsRef.current,
+        []
+      );
+    }
   };
 
-  const handleEditorDidMount = (editor: any) => {
+  // Handle editor mount and cursor position changes
+  const handleEditorDidMount = (
+    editor: monaco.editor.IStandaloneCodeEditor
+  ) => {
     editorRef.current = editor;
+    const model = editor.getModel();
 
-    editor.onDidChangeCursorPosition(
-      (e: monaco.editor.ICursorPositionChangedEvent) => {
-        if (isUpdatingRef.current) return;
+    if (model) {
+      editor.onDidChangeCursorPosition(
+        (e: monaco.editor.ICursorPositionChangedEvent) => {
+          const currentEditor = editorRef.current!;
+          const currentModel = currentEditor.getModel()!;
+          if (isUpdatingRef.current || !currentModel) return;
 
-        const position = e.position;
-        const selection = editor.getSelection();
+          const position = e.position;
+          const selection = currentEditor.getSelection();
 
-        onCursorPositionChange?.(position.lineNumber);
+          onCursorPositionChange?.(position.lineNumber);
 
-        sendCursorData?.({
-          cursorPosition: {
-            lineNumber: position.lineNumber,
-            column: position.column,
-          },
-          selection: selection
-            ? {
-                startLineNumber: selection.startLineNumber,
-                startColumn: selection.startColumn,
-                endLineNumber: selection.endLineNumber,
-                endColumn: selection.endColumn,
-              }
-            : null,
-        });
-      }
-    );
+          let otSelectionToSend: OTSelection | null = null;
+          if (selection) {
+            try {
+              const anchorOffset = positionToOffset(
+                currentModel,
+                selection.getStartPosition()
+              );
+              const headOffset = positionToOffset(
+                currentModel,
+                selection.getEndPosition()
+              );
+              const range = new OTSelection.SelectionRange(
+                anchorOffset,
+                headOffset
+              );
+              otSelectionToSend = new OTSelection([range]);
+            } catch (error) {
+              console.error(
+                "[CodeEditor] Error converting positions to selection offsets:",
+                error,
+                selection
+              );
+            }
+          }
+
+          sendSelectionData?.({
+            cursorPosition: {
+              lineNumber: position.lineNumber,
+              column: position.column,
+            },
+            selection: otSelectionToSend,
+          });
+        }
+      );
+    } else {
+      console.warn(
+        "[CodeEditor] Model not available on mount, cannot attach cursor listener."
+      );
+    }
 
     updateDecorations();
     if (onEditorDidMount) {

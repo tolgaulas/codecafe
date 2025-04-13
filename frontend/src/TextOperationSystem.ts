@@ -499,14 +499,18 @@ export class TextOperation {
 // ## Monaco Adapter Logic (based on ot.js CodeMirrorAdapter)
 // #############################################################################
 
-// Helper functions (keep implementations)
-function positionToOffset(
+// Helper functions to convert between Monaco Position and document offset
+export function positionToOffset(
   model: editor.ITextModel,
   position: Position
 ): number {
   return model.getOffsetAt(position);
 }
-function offsetToPosition(model: editor.ITextModel, offset: number): Position {
+
+export function offsetToPosition(
+  model: editor.ITextModel,
+  offset: number
+): Position {
   const maxOffset = getModelLength(model);
   const clampedOffset = Math.max(0, Math.min(offset, maxOffset));
   // if (offset !== clampedOffset) {
@@ -514,6 +518,7 @@ function offsetToPosition(model: editor.ITextModel, offset: number): Position {
   // }
   return model.getPositionAt(clampedOffset);
 }
+
 function getModelLength(model: editor.ITextModel): number {
   const lastLine = model.getLineCount();
   const lastCol = model.getLineMaxColumn(lastLine);
