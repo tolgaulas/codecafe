@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
 import java.util.logging.Level;
@@ -13,166 +15,214 @@ import java.util.logging.Level;
 @Service
 public class OtService {
     private static final Logger logger = Logger.getLogger(OtService.class.getName());
-    private static final int MAX_HISTORY_SIZE = 10000;
+    private static final int MAX_HISTORY_SIZE_PER_DOC = 5000; // Adjusted max size per document
 
-    private String documentContent = "";
-    private final List<TextOperation> operationHistory = new ArrayList<>();
-    private final ReentrantLock lock = new ReentrantLock();
+    // Inner class to hold state for a single document
+    private static class DocumentState {
+        String content = "";
+        final List<TextOperation> operationHistory = new ArrayList<>();
+        // Optional: Could add per-document lock here for finer granularity
+        // final ReentrantLock docLock = new ReentrantLock(); 
+    }
+
+    // Map to store state for each document, keyed by documentId (e.g., file path)
+    private final Map<String, DocumentState> documents = new ConcurrentHashMap<>();
+
+    // Global lock for managing the documents map structure safely (can be bottleneck)
+    private final ReentrantLock serviceLock = new ReentrantLock();
 
     /**
-     * Gets the current document content
+     * Gets or creates the state for a given document ID.
+     * Must be called within a locked context (e.g., serviceLock).
      */
-    public String getDocumentContent() {
-        lock.lock();
+    private DocumentState getOrCreateDocumentState(String documentId) {
+        return documents.computeIfAbsent(documentId, k -> {
+            logger.info("Creating new document state for ID: " + documentId);
+            return new DocumentState();
+        });
+    }
+
+    /**
+     * Gets the current content for a specific document.
+     * @param documentId The identifier of the document.
+     * @return The content of the document.
+     */
+    public String getDocumentContent(String documentId) {
+        serviceLock.lock();
         try {
-            return documentContent;
+            DocumentState state = getOrCreateDocumentState(documentId);
+            return state.content;
         } finally {
-            lock.unlock();
+            serviceLock.unlock();
         }
     }
 
     /**
-     * Gets the current server revision number
+     * Gets the current server revision number for a specific document.
+     * @param documentId The identifier of the document.
+     * @return The revision number for the document.
      */
-    public int getRevision() {
-        lock.lock();
+    public int getRevision(String documentId) {
+        serviceLock.lock();
         try {
-            return operationHistory.size();
+            DocumentState state = getOrCreateDocumentState(documentId);
+            return state.operationHistory.size();
         } finally {
-            lock.unlock();
+            serviceLock.unlock();
         }
     }
 
     /**
-     * Process an incoming operation from a client against a specified revision.
-     * Transforms the operation against concurrent operations, applies it, and adds it to the history.
-     * Based on ot.js Server.prototype.receiveOperation
+     * Process an incoming operation from a client against a specified revision for a specific document.
+     * Transforms the operation against concurrent operations, applies it, and adds it to the history for that document.
      *
-     * @param clientRevision The revision number the client based their operation on.
-     * @param operation      The operation from the client (using ot.js TextOperation format).
-     * @return The transformed operation that was applied to the document and added to history.
-     * @throws IllegalArgumentException if the clientRevision is invalid or transformation fails.
+     * @param documentId     The identifier of the document being modified.
+     * @param clientRevision The revision number the client based their operation on (relative to the document's history).
+     * @param operation      The operation from the client.
+     * @return The transformed operation that was applied to the document and added to its history.
+     * @throws IllegalArgumentException if the clientRevision is invalid or transformation/application fails.
      */
-    public TextOperation receiveOperation(int clientRevision, TextOperation operation) throws IllegalArgumentException {
-        lock.lock();
+    public TextOperation receiveOperation(String documentId, int clientRevision, TextOperation operation) throws IllegalArgumentException {
+        serviceLock.lock(); // Using global lock for simplicity, consider per-document lock for performance
         try {
-            int serverRevision = operationHistory.size();
-            logger.info("Received operation based on client revision " + clientRevision + " (Server revision: " + serverRevision + "). Op: " + operation);
+            DocumentState state = getOrCreateDocumentState(documentId);
+            int serverRevision = state.operationHistory.size();
+            logger.info(String.format("[%s] Received op based on client rev %d (Server rev: %d). Op: %s",
+                    documentId, clientRevision, serverRevision, operation));
 
-            // --- Validate Revision --- 
+            // --- Validate Revision ---
             if (clientRevision < 0 || clientRevision > serverRevision) {
                 throw new IllegalArgumentException(
-                        String.format("Invalid client revision: %d. Server revision is: %d.", clientRevision, serverRevision)
+                        String.format("[%s] Invalid client revision: %d. Server revision is: %d.", documentId, clientRevision, serverRevision)
                 );
             }
 
-            // --- Find Concurrent Operations --- 
-            // Operations that happened on the server after the client's revision
-            List<TextOperation> concurrentOps = operationHistory.subList(clientRevision, serverRevision);
-            logger.fine("Found " + concurrentOps.size() + " concurrent operations to transform against.");
+            // --- Find Concurrent Operations ---
+            List<TextOperation> concurrentOps = state.operationHistory.subList(clientRevision, serverRevision);
+            logger.fine(String.format("[%s] Found %d concurrent operations to transform against.", documentId, concurrentOps.size()));
 
-            // --- Transform Operation --- 
-            TextOperation transformedOp = operation; // Start with the original client op
+            // --- Transform Operation ---
+            TextOperation transformedOp = operation;
             for (int i = 0; i < concurrentOps.size(); i++) {
                 TextOperation concurrentOp = concurrentOps.get(i);
-                logger.finest("Transforming against concurrent op [" + (clientRevision + i) + "]: " + concurrentOp);
+                logger.finest(String.format("[%s] Transforming against concurrent op [%d]: %s", documentId, clientRevision + i, concurrentOp));
                 try {
                     List<TextOperation> pair = OtUtils.transform(transformedOp, concurrentOp);
-                    transformedOp = pair.get(0); // The transformed client op becomes the input for the next step
-                    logger.finest(" -> Transformed op: " + transformedOp);
+                    transformedOp = pair.get(0);
+                    logger.finest(String.format("[%s]  -> Transformed op: %s", documentId, transformedOp));
                 } catch (Exception e) {
-                    // Log the error and potentially rethrow or handle gracefully
-                    logger.log(Level.SEVERE, "Error during transformation step " + i + ". Op: " + transformedOp + ", Concurrent: " + concurrentOp, e);
+                    logger.log(Level.SEVERE, String.format("[%s] Error during transformation step %d. Op: %s, Concurrent: %s", documentId, i, transformedOp, concurrentOp), e);
                     throw new IllegalArgumentException("Transformation failed: " + e.getMessage(), e);
                 }
             }
-            logger.fine("Final transformed operation: " + transformedOp);
+            logger.fine(String.format("[%s] Final transformed operation: %s", documentId, transformedOp));
 
-            // --- Apply Transformed Operation --- 
+            // --- Apply Transformed Operation ---
             try {
-                // Log state right before applying
-                logger.info("Attempting to apply op [Rev " + operationHistory.size() + "]: " + transformedOp + " to doc state (length " + documentContent.length() + "): '" + documentContent + "'");
-                documentContent = OtUtils.apply(documentContent, transformedOp);
-                logger.fine("Applied transformed operation. New doc length: " + documentContent.length());
-                 logger.finest("New document content snippet: " + (documentContent.length() > 100 ? documentContent.substring(0, 100) + "..." : documentContent));
+                logger.info(String.format("[%s] Attempting to apply op [Rev %d]: %s to doc state (length %d): '%s'",
+                         documentId, state.operationHistory.size(), transformedOp, state.content.length(), state.content));
+                state.content = OtUtils.apply(state.content, transformedOp);
+                logger.fine(String.format("[%s] Applied transformed operation. New doc length: %d", documentId, state.content.length()));
+                logger.finest(String.format("[%s] New document content snippet: %s", documentId, (state.content.length() > 100 ? state.content.substring(0, 100) + "..." : state.content)));
             } catch (Exception e) {
-                // Log the error and potentially rethrow or handle gracefully
-                 logger.log(Level.SEVERE, "Error applying transformed operation: " + transformedOp + " to doc state: '" + documentContent + "'", e);
+                 logger.log(Level.SEVERE, String.format("[%s] Error applying transformed operation: %s to doc state: '%s'", documentId, transformedOp, state.content), e);
                  throw new IllegalArgumentException("Apply failed: " + e.getMessage(), e);
             }
 
-            // --- Add to History --- 
-            operationHistory.add(transformedOp); // Add the *transformed* operation
-            logger.fine("Added transformed op to history. New server revision: " + operationHistory.size());
+            // --- Add to History ---
+            state.operationHistory.add(transformedOp);
+            logger.fine(String.format("[%s] Added transformed op to history. New server revision: %d", documentId, state.operationHistory.size()));
 
-            // --- Prune History (Optional) ---
-            pruneHistory();
+            // --- Prune History (Per Document) ---
+            pruneHistory(state, documentId);
 
-            // --- Return Transformed Operation --- 
-            // The caller (e.g., WebSocket controller) is responsible for:
-            // 1. Sending 'ack' to the original sender.
-            // 2. Broadcasting the 'transformedOp' to other clients, along with the new server revision (operationHistory.size()).
+            // Return the transformed operation for broadcasting
             return transformedOp;
 
         } finally {
-            lock.unlock();
+            serviceLock.unlock();
         }
     }
 
-    /** Prunes the operation history if it exceeds the maximum size */
-    private void pruneHistory() {
-        // This simple pruning might break the ability for very old clients to catch up.
-        // A more robust solution might involve snapshotting.
-        if (operationHistory.size() > MAX_HISTORY_SIZE) {
-            int removeCount = operationHistory.size() - (MAX_HISTORY_SIZE / 2);
+    /** Prunes the operation history for a specific document if it exceeds the maximum size */
+    private void pruneHistory(DocumentState state, String documentId) {
+        if (state.operationHistory.size() > MAX_HISTORY_SIZE_PER_DOC) {
+            int removeCount = state.operationHistory.size() - (MAX_HISTORY_SIZE_PER_DOC / 2);
             if (removeCount > 0) {
-            operationHistory.subList(0, removeCount).clear();
-                logger.info("Pruned operation history. Removed " + removeCount + " ops. New size: " + operationHistory.size());
-                // Important: Pruning invalidates old revision numbers. Clients might need to resync fully.
+                state.operationHistory.subList(0, removeCount).clear();
+                logger.info(String.format("[%s] Pruned operation history. Removed %d ops. New size: %d",
+                        documentId, removeCount, state.operationHistory.size()));
             }
         }
     }
 
     /**
-     * Sets the document content directly and resets history.
-     * @param content The new document content
+     * Sets the document content directly for a specific document and resets its history.
+     * @param documentId The identifier of the document.
+     * @param content The new document content.
      */
-    public void setDocumentContent(String content) {
-        lock.lock();
+    public void setDocumentContent(String documentId, String content) {
+        serviceLock.lock();
         try {
-            documentContent = (content != null) ? content : "";
-            operationHistory.clear();
-            logger.info("Document content set directly. History cleared. New revision: 0");
+            DocumentState state = getOrCreateDocumentState(documentId);
+            state.content = (content != null) ? content : "";
+            state.operationHistory.clear();
+            logger.info(String.format("[%s] Document content set directly. History cleared. New revision: 0", documentId));
         } finally {
-            lock.unlock();
+            serviceLock.unlock();
         }
     }
 
     /**
-     * Reset the server state completely
+     * Reset the state for a specific document.
+     * @param documentId The identifier of the document to reset.
      */
-    public void reset() {
-        lock.lock();
+    public void resetDocument(String documentId) {
+        serviceLock.lock();
         try {
-            documentContent = "";
-            operationHistory.clear();
-            logger.info("OT service has been reset. New revision: 0");
+            DocumentState state = documents.get(documentId);
+            if (state != null) {
+                state.content = "";
+                state.operationHistory.clear();
+                logger.info(String.format("[%s] Document state has been reset. New revision: 0", documentId));
+            } else {
+                logger.warning("Attempted to reset non-existent document: " + documentId);
+            }
+            // Optionally remove the entry entirely? documents.remove(documentId);
         } finally {
-            lock.unlock();
+            serviceLock.unlock();
         }
     }
 
     /**
-     * Gets a copy of the operation history for debugging/inspection.
-     * @return A list of all operations in history
+     * Reset the state for ALL documents.
      */
-    public List<TextOperation> getOperationHistory() {
-        lock.lock();
+    public void resetAll() {
+        serviceLock.lock();
         try {
-            // Return a copy to avoid external modifications
-            return new ArrayList<>(operationHistory);
+            documents.clear();
+            logger.info("All document states have been reset.");
         } finally {
-            lock.unlock();
+            serviceLock.unlock();
+        }
+    }
+
+    /**
+     * Gets a copy of the operation history for a specific document.
+     * @param documentId The identifier of the document.
+     * @return A list of all operations in the document's history.
+     */
+    public List<TextOperation> getOperationHistory(String documentId) {
+        serviceLock.lock();
+        try {
+            DocumentState state = documents.get(documentId); // Don't create if not exists
+            if (state != null) {
+                return new ArrayList<>(state.operationHistory);
+            } else {
+                return new ArrayList<>(); // Return empty list if document doesn't exist
+            }
+        } finally {
+            serviceLock.unlock();
         }
     }
 }

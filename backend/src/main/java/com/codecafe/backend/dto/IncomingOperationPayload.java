@@ -1,5 +1,6 @@
 package com.codecafe.backend.dto;
 
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -10,16 +11,18 @@ public class IncomingOperationPayload {
 
     private String clientId;
     private int revision;
-    private TextOperation operation; // Assumes TextOperation is already Jackson-compatible (or custom serializer exists)
+    private List<Object> operation; // Raw operation list (numbers or strings)
+    private String documentId;
 
     // Default constructor for deserialization
     public IncomingOperationPayload() {
     }
 
-    public IncomingOperationPayload(String clientId, int revision, TextOperation operation) {
+    public IncomingOperationPayload(String clientId, int revision, List<Object> operation, String documentId) {
         this.clientId = clientId;
         this.revision = revision;
         this.operation = operation;
+        this.documentId = documentId;
     }
 
     // Getters and Setters
@@ -40,12 +43,20 @@ public class IncomingOperationPayload {
         this.revision = revision;
     }
 
-    public TextOperation getOperation() {
+    public List<Object> getOperation() {
         return operation;
     }
 
-    public void setOperation(TextOperation operation) {
+    public void setOperation(List<Object> operation) {
         this.operation = operation;
+    }
+
+    public String getDocumentId() {
+        return documentId;
+    }
+
+    public void setDocumentId(String documentId) {
+        this.documentId = documentId;
     }
 
     // equals, hashCode, toString (optional but good practice)
@@ -57,12 +68,13 @@ public class IncomingOperationPayload {
         IncomingOperationPayload that = (IncomingOperationPayload) o;
         return revision == that.revision &&
                 Objects.equals(clientId, that.clientId) &&
-                Objects.equals(operation, that.operation);
+                Objects.equals(operation, that.operation) &&
+                Objects.equals(documentId, that.documentId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(clientId, revision, operation);
+        return Objects.hash(clientId, revision, operation, documentId);
     }
 
     @Override
@@ -71,6 +83,7 @@ public class IncomingOperationPayload {
                 "clientId='" + clientId + '\'' +
                 ", revision=" + revision +
                 ", operation=" + operation +
+                ", documentId='" + documentId + '\'' +
                 '}';
     }
 } 

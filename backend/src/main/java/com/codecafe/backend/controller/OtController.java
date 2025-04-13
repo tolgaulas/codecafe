@@ -44,42 +44,41 @@ public class OtController {
                                 Principal principal) {
 
         String clientId = payload.getClientId();
-        if (clientId == null) {
-            logger.warning("Received operation without clientId in payload. Discarding.");
+        String documentId = payload.getDocumentId();
+
+        if (clientId == null || documentId == null) {
+            logger.warning("Received operation without clientId or documentId in payload. Discarding.");
             return;
         }
 
-        logger.info("OtController received operation payload from client [" + clientId + "]: Revision=" + payload.getRevision() + ", Op=" + payload.getOperation());
+        logger.info(String.format("OtController received operation payload from client [%s] for doc [%s]: Revision=%d, Op=%s",
+                 clientId, documentId, payload.getRevision(), payload.getOperation()));
 
         try {
             // Process the operation using the new service method
-            TextOperation transformedOp = otService.receiveOperation(payload.getRevision(), payload.getOperation());
+            // Deserialize List<Object> into TextOperation using the constructor
+            TextOperation operation = new TextOperation(payload.getOperation()); 
+            TextOperation transformedOp = otService.receiveOperation(documentId, payload.getRevision(), operation);
 
-            // 1. Broadcast the transformed operation to ALL clients (including sender)
-            // The client state machine needs this broadcast to potentially transform its buffer.
-            // The broadcast payload should include the clientId and the operation.
+            // 1. Broadcast the transformed operation to ALL clients
             Map<String, Object> broadcastPayload = new HashMap<>();
+            broadcastPayload.put("documentId", documentId);
             broadcastPayload.put("clientId", clientId);
-            broadcastPayload.put("operation", transformedOp.getOps()); // Send raw ops list
-            // Note: We don't send revision here; clients track their own based on received ops/acks.
+            broadcastPayload.put("operation", transformedOp.getOps());
+
             messagingTemplate.convertAndSend("/topic/operations", broadcastPayload);
-            logger.fine("Broadcasted transformed op from client [" + clientId + "] to /topic/operations");
+            logger.fine(String.format("Broadcasted transformed op from client [%s] for doc [%s] to /topic/operations", clientId, documentId));
 
             // 2. Send ACK back to the original sender ONLY
-            // Use user-specific destination if possible, requires proper user handling/subscription
-            // String userDestination = "/user/" + clientId + "/queue/ack"; // Example if using user destinations
-            String ackDestination = "/topic/ack/" + clientId; // Simpler topic per client ID
-
+            String ackDestination = "/topic/ack/" + clientId;
             messagingTemplate.convertAndSend(ackDestination, "ack");
             logger.fine("Sent ACK to client [" + clientId + "] at " + ackDestination);
 
         } catch (IllegalArgumentException e) {
-            logger.warning("Error processing operation from client [" + clientId + "]: " + e.getMessage());
+            logger.warning(String.format("Error processing operation from client [%s] for doc [%s]: %s", clientId, documentId, e.getMessage()));
             // Optionally send an error message back to the client
-            // String errorDestination = "/topic/error/" + clientId;
-            // messagingTemplate.convertAndSend(errorDestination, "Error: " + e.getMessage());
         } catch (Exception e) {
-            logger.severe("Unexpected error processing operation from client [" + clientId + "]: " + e.getMessage());
+            logger.severe(String.format("Unexpected error processing operation from client [%s] for doc [%s]: %s", clientId, documentId, e.getMessage()));
             // Handle unexpected errors
         }
     }
@@ -95,37 +94,51 @@ public class OtController {
                                 Principal principal) {
 
         String clientId = payload.getClientId();
-        if (clientId == null) {
-             logger.warning("Received selection without clientId in payload.");
+        String documentId = payload.getDocumentId();
+
+        if (clientId == null || documentId == null) {
+             logger.warning("Received selection without clientId or documentId in payload.");
              return;
         }
 
-        logger.finest("Received selection from client [" + clientId + "]: " + payload.getSelection());
+        logger.finest(String.format("Received selection from client [%s] for doc [%s]: %s", clientId, documentId, payload.getSelection()));
 
         // Broadcast selection to other clients
         Map<String, Object> broadcastPayload = new HashMap<>();
+        broadcastPayload.put("documentId", documentId);
         broadcastPayload.put("clientId", clientId);
-        broadcastPayload.put("selection", payload.getSelection()); // Forward the selection payload
+        // Forwarding the raw selection payload - Assuming frontend handles Map<String, List<Map<String, Integer>>>
+        broadcastPayload.put("selection", payload.getSelection());
 
         // Send to the main topic, clients will ignore their own ID
         messagingTemplate.convertAndSend("/topic/selections", broadcastPayload);
-         logger.finest("Broadcasted selection from client [" + clientId + "] to /topic/selections");
+         logger.finest(String.format("Broadcasted selection from client [%s] for doc [%s] to /topic/selections", clientId, documentId));
     }
 
     /**
      * Handle document state requests.
-     * Returns the current document content and revision number.
+     * Expects a payload containing the documentId.
+     * Returns the current document content and revision number for that document.
      */
     @MessageMapping("/get-document-state")
-    public void getDocumentState() {
+    public void getDocumentState(@Payload Map<String, String> payload) {
+        String documentId = payload.get("documentId");
+
+        if (documentId == null) {
+            logger.warning("Received get-document-state request without documentId. Ignoring.");
+            return;
+        }
+
+        logger.info("Received request for document state for doc [" + documentId + "]");
+
         // Use a Map or a dedicated DTO for the response
         Map<String, Object> stateResponse = new HashMap<>();
-        stateResponse.put("document", otService.getDocumentContent());
-        stateResponse.put("revision", otService.getRevision());
+        stateResponse.put("documentId", documentId);
+        stateResponse.put("document", otService.getDocumentContent(documentId));
+        stateResponse.put("revision", otService.getRevision(documentId));
 
-        logger.info("Sending document state: Revision=" + stateResponse.get("revision"));
+        logger.info("Sending document state: Revision=" + stateResponse.get("revision") + " for doc [" + documentId + "]");
         // Send state back to the requesting client (or broadcast if needed)
-        // Assuming a broadcast for simplicity, or use user-specific destination
         messagingTemplate.convertAndSend("/topic/document-state", stateResponse);
     }
 }

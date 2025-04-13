@@ -39,6 +39,17 @@ import {
 } from "@dnd-kit/modifiers";
 import WebViewPanel from "./components/WebViewPanel";
 import { motion, AnimatePresence } from "framer-motion";
+import SockJS from "sockjs-client";
+import Stomp from "stompjs";
+import { v4 as uuidv4 } from "uuid";
+import { editor } from "monaco-editor";
+import {
+  TextOperation,
+  MonacoAdapter,
+  OTSelection,
+  Client,
+  IClientCallbacks,
+} from "./TextOperationSystem";
 
 // Define types for code execution
 interface CodeFile {
@@ -324,7 +335,26 @@ const CodeEditorUI = () => {
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
   const [isSessionCreator, setIsSessionCreator] = useState<boolean>(false);
 
+  // OT State
+  const [userId] = useState<string>(() => "user-" + uuidv4());
+  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+  const adapterRef = useRef<MonacoAdapter | null>(null);
+  const clientRef = useRef<Client | null>(null);
+  const stompClientRef = useRef<Stomp.Client | null>(null);
+
+  // Flag to control editor readiness for OT
+  const [isEditorReadyForOT, setIsEditorReadyForOT] = useState(false);
+
   // 3. HANDLERS / FUNCTIONS THIRD
+
+  // Editor Mount Handler
+  const handleEditorDidMount = (
+    editorInstance: editor.IStandaloneCodeEditor
+  ) => {
+    console.log("Monaco Editor Instance Mounted:", editorInstance);
+    editorInstanceRef.current = editorInstance;
+    setIsEditorReadyForOT(true); // Mark editor as ready
+  };
 
   // dnd-kit Sensors
   const sensors = useSensors(
@@ -739,6 +769,426 @@ const CodeEditorUI = () => {
     }
   };
 
+  // WebSocket Connection Effect
+  useEffect(() => {
+    // Conditions to establish connection: session active, file open, editor ready
+    if (
+      !isSessionActive ||
+      !activeFileId ||
+      !editorInstanceRef.current ||
+      !isEditorReadyForOT
+    ) {
+      // Cleanup existing connection if conditions are not met
+      if (stompClientRef.current?.connected) {
+        console.log(
+          `[WS Cleanup] Disconnecting STOMP (Reason: sessionActive=${isSessionActive}, activeFileId=${activeFileId}, editorReady=${isEditorReadyForOT})`
+        );
+        stompClientRef.current.disconnect(() =>
+          console.log("[STOMP] Disconnected due to unmet conditions.")
+        );
+        stompClientRef.current = null;
+        clientRef.current = null; // Reset client
+        adapterRef.current?.detach(); // Detach adapter
+        adapterRef.current = null; // Reset adapter
+      }
+      return; // Exit effect if conditions not met
+    }
+
+    console.log(
+      `[WS Setup] Conditions met for file ${activeFileId}. Setting up STOMP...`
+    );
+
+    // Ensure previous connection is cleaned up before starting new one
+    if (stompClientRef.current?.connected) {
+      console.warn(
+        "[WS Setup] Stomp client already connected during setup? Disconnecting first."
+      );
+      stompClientRef.current.disconnect(() => {}); // Provide empty callback
+      stompClientRef.current = null;
+    }
+    // Reset OT state before connecting for the new file
+    clientRef.current = null;
+    adapterRef.current?.detach();
+    adapterRef.current = null;
+
+    const currentEditorInstance = editorInstanceRef.current;
+    const currentActiveFileId = activeFileId; // Capture activeFileId for this effect closure
+
+    // Set initial code state for the new file (e.g., loading indicator)
+    // The actual content will be set by the document-state message
+    const model = currentEditorInstance.getModel();
+    if (model && model.getValue() !== "// Loading document...") {
+      // model.setValue("// Loading document...");
+      // Temporarily disable setting loading text to avoid flashing
+      // Maybe set a loading state elsewhere in the UI
+    }
+
+    console.log("[WS Setup] Connecting via SockJS...");
+    const socket = new SockJS("http://localhost:8080/ws"); // Use localhost
+    const stompClient = Stomp.over(socket);
+    stompClientRef.current = stompClient;
+
+    if (!adapterRef.current && currentEditorInstance) {
+      console.log(
+        `[WS Setup] Initializing MonacoAdapter for ${currentActiveFileId}`
+      );
+      adapterRef.current = new MonacoAdapter(currentEditorInstance);
+    }
+
+    let subscriptions: Stomp.Subscription[] = [];
+
+    stompClient.connect(
+      {},
+      (frame: any) => {
+        console.log(
+          `[STOMP Connected] Frame: ${frame}, File: ${currentActiveFileId}`
+        );
+
+        // Define callbacks WITH documentId included
+        const clientCallbacks: IClientCallbacks = {
+          sendOperation: (revision: number, operation: TextOperation) => {
+            if (stompClientRef.current?.connected && currentActiveFileId) {
+              console.log(
+                `[sendOperation Callback] Preparing to send Op for ${currentActiveFileId} @ rev ${revision}`
+              );
+              const payload = {
+                documentId: currentActiveFileId,
+                clientId: userId,
+                revision: revision,
+                operation: operation.toJSON(),
+              };
+              console.log(`[Client -> Server Op] /app/operation`, payload);
+              stompClientRef.current.send(
+                "/app/operation",
+                {},
+                JSON.stringify(payload)
+              );
+            } else {
+              console.error(
+                "Cannot send operation - STOMP not connected or no active file"
+              );
+            }
+          },
+          sendSelection: (selection: OTSelection | null) => {
+            if (stompClientRef.current?.connected && currentActiveFileId) {
+              const payload = {
+                documentId: currentActiveFileId,
+                clientId: userId,
+                selection: selection?.toJSON() ?? null,
+              };
+              console.log(`[Client -> Server Sel] /app/selection`, payload);
+              stompClientRef.current.send(
+                "/app/selection",
+                {},
+                JSON.stringify(payload)
+              );
+            } else {
+              console.warn(
+                "Cannot send selection - STOMP not connected or no active file"
+              );
+            }
+          },
+          applyOperation: (operation: TextOperation) => {
+            console.log(`[Client -> Editor Apply] Op: ${operation.toString()}`);
+            adapterRef.current?.applyOperation(operation);
+          },
+          getSelection: () => {
+            return adapterRef.current?.getSelection() ?? null;
+          },
+          setSelection: (selection: OTSelection | null) => {
+            adapterRef.current?.setSelection(selection);
+          },
+        };
+
+        // Subscribe to topics (handle documentId filtering)
+
+        // Document State Handling
+        subscriptions.push(
+          stompClient.subscribe("/topic/document-state", (message: any) => {
+            try {
+              const state = JSON.parse(message.body);
+              console.log(`[Server -> Client State] Received:`, state);
+
+              // *** Check if state is for the currently active file ***
+              if (state.documentId !== currentActiveFileId) {
+                console.log(
+                  `   Ignoring state for inactive file: ${state.documentId} (current: ${currentActiveFileId})`
+                );
+                return;
+              }
+
+              if (!clientRef.current) {
+                console.log(
+                  `   Initializing Client for ${state.documentId} @ rev ${state.revision}`
+                );
+                clientRef.current = new Client(
+                  state.revision,
+                  userId,
+                  clientCallbacks
+                );
+
+                if (currentEditorInstance) {
+                  const model = currentEditorInstance.getModel();
+                  const currentEditorValue = model?.getValue();
+                  if (model && currentEditorValue !== state.document) {
+                    console.log(
+                      `   Setting initial document content for ${state.documentId}.`
+                    );
+                    if (adapterRef.current)
+                      adapterRef.current.ignoreNextChange = true;
+                    // Use pushEditOperations for setting initial content to avoid breaking undo stack
+                    model.pushEditOperations(
+                      [],
+                      [
+                        {
+                          range: model.getFullModelRange(),
+                          text: state.document,
+                        },
+                      ],
+                      () => null // No undo stop needed here usually
+                    );
+                    // model.setValue(state.document); // Old method
+                  } else {
+                    console.log(
+                      `   Editor content already matches for ${state.documentId}.`
+                    );
+                  }
+                }
+                // Register adapter ONLY after client is initialized and doc is set
+                adapterRef.current?.registerCallbacks({
+                  change: (op: TextOperation, inverse: TextOperation) => {
+                    console.log(
+                      `[Adapter Callback] Change triggered for ${currentActiveFileId}. Op: ${op.toString()}`
+                    );
+                    if (!clientRef.current) {
+                      console.error(
+                        `[Adapter Callback] Error: clientRef is null when change occurred for ${currentActiveFileId}`
+                      );
+                      return;
+                    }
+                    console.log(
+                      `[Adapter Callback] Calling applyClient. Client State: ${clientRef.current.state.constructor.name}, Revision: ${clientRef.current.revision}`
+                    );
+                    clientRef.current?.applyClient(op);
+                  },
+                  selectionChange: () => {
+                    // console.log(`[Editor -> Client SelChange] File: ${currentActiveFileId}`);
+                    clientRef.current?.selectionChanged();
+                  },
+                  blur: () => {
+                    console.log(
+                      `[Editor -> Client Blur] File: ${currentActiveFileId}`
+                    );
+                    clientRef.current?.blur();
+                  },
+                });
+              } else {
+                console.warn(
+                  `[Server -> Client State] Received state for ${state.documentId} after client init. Rev: ${state.revision}, ClientRev: ${clientRef.current.revision}`
+                );
+                // Optional: Handle revision mismatch/resync logic here if needed
+              }
+            } catch (error) {
+              console.error(
+                "Error processing document-state message:",
+                error,
+                message.body
+              );
+            }
+          })
+        );
+
+        // Operations Handling
+        subscriptions.push(
+          stompClient.subscribe("/topic/operations", (message: any) => {
+            try {
+              const payload = JSON.parse(message.body);
+              if (
+                !payload ||
+                !payload.clientId ||
+                !payload.operation ||
+                !payload.documentId
+              ) {
+                console.error(
+                  "[Server -> Client Op] Invalid payload:",
+                  message.body
+                );
+                return;
+              }
+              console.log(
+                `[Server -> Client Op] Received from ${payload.clientId} for ${payload.documentId}:`,
+                payload.operation
+              );
+
+              // *** Ignore if for different file or own message ***
+              if (payload.documentId !== currentActiveFileId) {
+                console.log(
+                  `   Ignoring op for inactive file: ${payload.documentId}`
+                );
+                return;
+              }
+              if (payload.clientId === userId) {
+                console.log("   Ignoring own operation broadcast.");
+                return;
+              }
+
+              if (clientRef.current) {
+                try {
+                  const operation = TextOperation.fromJSON(payload.operation);
+                  clientRef.current.applyServer(operation);
+                } catch (e) {
+                  console.error(
+                    "[Server -> Client Op] Error applying server op:",
+                    e,
+                    payload.operation
+                  );
+                }
+              } else {
+                console.warn(
+                  `[Server -> Client Op] Received op for ${payload.documentId} before client init.`
+                );
+              }
+            } catch (error) {
+              console.error(
+                "Error processing operations message:",
+                error,
+                message.body
+              );
+            }
+          })
+        );
+
+        // Selections Handling
+        subscriptions.push(
+          stompClient.subscribe("/topic/selections", (message: any) => {
+            try {
+              const payload = JSON.parse(message.body);
+              if (!payload || !payload.clientId || !payload.documentId) {
+                // Check documentId
+                console.error(
+                  "[Server -> Client Sel] Invalid payload:",
+                  message.body
+                );
+                return;
+              }
+              // console.log(`[Server -> Client Sel] Received from ${payload.clientId} for ${payload.documentId}:`, payload.selection);
+
+              // *** Ignore if for different file or own message ***
+              if (payload.documentId !== currentActiveFileId) {
+                // console.log(`   Ignoring selection for inactive file: ${payload.documentId}`);
+                return;
+              }
+              if (payload.clientId === userId) {
+                return; // Don't process own selection echoes
+              }
+
+              if (clientRef.current && adapterRef.current) {
+                const selection = payload.selection
+                  ? OTSelection.fromJSON(payload.selection)
+                  : null;
+                if (selection) {
+                  try {
+                    // TODO: Implement visual display of remote selections
+                    // For now, just log the transformed selection
+                    const transformedSelection =
+                      clientRef.current.transformSelection(selection);
+                    // console.log(`   Transformed selection for ${payload.clientId} on ${payload.documentId}:`, transformedSelection.toJSON());
+                    // adapterRef.current.setOtherSelection(transformedSelection, remoteUserColor, payload.clientId);
+                  } catch (e) {
+                    console.error(
+                      "[Server -> Client Sel] Error transforming remote selection:",
+                      e,
+                      payload.selection
+                    );
+                  }
+                } else {
+                  // Handle cursor blur / selection removal for the remote user
+                  // adapterRef.current.removeOtherSelection(payload.clientId);
+                }
+              } else {
+                // console.warn(`[Server -> Client Sel] Received selection for ${payload.documentId} before client/adapter init.`);
+              }
+            } catch (error) {
+              console.error(
+                "Error processing selections message:",
+                error,
+                message.body
+              );
+            }
+          })
+        );
+
+        // ACK Handling (remains user-specific, not document-specific)
+        const ackTopic = `/topic/ack/${userId}`;
+        console.log(`[STOMP Setup] Subscribing to ACK topic: ${ackTopic}`);
+        subscriptions.push(
+          stompClient.subscribe(ackTopic, (message: any) => {
+            console.log(`[Server -> Client ACK] Received`);
+            if (message.body === "ack") {
+              clientRef.current?.serverAck();
+            } else {
+              console.warn(
+                "[Server -> Client ACK] Received unexpected ACK message:",
+                message.body
+              );
+            }
+          })
+        );
+
+        // Request initial state FOR THE CURRENT ACTIVE FILE
+        console.log(
+          `[Client -> Server ReqState] Requesting state for ${currentActiveFileId}...`
+        );
+        stompClient.send(
+          "/app/get-document-state",
+          {},
+          JSON.stringify({ documentId: currentActiveFileId })
+        );
+      },
+      (error: any) => {
+        console.error(
+          `[STOMP Error] Connection Failed for ${currentActiveFileId}:`,
+          error
+        );
+        // Optionally set code state to show error
+        // setFileContents(prev => ({...prev, [currentActiveFileId]: "// Connection failed."})) ;
+        setIsSessionActive(false); // Consider if this should affect the whole session
+        // Reset OT state on connection error
+        clientRef.current = null;
+        adapterRef.current?.detach();
+        adapterRef.current = null;
+      }
+    );
+
+    // Cleanup function for the effect
+    return () => {
+      console.log(
+        `[WS Cleanup] Running cleanup for file ${currentActiveFileId} effect...`
+      );
+      subscriptions.forEach((sub) => {
+        try {
+          sub.unsubscribe();
+        } catch (e) {
+          console.warn("Error unsubscribing:", e);
+        }
+      });
+      subscriptions = [];
+      if (stompClientRef.current?.connected) {
+        console.log("[WS Cleanup] Disconnecting STOMP client in cleanup.");
+        stompClientRef.current.disconnect(() =>
+          console.log("[STOMP] Disconnected via effect cleanup.")
+        );
+      }
+      // Don't nullify stompClientRef here, the outer check handles it
+      // Reset client and adapter refs specific to this file connection attempt
+      clientRef.current = null;
+      adapterRef.current?.detach();
+      adapterRef.current = null;
+      console.log(`[WS Cleanup] Finished cleanup for ${currentActiveFileId}.`);
+    };
+    // Depend on session, active file, and editor readiness
+  }, [isSessionActive, sessionId, activeFileId, userId, isEditorReadyForOT]);
+
   // Derived State (Memos)
   const htmlFileContent = useMemo(() => {
     const htmlFile = openFiles.find((f) => f.language === "html");
@@ -898,6 +1348,29 @@ const CodeEditorUI = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isShareMenuOpen]);
+
+  // Effect to handle joining via URL parameter
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sessionIdFromUrl = url.searchParams.get("session");
+
+    if (sessionIdFromUrl && !isSessionActive) {
+      // Only run if not already active
+      console.log("Detected session ID from URL:", sessionIdFromUrl);
+      setSessionId(sessionIdFromUrl);
+      setIsSessionActive(true); // Activate the session immediately for joining
+      setIsSessionCreator(false); // Joining user is not the creator
+
+      // Optional: Clean the URL
+      const cleanUrl = new URL(window.location.href);
+      cleanUrl.searchParams.delete("session");
+      window.history.replaceState({}, "", cleanUrl.toString());
+
+      // Optional: Automatically open the share menu to prompt for name/color?
+      // setIsShareMenuOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   // 5. RETURN JSX LAST
   return (
@@ -1367,8 +1840,12 @@ const CodeEditorUI = () => {
                     ]
                   }
                   showLineNumbers={true}
-                  code={fileContents[activeFileId] || ""}
-                  onCodeChange={handleCodeChange}
+                  // Pass the specific file content OR a loading state if OT is initializing
+                  code={fileContents[activeFileId] ?? "// Loading..."}
+                  // Let OT manage changes, don't pass handleCodeChange directly if OT active
+                  onCodeChange={() => {}} // Add dummy function to satisfy prop type
+                  // Pass the mount handler
+                  onEditorDidMount={handleEditorDidMount}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-stone-500">

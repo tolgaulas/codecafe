@@ -1,5 +1,6 @@
 package com.codecafe.backend.dto;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -10,15 +11,17 @@ import java.util.Objects;
 public class IncomingSelectionPayload {
 
     private String clientId;
-    private Map<String, Object> selection; // Can be null
+    private Map<String, List<Map<String, Integer>>> selection; // Example: { ranges: [{ anchor: 0, head: 5 }] }
+    private String documentId;
 
     // Default constructor for Jackson
     public IncomingSelectionPayload() {
     }
 
-    public IncomingSelectionPayload(String clientId, Map<String, Object> selection) {
+    public IncomingSelectionPayload(String clientId, Map<String, List<Map<String, Integer>>> selection, String documentId) {
         this.clientId = clientId;
         this.selection = selection;
+        this.documentId = documentId;
     }
 
     // Getters and Setters
@@ -31,12 +34,20 @@ public class IncomingSelectionPayload {
         this.clientId = clientId;
     }
 
-    public Map<String, Object> getSelection() {
+    public Map<String, List<Map<String, Integer>>> getSelection() {
         return selection;
     }
 
-    public void setSelection(Map<String, Object> selection) {
+    public void setSelection(Map<String, List<Map<String, Integer>>> selection) {
         this.selection = selection;
+    }
+
+    public String getDocumentId() {
+        return documentId;
+    }
+
+    public void setDocumentId(String documentId) {
+        this.documentId = documentId;
     }
 
     // equals, hashCode, toString
@@ -46,12 +57,12 @@ public class IncomingSelectionPayload {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         IncomingSelectionPayload that = (IncomingSelectionPayload) o;
-        return Objects.equals(clientId, that.clientId) && Objects.equals(selection, that.selection);
+        return Objects.equals(clientId, that.clientId) && Objects.equals(selection, that.selection) && Objects.equals(documentId, that.documentId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(clientId, selection);
+        return Objects.hash(clientId, selection, documentId);
     }
 
     @Override
@@ -59,6 +70,7 @@ public class IncomingSelectionPayload {
         return "IncomingSelectionPayload{" +
                 "clientId='" + clientId + '\'' +
                 ", selection=" + selection +
+                ", documentId='" + documentId + '\'' +
                 '}';
     }
 } 
