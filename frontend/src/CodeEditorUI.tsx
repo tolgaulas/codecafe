@@ -996,6 +996,18 @@ const CodeEditorUI = () => {
         );
         setIsConnected(true); // Set connected state to true
 
+        // <<< Send explicit join message >>>
+        const joinPayload = {
+          sessionId: sessionId, // Assuming sessionId is available here
+          documentId: currentActiveFileId, // Send initial document focus
+          userId: userId,
+          userName: userName.trim(),
+          userColor: userColor,
+        };
+        console.log("Sending explicit /app/join message", joinPayload); // Use console.log
+        stompClient.send("/app/join", {}, JSON.stringify(joinPayload));
+        // <<< End send join message >>>
+
         // Define callbacks WITH documentId included
         const clientCallbacks: IClientCallbacks = {
           sendOperation: (revision: number, operation: TextOperation) => {
@@ -1028,21 +1040,32 @@ const CodeEditorUI = () => {
             }
           },
           sendSelection: (selection: OTSelection | null) => {
-            if (stompClientRef.current?.connected && currentActiveFileId) {
-              // CORRECTED PAYLOAD STRUCTURE
+            // Ensure user info (name, color) is included here too
+            if (
+              stompClientRef.current?.connected &&
+              currentActiveFileId &&
+              sessionId &&
+              userName.trim()
+            ) {
+              // --- Add Log ---
+              console.log(
+                "[DEBUG] Attempting to send selection via clientCallbacks.sendSelection"
+              );
               const payload = {
                 documentId: currentActiveFileId,
+                sessionId: sessionId, // Include sessionId
                 userInfo: {
-                  // <<< Use nested userInfo
                   id: userId,
-                  name: userName.trim(), // <<< Include name
-                  color: userColor, // <<< Include color
-                  cursorPosition: null, // OT Client doesn't manage raw cursor, set to null or derive if needed
+                  name: userName.trim(), // <<< Include name >>>
+                  color: userColor, // <<< Include color >>>
+                  cursorPosition: null, // OT Client doesn't directly provide this; rely on handleSendSelectionData
                   selection: selection?.toJSON() ?? null,
                 },
               };
-              // Log uses different text to distinguish from the direct editor event
-              console.log(`[OT Client -> Server Sel] /app/selection`, payload);
+              console.log(
+                `[OT Client -> Server Sel] /app/selection (via clientCallbacks)`,
+                payload
+              );
               stompClientRef.current.send(
                 "/app/selection",
                 {},
@@ -1050,7 +1073,7 @@ const CodeEditorUI = () => {
               );
             } else {
               console.warn(
-                "Cannot send selection - STOMP not connected or no active file"
+                "Cannot send selection via OT Client - STOMP not connected, no active file, no session ID, or no user name"
               );
             }
           },
@@ -1081,7 +1104,6 @@ const CodeEditorUI = () => {
               console.log(`[Server -> Client State] Received:`, state);
 
               // *** Check if state is for the currently active file ***
-              // This check might still be useful as a sanity check, though less critical now
               if (state.documentId !== currentActiveFileId) {
                 console.log(
                   `   Ignoring state for inactive file: ${state.documentId} (current: ${currentActiveFileId})`
@@ -1089,6 +1111,54 @@ const CodeEditorUI = () => {
                 return;
               }
 
+              // <<< Process participants every time state is received for the active file >>>
+              if (state.participants && Array.isArray(state.participants)) {
+                const initialRemoteUsers = state.participants
+                  .map((p: any) => {
+                    // Sanity check participant structure
+                    if (!p || typeof p.id !== "string") {
+                      console.warn(
+                        "Received invalid participant structure in state message:",
+                        p
+                      );
+                      return null; // Skip invalid participant
+                    }
+                    const frontendSelection = p.selection
+                      ? OTSelection.fromJSON(p.selection)
+                      : null;
+                    return {
+                      id: p.id,
+                      name: p.name || `User ${p.id.substring(0, 4)}`,
+                      color: p.color || "#CCCCCC",
+                      cursorPosition: p.cursorPosition || null,
+                      selection: frontendSelection,
+                    };
+                  })
+                  .filter(
+                    (user: RemoteUser | null): user is RemoteUser =>
+                      user !== null
+                  );
+
+                setRemoteUsers((prev) => ({
+                  ...prev,
+                  [state.documentId]: initialRemoteUsers, // Update state for the specific document ID from the message
+                }));
+                console.log(
+                  `   Processed participants for ${state.documentId}. Count: ${initialRemoteUsers.length}`
+                );
+              } else {
+                // Ensure empty list if participants are null/undefined in state message
+                setRemoteUsers((prev) => ({
+                  ...prev,
+                  [state.documentId]: [],
+                }));
+                console.log(
+                  `   No participants found in state message for ${state.documentId}.`
+                );
+              }
+              // <<< End processing participants >>>
+
+              // Initialize OT Client only if it doesn't exist
               if (!clientRef.current) {
                 console.log(
                   `   Initializing Client for ${state.documentId} @ rev ${state.revision}`
@@ -1099,6 +1169,9 @@ const CodeEditorUI = () => {
                   clientCallbacks
                 );
 
+                // <<< Remove initial participant processing from here >>>
+
+                // Set initial document content (only needed during client init)
                 if (currentEditorInstance) {
                   const model = currentEditorInstance.getModel();
                   const currentEditorValue = model?.getValue();
@@ -1126,6 +1199,8 @@ const CodeEditorUI = () => {
                     );
                   }
                 }
+                // <<< End initial participant processing >>>
+
                 // Register adapter ONLY after client is initialized and doc is set
                 adapterRef.current?.registerCallbacks({
                   change: (op: TextOperation, inverse: TextOperation) => {
@@ -1345,6 +1420,9 @@ const CodeEditorUI = () => {
 
               // Update the remoteUsers state
               setRemoteUsers((prevRemoteUsers) => {
+                // Use variables from the outer scope (documentId, userInfo, remoteUserId)
+                // instead of trying to access payload directly here.
+
                 // Create a deep copy to modify safely
                 const nextRemoteUsers = JSON.parse(
                   JSON.stringify(prevRemoteUsers)
@@ -1352,24 +1430,26 @@ const CodeEditorUI = () => {
 
                 // Ensure the array for the current document exists
                 if (!nextRemoteUsers[documentId]) {
+                  // Use documentId from outer scope
                   nextRemoteUsers[documentId] = [];
                 }
                 const usersForDoc = nextRemoteUsers[documentId]; // Get the array reference
 
                 const existingUserIndex = usersForDoc.findIndex(
-                  (u: RemoteUser) => u.id === remoteUserId
+                  (u: RemoteUser) => u.id === remoteUserId // Use remoteUserId from outer scope
                 );
 
                 // Use OTSelection.fromJSON here as backend sends the JSON representation
+                // Use userInfo from the outer scope
                 const selectionFromPayload = userInfo.selection
                   ? OTSelection.fromJSON(userInfo.selection)
                   : null;
 
                 const updatedUserInfo: RemoteUser = {
-                  id: remoteUserId,
-                  name: userInfo.name || `User ${remoteUserId.substring(0, 4)}`,
-                  color: userInfo.color || "#CCCCCC",
-                  cursorPosition: userInfo.cursorPosition, // This comes directly from backend DTO
+                  id: remoteUserId, // Use remoteUserId from outer scope
+                  name: userInfo.name || `User ${remoteUserId.substring(0, 4)}`, // Use userInfo & remoteUserId
+                  color: userInfo.color || "#CCCCCC", // Use userInfo
+                  cursorPosition: userInfo.cursorPosition, // Use userInfo
                   selection: selectionFromPayload, // Store the OTSelection object
                 };
 
@@ -1388,7 +1468,7 @@ const CodeEditorUI = () => {
                     if (usersInOtherDoc) {
                       // Check if the document exists in state
                       const userIndexInOtherDoc = usersInOtherDoc.findIndex(
-                        (u: RemoteUser) => u.id === remoteUserId
+                        (u: RemoteUser) => u.id === remoteUserId // Use remoteUserId from outer scope
                       );
                       if (userIndexInOtherDoc > -1) {
                         // Clear selection and cursor, keep other info
@@ -1416,7 +1496,7 @@ const CodeEditorUI = () => {
                   return prevRemoteUsers;
                 }
 
-                return nextRemoteUsers; // Return the modified state
+                return nextRemoteUsers; // Ensure the modified state is returned
               });
             } catch (error) {
               console.error(
@@ -1522,6 +1602,10 @@ const CodeEditorUI = () => {
       const timer = setTimeout(() => {
         if (stompClientRef.current?.connected) {
           // Re-check connection inside timeout
+          // --- Add Log ---
+          console.log(
+            "[DEBUG] Attempting to send selection via Presence Effect useEffect"
+          );
           console.log(
             `[Presence Effect] Sending initial presence for ${userId} in ${activeFileId}. Connected: ${isConnected}`
           );

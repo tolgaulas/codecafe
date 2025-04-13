@@ -85,6 +85,7 @@ const CodeEditor = ({
 
     // Use requestAnimationFrame to ensure the editor has processed content changes
     requestAnimationFrame(() => {
+      if (!editorRef.current) return;
       if (position) {
         editorRef.current.setPosition(position);
       }
@@ -111,6 +112,12 @@ const CodeEditor = ({
 
       const editor = editorRef.current;
       const model = editor.getModel();
+
+      if (!model) {
+        console.error("[CodeEditor code update] Cannot get model from editor.");
+        isUpdatingRef.current = false; // Reset flag if model is null
+        return;
+      }
 
       // Create and apply the edit operation
       model.pushEditOperations(
@@ -221,10 +228,9 @@ const CodeEditor = ({
     );
 
     const decorations = users.flatMap((user) => {
-      // @ts-ignore <-- Ignore potential null warning for model in flatMap
       const decorationArray = [];
 
-      // Render Selection
+      // Render Selection **ONLY IF** selection is not null
       if (
         user.selection &&
         user.selection.ranges &&
@@ -276,10 +282,16 @@ const CodeEditor = ({
         }
       }
 
-      // Render Cursor
+      // --- Debugging Cursor ---
+      console.log(
+        `[CodeEditor updateDecorations] User ${user.id} - Checking cursorPosition:`,
+        user.cursorPosition
+      );
+      // Render Cursor **ONLY IF** cursorPosition is not null
       if (user.cursorPosition) {
+        // --- Debugging Cursor ---
         console.log(
-          `[CodeEditor updateDecorations] User ${user.id} - Cursor Position:`,
+          `[CodeEditor updateDecorations] User ${user.id} - PASSED null check, rendering cursor decoration for position:`,
           user.cursorPosition
         );
         const cursorPosRange = new monaco.Range(
@@ -361,6 +373,22 @@ const CodeEditor = ({
     const listener = editor.onDidChangeCursorPosition(
       (e: monaco.editor.ICursorPositionChangedEvent) => {
         const currentEditor = editorRef.current; // Re-check ref inside callback
+
+        // --- Add Reason Check ---
+        // Only send data if the change was likely user-initiated
+        const userInitiatedReasons = [
+          monaco.editor.CursorChangeReason.Explicit, // e.g., mouse click
+          monaco.editor.CursorChangeReason.Paste,
+          // Consider adding Undo/Redo if desired
+          // monaco.editor.CursorChangeReason.Undo,
+          // monaco.editor.CursorChangeReason.Redo,
+        ];
+        if (!userInitiatedReasons.includes(e.reason)) {
+          // console.log(`[CodeEditor] Ignoring cursor change due to reason: ${monaco.editor.CursorChangeReason[e.reason] || e.reason}`);
+          return; // Don't send selection data for programmatic changes
+        }
+        // --- End Reason Check ---
+
         if (isUpdatingRef.current || !currentEditor) return;
         const currentModel = currentEditor.getModel();
         if (!currentModel) return;

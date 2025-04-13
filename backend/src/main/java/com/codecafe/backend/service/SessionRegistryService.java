@@ -9,6 +9,8 @@ import java.util.Collections;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
+import java.util.AbstractMap;
+import java.util.ArrayList;
 
 @Service
 public class SessionRegistryService {
@@ -65,37 +67,49 @@ public class SessionRegistryService {
      * Consider modifying this if the WebSocket disconnect event can provide the session ID.
      *
      * @param userId The ID of the user who disconnected.
+     * @return A list of Map.Entry where key is sessionId and value is documentId that the user left.
      */
-    public void userLeft(String userId) {
+    public List<Map.Entry<String, String>> userLeft(String userId) {
          if (userId == null) {
              logger.warning("Attempted to remove a user with null ID.");
-             return;
+             return Collections.emptyList();
          }
-        final boolean[] removed = {false};
+        // List to store affected session/document pairs
+        List<Map.Entry<String, String>> affectedEntries = new ArrayList<>();
+
         activeSessions.forEach((sessionId, documentMap) -> {
+            List<String> documentsToRemoveFromSession = new ArrayList<>(); // Store keys to remove from inner map
             documentMap.forEach((documentId, users) -> {
                 if (users.remove(userId) != null) {
                     logger.info(String.format("[Session: %s] User [%s] left document [%s]", sessionId, userId, documentId));
-                    removed[0] = true;
-                    // Optional: Remove the document entry if no users are left
+                    affectedEntries.add(new AbstractMap.SimpleEntry<>(sessionId, documentId)); // Add to affected list
+                    // Check if the user map for the document is now empty
                     if (users.isEmpty()) {
-                        documentMap.remove(documentId);
+                        documentsToRemoveFromSession.add(documentId); // Mark document user map for removal
                         logger.info(String.format("[Session: %s] Document user map removed as it's empty: %s", sessionId, documentId));
-                        // Optional: Remove the session entry if no documents are left
-                        if (documentMap.isEmpty()) {
-                            activeSessions.remove(sessionId);
-                            logger.info(String.format("Session map removed as it's empty: %s", sessionId));
-                        }
                     }
                 }
             });
+            // Remove empty document user maps from the session map
+            documentsToRemoveFromSession.forEach(documentMap::remove);
         });
 
-        if (removed[0]) {
-            logSessionState(); // Log current state for debugging
+        // Remove empty session maps from the main map (after iterating documents)
+        List<String> sessionsToRemove = new ArrayList<>();
+        activeSessions.forEach((sessionId, documentMap) -> {
+            if (documentMap.isEmpty()) {
+                 sessionsToRemove.add(sessionId);
+                 logger.info(String.format("Session map removed as it's empty: %s", sessionId));
+            }
+        });
+        sessionsToRemove.forEach(activeSessions::remove);
+
+        if (!affectedEntries.isEmpty()) {
+            logSessionState(); // Log current state for debugging if changes were made
         } else {
              logger.fine("Attempted to remove user [" + userId + "] but they were not found in any active session/document.");
         }
+        return affectedEntries; // Return the list of affected entries
     }
 
     /**

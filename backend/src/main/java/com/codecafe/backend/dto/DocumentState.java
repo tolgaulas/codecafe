@@ -8,6 +8,7 @@ public class DocumentState {
     private String documentId;
     private String document;
     private int revision;
+    private String sessionId;
     // private VersionVector versionVector; // Commented out/Removed if using simple revision
     private List<UserInfoDTO> participants;
 
@@ -15,10 +16,11 @@ public class DocumentState {
     }
 
     // Optional: Update constructor if needed
-    // public DocumentState(String documentId, String document, int revision, List<UserInfoDTO> participants) {
+    // public DocumentState(String documentId, String document, int revision, String sessionId, List<UserInfoDTO> participants) {
     //     this.documentId = documentId;
     //     this.document = document;
     //     this.revision = revision;
+    //     this.sessionId = sessionId;
     //     this.participants = participants;
     // }
 
@@ -44,6 +46,14 @@ public class DocumentState {
 
     public void setRevision(int revision) {
         this.revision = revision;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public List<UserInfoDTO> getParticipants() {
