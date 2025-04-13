@@ -1,30 +1,64 @@
 package com.codecafe.backend.dto;
 
+// Assuming UserInfoDTO exists or will be created
+import java.util.List;
+import com.codecafe.backend.dto.UserInfoDTO; // Import the newly created DTO
+
 public class DocumentState {
-    private String content;
-    private VersionVector versionVector;
+    private String documentId;
+    private String document;
+    private int revision;
+    // private VersionVector versionVector; // Commented out/Removed if using simple revision
+    private List<UserInfoDTO> participants;
 
     public DocumentState() {
     }
 
-    public DocumentState(String content, VersionVector versionVector) {
-        this.content = content;
-        this.versionVector = versionVector;
+    // Optional: Update constructor if needed
+    // public DocumentState(String documentId, String document, int revision, List<UserInfoDTO> participants) {
+    //     this.documentId = documentId;
+    //     this.document = document;
+    //     this.revision = revision;
+    //     this.participants = participants;
+    // }
+
+    public String getDocumentId() {
+        return documentId;
     }
 
-    public String getContent() {
-        return content;
+    public void setDocumentId(String documentId) {
+        this.documentId = documentId;
     }
 
-    public void setContent(String content) {
-        this.content = content;
+    public String getDocument() {
+        return document;
     }
 
-    public VersionVector getVersionVector() {
-        return versionVector;
+    public void setDocument(String document) {
+        this.document = document;
     }
 
-    public void setVersionVector(VersionVector versionVector) {
-        this.versionVector = versionVector;
+    public int getRevision() {
+        return revision;
     }
+
+    public void setRevision(int revision) {
+        this.revision = revision;
+    }
+
+    public List<UserInfoDTO> getParticipants() {
+        return participants;
+    }
+
+    public void setParticipants(List<UserInfoDTO> participants) {
+        this.participants = participants;
+    }
+
+    // public VersionVector getVersionVector() {
+    //     return versionVector;
+    // }
+
+    // public void setVersionVector(VersionVector versionVector) {
+    //     this.versionVector = versionVector;
+    // }
 }

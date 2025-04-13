@@ -18,16 +18,22 @@ import java.security.Principal;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.util.List;
+import java.util.Collections;
+import com.codecafe.backend.dto.UserInfoDTO;
+import com.codecafe.backend.service.SessionRegistryService;
 
 @Controller
 public class OtController {
     private final OtService otService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final SessionRegistryService sessionRegistryService;
     private static final Logger logger = Logger.getLogger(OtController.class.getName());
 
-    public OtController(OtService otService, SimpMessagingTemplate messagingTemplate) {
+    public OtController(OtService otService, SimpMessagingTemplate messagingTemplate, SessionRegistryService sessionRegistryService) {
         this.otService = otService;
         this.messagingTemplate = messagingTemplate;
+        this.sessionRegistryService = sessionRegistryService;
     }
 
     /**
@@ -121,27 +127,61 @@ public class OtController {
     /**
      * Handle document state requests.
      * Expects a payload containing the documentId.
-     * Returns the current document content and revision number for that document.
+     * Returns the current document content, revision number, and active participants for that document.
      */
     @MessageMapping("/get-document-state")
-    public void getDocumentState(@Payload Map<String, String> payload) {
+    public void getDocumentState(@Payload Map<String, String> payload, Principal principal) {
         String documentId = payload.get("documentId");
+
+        // --- Determine Requesting User ID (Placeholder) ---
+        String requestingUserId = null;
+        if (principal != null) {
+            // Assuming principal.getName() corresponds to the User ID used elsewhere (e.g., clientId)
+            requestingUserId = principal.getName();
+            logger.info("Identified requesting user ID: " + requestingUserId);
+        } else {
+            // Fallback or error if principal is needed but missing
+            // This might happen depending on WebSocket security configuration
+            logger.warning("Principal not available for get-document-state request. Cannot exclude requester from participant list.");
+            // Decide how to handle this - maybe still fetch all participants?
+        }
+        // ---------------------------------------------------
 
         if (documentId == null) {
             logger.warning("Received get-document-state request without documentId. Ignoring.");
             return;
         }
 
-        logger.info("Received request for document state for doc [" + documentId + "]");
+        logger.info("Received request for document state for doc [" + documentId + "] from user [" + (requestingUserId != null ? requestingUserId : "unknown") + "]");
 
-        // Use a Map or a dedicated DTO for the response
-        Map<String, Object> stateResponse = new HashMap<>();
-        stateResponse.put("documentId", documentId);
-        stateResponse.put("document", otService.getDocumentContent(documentId));
-        stateResponse.put("revision", otService.getRevision(documentId));
+        // --- Fetch Participants (Placeholder) ---
+        List<UserInfoDTO> participants = Collections.emptyList(); // Default to empty list
+        try {
+            // TODO: Replace this with your actual service call, passing requestingUserId for exclusion
+            participants = sessionRegistryService.getActiveParticipantsForDocument(documentId, requestingUserId);
+            logger.info("Fetched participants for document [" + documentId + "] (excluding user [" + requestingUserId + "])");
 
-        logger.info("Sending document state: Revision=" + stateResponse.get("revision") + " for doc [" + documentId + "]");
-        // Send state back to the requesting client (or broadcast if needed)
+        } catch (Exception e) {
+            logger.severe("Error fetching participants for document [" + documentId + "]: " + e.getMessage());
+        }
+        // ---------------------------------------
+
+
+        // --- Use DocumentState DTO for the response ---
+        DocumentState stateResponse = new DocumentState();
+        stateResponse.setDocumentId(documentId);
+        stateResponse.setDocument(otService.getDocumentContent(documentId));
+        stateResponse.setRevision(otService.getRevision(documentId));
+        // --- Set the fetched participants list --- 
+        stateResponse.setParticipants(participants); // Uncommented
+        // -----------------------------------------
+
+
+        logger.info("Sending document state: Revision=" + stateResponse.getRevision() +
+                    ", Participants Count=" + stateResponse.getParticipants().size() + // Use getter
+                    " for doc [" + documentId + "]");
+
+        // Send state back using the DTO
         messagingTemplate.convertAndSend("/topic/document-state", stateResponse);
     }
 }
