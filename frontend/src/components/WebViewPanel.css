@@ -154,10 +154,8 @@
 }
 
 #web-view-content .tabs li span {
-  display: block;
   width: 98%;
   line-height: 30px;
-  transform: skewX(-25deg);
   white-space: nowrap;
   overflow: hidden;
   color: #b6afa9; /* Lighter text for inactive tab */

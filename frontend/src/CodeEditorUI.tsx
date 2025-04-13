@@ -3,12 +3,7 @@ import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import TerminalComponent from "./components/TerminalComponent";
 import { FaRegFolder, FaGlobe } from "react-icons/fa";
-import {
-  VscAccount,
-  VscLiveShare,
-  VscSearch,
-  VscPreview,
-} from "react-icons/vsc";
+import { VscAccount, VscLiveShare, VscSearch } from "react-icons/vsc";
 import { VscFiles } from "react-icons/vsc";
 import { VscSettingsGear } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
@@ -41,6 +36,7 @@ import {
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
 import WebViewPanel from "./components/WebViewPanel";
+import { FaEarthAmericas } from "react-icons/fa6";
 
 // Define types for code execution
 interface CodeFile {
@@ -930,7 +926,7 @@ const CodeEditorUI = () => {
                 }`}
                 onClick={() => handleIconClick("webView")}
               >
-                <VscPreview size={24} />
+                <FaEarthAmericas size={24} />
               </button>
               <button
                 className={`w-full flex justify-center py-1 ${

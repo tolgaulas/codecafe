@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import "./WebViewPanel.css"; // Import the specific CSS
+import { FaEarthAmericas } from "react-icons/fa6"; // CORRECTED Import path
 
 // Define props interface
 interface WebViewPanelProps {
@@ -64,11 +65,33 @@ const WebViewPanel: React.FC<WebViewPanelProps> = ({
         <ul className="tabs">
           {/* Single placeholder tab */}
           <li className="active">
-            <img
-              src="http://ademilter.com/wp-content/themes/ademilter/img/logo.png"
-              alt="Tab Favicon"
-            />
-            <span>Example Site - Web Preview</span>
+            {/* Absolutely positioned icon wrapper (mimics example CSS) */}
+            <span
+              style={{
+                position: "absolute",
+                left: "-6px",
+                top: "6px",
+                zIndex: 9, // Match example
+                transform: "skewX(-25deg)", // Apply inverse skew directly
+                // Add display:block or inline-block for size to apply correctly
+                display: "inline-block",
+              }}
+            >
+              <FaEarthAmericas
+                size={16}
+                // Remove positioning classes from icon itself
+              />
+            </span>
+            {/* Text span with inverse skew and padding */}
+            <span
+              style={{
+                transform: "skewX(-25deg)",
+                display: "inline-block", // Ensure it takes space for padding
+              }}
+            >
+              Preview
+            </span>
+            {/* Close button remains a direct child for positioning relative to the skewed li */}
             <a className="close" href="#">
               ×
             </a>
