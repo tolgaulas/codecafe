@@ -2273,6 +2273,7 @@ const CodeEditorUI = () => {
                 htmlContent={htmlFileContent}
                 cssContent={cssFileContent}
                 jsContent={jsFileContent}
+                onClose={toggleWebView} // Pass the toggle function here
               />
             </div>
           )}
