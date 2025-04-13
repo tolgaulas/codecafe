@@ -2,7 +2,7 @@
 A real-time collaborative development environment that makes coding together as easy as sharing a document. Think VS Code, but multiplayer.
 
 ![image](https://github.com/user-attachments/assets/23a34888-35f0-4cea-a7fa-b557008c89e0)
-[Click here to watch the demo video!](https://youtu.be/dvediMrxoQg)
+[Click here to watch the demo video!](https://www.youtube.com/watch?v=FL0qg1Uo-MQ)
 
 
 
