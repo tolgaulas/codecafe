@@ -249,6 +249,7 @@ const CodeEditorUI = () => {
   const mainContentRef = useRef<HTMLDivElement>(null);
   const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null); // Added ref for header
 
   // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
@@ -615,6 +616,28 @@ const CodeEditorUI = () => {
     setIsViewMenuOpen(false);
   };
 
+  // Toggle Terminal Visibility
+  const toggleTerminalVisibility = () => {
+    if (terminalHeight > 0) {
+      // Closing: Save current height (if substantial) and set to 0
+      if (terminalHeight > TERMINAL_COLLAPSE_THRESHOLD_PX) {
+        // Avoid saving tiny heights
+        setPreviousTerminalHeight(terminalHeight);
+      }
+      setTerminalHeight(0);
+    } else {
+      // Opening: Restore previous height or use default
+      const heightToRestore =
+        previousTerminalHeight > MIN_TERMINAL_HEIGHT_PX
+          ? previousTerminalHeight
+          : window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION;
+      setTerminalHeight(heightToRestore);
+      // Fit terminal after restoring height
+      requestAnimationFrame(() => terminalRef.current?.fit());
+    }
+    setIsViewMenuOpen(false); // Close menu
+  };
+
   // Derived State (Memos)
   const htmlFileContent = useMemo(() => {
     const htmlFile = openFiles.find((f) => f.language === "html");
@@ -755,10 +778,16 @@ const CodeEditorUI = () => {
   // 5. RETURN JSX LAST
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between bg-stone-800 bg-opacity-80 p-2 border-b border-stone-600 flex-shrink-0 relative">
+      {/* Header - Assign headerRef */}
+      <div
+        ref={headerRef}
+        className="flex items-center justify-between bg-stone-800 bg-opacity-80 p-2 border-b border-stone-600 flex-shrink-0 relative"
+      >
+        {/* Left Buttons Container */}
         <div className="flex items-center">
           <div className="flex space-x-2">
+            {/* ... File, Edit, View, Run buttons ... */}
+            {/* View Button */}
             <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
               File
             </button>
@@ -766,25 +795,13 @@ const CodeEditorUI = () => {
               Edit
             </button>
             <button
-              className="relative px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
+              className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
               onClick={() => setIsViewMenuOpen((prev) => !prev)}
               ref={viewMenuButtonRef}
             >
               View
-              {isViewMenuOpen && (
-                <div
-                  ref={viewMenuRef}
-                  className="absolute left-0 top-full mt-1 bg-stone-700 border border-stone-600 rounded shadow-lg z-50 whitespace-nowrap"
-                >
-                  <button
-                    onClick={toggleWebView}
-                    className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
-                  >
-                    {isWebViewVisible ? "Close Web View" : "Open Web View"}
-                  </button>
-                </div>
-              )}
             </button>
+            {/* Run Button */}
             <button
               className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
               onClick={handleRunCode}
@@ -792,7 +809,40 @@ const CodeEditorUI = () => {
               Run
             </button>
           </div>
+          {/* View Dropdown Menu - Positioned using style, removed rounded */}
+          {isViewMenuOpen && (
+            <div
+              ref={viewMenuRef}
+              className="absolute bg-stone-700 border border-stone-600 shadow-lg z-50 whitespace-nowrap" // Removed rounded
+              style={{
+                left: `${viewMenuButtonRef.current?.offsetLeft ?? 0}px`,
+                top: `${headerRef.current?.offsetHeight ?? 0}px`, // Position based on header height
+              }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleWebView();
+                }}
+                className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
+              >
+                {isWebViewVisible ? "Close Web View" : "Open Web View"}
+              </button>
+              {/* Added Terminal Toggle Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleTerminalVisibility();
+                }}
+                className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
+              >
+                {terminalHeight > 0 ? "Close Terminal" : "Open Terminal"}
+              </button>
+            </div>
+          )}
         </div>
+        {/* ... User Avatar / Help buttons ... */}
+        {/* ... rest of header ... */}
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-red-400 rounded-full flex items-center justify-center">
             <span className="text-stone-200">M</span>
