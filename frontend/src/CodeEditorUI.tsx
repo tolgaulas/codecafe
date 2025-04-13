@@ -319,6 +319,11 @@ const CodeEditorUI = () => {
     null
   );
 
+  // Session State
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
+  const [isSessionCreator, setIsSessionCreator] = useState<boolean>(false);
+
   // 3. HANDLERS / FUNCTIONS THIRD
 
   // dnd-kit Sensors
@@ -380,7 +385,7 @@ const CodeEditorUI = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://157.230.83.211:8080/api/execute",
+        "http://localhost:8080/api/execute",
         requestBody,
         {
           headers: {
@@ -681,17 +686,41 @@ const CodeEditorUI = () => {
     setIsColorPickerOpen(false);
   };
 
-  const handleStartSession = () => {
-    // Placeholder for actual session start logic & link generation
-    const dummyLink = `http://localhost:5173/session/${Math.random()
-      .toString(36)
-      .substring(2, 9)}`; // Generate a simple random ID
-    console.log("Starting session with:", { name: userName, color: userColor });
+  const handleStartSession = async () => {
+    if (!userName.trim()) return; // Prevent starting with empty name
 
-    // Update state to show link view within the dropdown
-    setGeneratedShareLink(dummyLink);
-    setShareMenuView("link");
-    setIsColorPickerOpen(false); // Ensure color picker is closed if it was open
+    setIsColorPickerOpen(false); // Ensure color picker is closed
+
+    try {
+      const response = await axios.post<{ sessionId: string }>(
+        "http://localhost:8080/api/sessions/create",
+        {
+          creatorName: userName.trim(), // Send trimmed name
+        }
+      );
+
+      const newSessionId = response.data.sessionId;
+      const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
+
+      console.log("Session created:", newSessionId);
+      console.log("Share link:", shareLink);
+
+      setSessionId(newSessionId);
+      setIsSessionCreator(true);
+      setIsSessionActive(true); // Mark session as active
+      setGeneratedShareLink(shareLink); // Store the real link
+      setShareMenuView("link"); // Switch to link view
+
+      // Update URL without reloading
+      const url = new URL(window.location.href);
+      url.searchParams.set("session", newSessionId);
+      window.history.pushState({}, "", url.toString());
+    } catch (error) {
+      console.error("Error creating session:", error);
+      // Optionally: Show an error message to the user in the UI
+      // e.g., set an error state and display it in the share menu
+      alert("Failed to create session. Please try again."); // Simple alert for now
+    }
   };
 
   // Copy Share Link Handler
