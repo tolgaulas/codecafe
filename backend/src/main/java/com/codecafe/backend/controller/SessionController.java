@@ -1,15 +1,23 @@
 package com.codecafe.backend.controller;
 
+import com.codecafe.backend.dto.DocumentContentPayload;
+import com.codecafe.backend.service.OtService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.HashMap;
+
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @RestController
 @RequestMapping("/api/sessions")
 public class SessionController {
+
+    private final OtService otService;
+    private static final Logger logger = Logger.getLogger(SessionController.class.getName());
 
     // In-memory storage for sessions (replace with database in production)
     private static final Map<String, SessionInfo> activeSessions = new ConcurrentHashMap<>();
@@ -17,12 +25,12 @@ public class SessionController {
     static class SessionInfo {
         private final String id;
         private final String creatorName;
-        private final long createdAt;
+        private final Instant createdAt;
 
         public SessionInfo(String id, String creatorName) {
             this.id = id;
             this.creatorName = creatorName;
-            this.createdAt = System.currentTimeMillis();
+            this.createdAt = Instant.now();
         }
 
         public String getId() {
@@ -33,9 +41,14 @@ public class SessionController {
             return creatorName;
         }
 
-        public long getCreatedAt() {
+        public Instant getCreatedAt() {
             return createdAt;
         }
+    }
+
+    // Constructor injection for dependencies
+    public SessionController(OtService otService) {
+        this.otService = otService;
     }
 
     @PostMapping("/create")
@@ -44,14 +57,13 @@ public class SessionController {
         
         // Generate a unique session ID
         String sessionId = UUID.randomUUID().toString();
+        SessionInfo sessionInfo = new SessionInfo(sessionId, creatorName);
+        activeSessions.put(sessionId, sessionInfo);
         
-        // Store session info
-        activeSessions.put(sessionId, new SessionInfo(sessionId, creatorName));
+        logger.info("Created session: " + sessionId + " by " + creatorName);
         
-        Map<String, String> response = new HashMap<>();
-        response.put("sessionId", sessionId);
-        
-        return ResponseEntity.ok(response);
+        // Return the session ID
+        return ResponseEntity.ok(Map.of("sessionId", sessionId));
     }
 
     @GetMapping("/{sessionId}")
@@ -59,9 +71,40 @@ public class SessionController {
         SessionInfo sessionInfo = activeSessions.get(sessionId);
         
         if (sessionInfo == null) {
+            logger.warning("Session info requested for non-existent session: " + sessionId);
             return ResponseEntity.notFound().build();
         }
         
         return ResponseEntity.ok(sessionInfo);
+    }
+
+    @PostMapping("/{sessionId}/set-document")
+    public ResponseEntity<Void> setDocumentContent(
+            @PathVariable String sessionId,
+            @RequestBody DocumentContentPayload payload) {
+
+        logger.info(String.format("Received request to set content for doc [%s] in session [%s]", payload.getDocumentId(), sessionId));
+
+        // Basic validation
+        if (payload.getDocumentId() == null || payload.getDocumentId().isEmpty()) {
+            logger.warning("Request to set document content is missing documentId.");
+            return ResponseEntity.badRequest().build();
+        }
+
+        // Check if session exists using the local map
+        if (!activeSessions.containsKey(sessionId)) {
+           logger.warning("Attempted to set document content for non-existent session: " + sessionId);
+           return ResponseEntity.notFound().build();
+        }
+
+        try {
+            // Call OtService to set the initial content
+            otService.setDocumentContent(payload.getDocumentId(), payload.getContent());
+            logger.info(String.format("Successfully set initial content for doc [%s] in session [%s]", payload.getDocumentId(), sessionId));
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.log(Level.SEVERE, String.format("Error setting document content for doc [%s] in session [%s]", payload.getDocumentId(), sessionId), e);
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

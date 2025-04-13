@@ -308,7 +308,14 @@ const CodeEditorUI = () => {
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
   const [activeFileId, setActiveFileId] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
-    {}
+    () => {
+      // Use a function initializer to avoid recomputing on every render
+      return {
+        "index.html": MOCK_FILES["index.html"].content,
+        "style.css": MOCK_FILES["style.css"].content,
+        "script.js": MOCK_FILES["script.js"].content,
+      };
+    }
   );
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
@@ -600,6 +607,12 @@ const CodeEditorUI = () => {
   const handleOpenFile = (fileId: string) => {
     if (!MOCK_FILES[fileId]) return;
     const fileData = MOCK_FILES[fileId];
+
+    // Determine content to load based on session state
+    const contentToLoad = isSessionActive
+      ? "// Loading session content..." // Show loading if session active
+      : fileData.content; // Otherwise, load mock content
+
     if (!openFiles.some((f) => f.id === fileId)) {
       const newOpenFile: OpenFile = {
         id: fileId,
@@ -607,8 +620,11 @@ const CodeEditorUI = () => {
         language: fileData.language,
       };
       setOpenFiles((prev) => [...prev, newOpenFile]);
-      setFileContents((prev) => ({ ...prev, [fileId]: fileData.content }));
+      // Use contentToLoad when adding the file content initially
+      setFileContents((prev) => ({ ...prev, [fileId]: contentToLoad }));
     }
+    // If the file is already open, we don't modify its content here.
+
     setActiveFileId(fileId);
   };
 
@@ -722,23 +738,85 @@ const CodeEditorUI = () => {
     setIsColorPickerOpen(false); // Ensure color picker is closed
 
     try {
-      const response = await axios.post<{ sessionId: string }>(
+      // 1. Create the session
+      console.log(
+        `[handleStartSession] Creating session for user: ${userName.trim()}`
+      );
+      const createResponse = await axios.post<{ sessionId: string }>(
         "http://localhost:8080/api/sessions/create",
         {
           creatorName: userName.trim(), // Send trimmed name
         }
       );
 
-      const newSessionId = response.data.sessionId;
-      const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
+      const newSessionId = createResponse.data.sessionId;
+      console.log(
+        "[handleStartSession] Session created successfully:",
+        newSessionId
+      );
 
-      console.log("Session created:", newSessionId);
-      console.log("Share link:", shareLink);
+      // 2. Set initial content for key files on the backend
+      const keyFiles = ["index.html", "style.css", "script.js"];
+      const initialContentPromises = keyFiles.map((fileId) => {
+        const currentContent = fileContents[fileId];
+        if (currentContent !== undefined) {
+          // Only send if content exists locally
+          console.log(
+            `[handleStartSession] Sending initial content for ${fileId} to session ${newSessionId}`
+          );
+          return axios
+            .post(
+              `http://localhost:8080/api/sessions/${newSessionId}/set-document`,
+              {
+                documentId: fileId,
+                content: currentContent,
+              }
+            )
+            .catch((err) => {
+              // Log error for specific file but don't block session start entirely
+              console.error(
+                `[handleStartSession] Failed to set initial content for ${fileId}:`,
+                err
+              );
+              return null; // Allow Promise.all to complete
+            });
+        } else {
+          console.warn(
+            `[handleStartSession] No local content found for key file ${fileId}, skipping initial set.`
+          );
+          return Promise.resolve(null); // Resolve promise for skipped files
+        }
+      });
+
+      // Wait for all initial content requests to finish (or fail individually)
+      await Promise.all(initialContentPromises);
+      console.log(
+        "[handleStartSession] Finished attempting to set initial document content."
+      );
+
+      // Ensure local state reflects the content just sent (for creator)
+      setFileContents((prevContents) => {
+        const newContents = { ...prevContents };
+        keyFiles.forEach((fileId) => {
+          const sentContent = fileContents[fileId]; // Get the content that was sent
+          if (sentContent !== undefined) {
+            newContents[fileId] = sentContent;
+          }
+        });
+        return newContents;
+      });
+      console.log(
+        "[handleStartSession] Updated local fileContents state post-init."
+      );
+
+      // 3. Update frontend state and URL
+      const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
+      console.log("[handleStartSession] Share link:", shareLink);
 
       setSessionId(newSessionId);
       setIsSessionCreator(true);
-      setIsSessionActive(true); // Mark session as active
-      setGeneratedShareLink(shareLink); // Store the real link
+      setIsSessionActive(true); // Mark session as active locally
+      setGeneratedShareLink(shareLink);
       setShareMenuView("link"); // Switch to link view
 
       // Update URL without reloading
@@ -746,10 +824,11 @@ const CodeEditorUI = () => {
       url.searchParams.set("session", newSessionId);
       window.history.pushState({}, "", url.toString());
     } catch (error) {
-      console.error("Error creating session:", error);
-      // Optionally: Show an error message to the user in the UI
-      // e.g., set an error state and display it in the share menu
-      alert("Failed to create session. Please try again."); // Simple alert for now
+      console.error(
+        "[handleStartSession] Error creating session or setting initial content:",
+        error
+      );
+      alert("Failed to create session. Please try again.");
     }
   };
 
@@ -1015,39 +1094,67 @@ const CodeEditorUI = () => {
                 );
                 return;
               }
-              console.log(
-                `[Server -> Client Op] Received from ${payload.clientId} for ${payload.documentId}:`,
-                payload.operation
-              );
+              // Don't log every single op, maybe just errors or state changes
+              // console.log(`[Server -> Client Op] Received from ${payload.clientId} for ${payload.documentId}:`, payload.operation);
 
-              // *** Ignore if for different file or own message ***
-              if (payload.documentId !== currentActiveFileId) {
-                console.log(
-                  `   Ignoring op for inactive file: ${payload.documentId}`
-                );
-                return;
-              }
+              // *** Ignore own messages ***
               if (payload.clientId === userId) {
-                console.log("   Ignoring own operation broadcast.");
+                // console.log("   Ignoring own operation broadcast.");
                 return;
               }
 
-              if (clientRef.current) {
+              // *** Apply to ACTIVE file via OT Client ***
+              if (payload.documentId === currentActiveFileId) {
+                if (clientRef.current) {
+                  try {
+                    const operation = TextOperation.fromJSON(payload.operation);
+                    clientRef.current.applyServer(operation);
+                  } catch (e) {
+                    console.error(
+                      `[Server -> Client Op] Error applying server op to ACTIVE file ${currentActiveFileId}:`,
+                      e,
+                      payload.operation
+                    );
+                  }
+                } else {
+                  console.warn(
+                    `[Server -> Client Op] Received op for ACTIVE file ${payload.documentId} before client init.`
+                  );
+                }
+              }
+              // *** Apply directly to ANY OTHER file state (inactive or not currently open) ***
+              else {
+                console.log(
+                  `Applying server op directly to background file state: ${payload.documentId}`
+                );
                 try {
                   const operation = TextOperation.fromJSON(payload.operation);
-                  clientRef.current.applyServer(operation);
+                  // Apply the operation directly to the state string for the file
+                  setFileContents((prevContents) => {
+                    const currentContent =
+                      prevContents[payload.documentId] ?? ""; // Get current content or default to empty
+                    if (currentContent === "// Loading session content...") {
+                      // If the file is still in the initial loading state, maybe wait for full state?
+                      // Or apply tentatively. Let's apply for now.
+                      console.warn(
+                        `Applying op to background file ${payload.documentId} that might still be loading.`
+                      );
+                    }
+                    const newContent = operation.apply(currentContent); // Apply the text operation
+                    return {
+                      ...prevContents,
+                      [payload.documentId]: newContent,
+                    };
+                  });
                 } catch (e) {
                   console.error(
-                    "[Server -> Client Op] Error applying server op:",
+                    `Error applying server op to background file ${payload.documentId}:`,
                     e,
                     payload.operation
                   );
                 }
-              } else {
-                console.warn(
-                  `[Server -> Client Op] Received op for ${payload.documentId} before client init.`
-                );
               }
+              // File not open check removed - we store all updates now
             } catch (error) {
               console.error(
                 "Error processing operations message:",
@@ -1191,21 +1298,22 @@ const CodeEditorUI = () => {
 
   // Derived State (Memos)
   const htmlFileContent = useMemo(() => {
-    const htmlFile = openFiles.find((f) => f.language === "html");
-    return htmlFile
-      ? fileContents[htmlFile.id] || ""
-      : "<!-- No HTML file open -->";
-  }, [openFiles, fileContents]);
+    // Directly access the content from the state, provide default if not found
+    return (
+      fileContents["index.html"] ||
+      "<!DOCTYPE html><html><head></head><body><!-- index.html not loaded --></body></html>"
+    );
+  }, [fileContents]); // Depend only on fileContents
 
   const cssFileContent = useMemo(() => {
-    const cssFile = openFiles.find((f) => f.language === "css");
-    return cssFile ? fileContents[cssFile.id] || "" : "/* No CSS file open */";
-  }, [openFiles, fileContents]);
+    // Directly access the content from the state, provide default if not found
+    return fileContents["style.css"] || "/* style.css not loaded */";
+  }, [fileContents]); // Depend only on fileContents
 
   const jsFileContent = useMemo(() => {
-    const jsFile = openFiles.find((f) => f.language === "javascript");
-    return jsFile ? fileContents[jsFile.id] || "" : "// No JS file open";
-  }, [openFiles, fileContents]);
+    // Directly access the content from the state, provide default if not found
+    return fileContents["script.js"] || "// script.js not loaded";
+  }, [fileContents]); // Depend only on fileContents
 
   // 4. EFFECTS FOURTH
 
