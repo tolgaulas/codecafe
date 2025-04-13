@@ -11,7 +11,9 @@ import { HiOutlineShare } from "react-icons/hi2";
 import { DiJavascript1, DiCss3Full, DiHtml5 } from "react-icons/di";
 import { VscJson } from "react-icons/vsc";
 import { VscFile } from "react-icons/vsc";
+import { FiCopy, FiX } from "react-icons/fi";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
+import { COLORS } from "./constants/colors";
 import {
   DndContext,
   closestCenter,
@@ -36,6 +38,7 @@ import {
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
 import WebViewPanel from "./components/WebViewPanel";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Define types for code execution
 interface CodeFile {
@@ -250,6 +253,8 @@ const CodeEditorUI = () => {
   const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null); // Added ref for header
+  const shareButtonRef = useRef<HTMLButtonElement>(null); // <-- Ref for Share button
+  const shareMenuRef = useRef<HTMLDivElement>(null); // <-- Ref for Share menu
 
   // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
@@ -299,6 +304,20 @@ const CodeEditorUI = () => {
   // View Menu State
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isWebViewVisible, setIsWebViewVisible] = useState(false);
+
+  // Share Menu State <-- Add Share Menu State
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
+  const [userName, setUserName] = useState(""); // Store user's name
+  const [userColor, setUserColor] = useState(COLORS[0]); // Default color
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+
+  // Share Menu View State
+  const [shareMenuView, setShareMenuView] = useState<"initial" | "link">(
+    "initial"
+  );
+  const [generatedShareLink, setGeneratedShareLink] = useState<string | null>(
+    null
+  );
 
   // 3. HANDLERS / FUNCTIONS THIRD
 
@@ -638,6 +657,59 @@ const CodeEditorUI = () => {
     setIsViewMenuOpen(false); // Close menu
   };
 
+  // Share Menu Handlers <-- Add Share Menu Handlers
+  const toggleShareMenu = () => {
+    setIsShareMenuOpen((prev) => {
+      const closing = prev;
+      if (closing) {
+        // Reset view state when closing
+        setShareMenuView("initial");
+        setGeneratedShareLink(null);
+      }
+      setIsColorPickerOpen(false); // Close color picker when toggling menu
+      return !prev;
+    });
+  };
+
+  const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setUserName(event.target.value);
+    setIsColorPickerOpen(false);
+  };
+
+  const handleColorSelect = (color: string) => {
+    setUserColor(color);
+    setIsColorPickerOpen(false);
+  };
+
+  const handleStartSession = () => {
+    // Placeholder for actual session start logic & link generation
+    const dummyLink = `http://localhost:5173/session/${Math.random()
+      .toString(36)
+      .substring(2, 9)}`; // Generate a simple random ID
+    console.log("Starting session with:", { name: userName, color: userColor });
+
+    // Update state to show link view within the dropdown
+    setGeneratedShareLink(dummyLink);
+    setShareMenuView("link");
+    setIsColorPickerOpen(false); // Ensure color picker is closed if it was open
+  };
+
+  // Copy Share Link Handler
+  const handleCopyShareLink = () => {
+    if (generatedShareLink) {
+      navigator.clipboard
+        .writeText(generatedShareLink)
+        .then(() => {
+          // Optional: Add feedback to the user (e.g., change button text to "Copied!")
+          console.log("Link copied to clipboard!");
+        })
+        .catch((err) => {
+          console.error("Failed to copy link: ", err);
+          // Optional: Show an error message to the user
+        });
+    }
+  };
+
   // Derived State (Memos)
   const htmlFileContent = useMemo(() => {
     const htmlFile = openFiles.find((f) => f.language === "html");
@@ -775,6 +847,29 @@ const CodeEditorUI = () => {
     };
   }, [isViewMenuOpen]); // Keep minimal dependency
 
+  // Close Share Menu on Outside Click Effect <-- Add effect for Share Menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isShareMenuOpen &&
+        shareMenuRef.current &&
+        !shareMenuRef.current.contains(event.target as Node) &&
+        shareButtonRef.current &&
+        !shareButtonRef.current.contains(event.target as Node)
+      ) {
+        // Reset view state when closing via outside click
+        setShareMenuView("initial");
+        setGeneratedShareLink(null);
+        setIsShareMenuOpen(false);
+        setIsColorPickerOpen(false); // Also close color picker
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isShareMenuOpen]);
+
   // 5. RETURN JSX LAST
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
@@ -850,13 +945,153 @@ const CodeEditorUI = () => {
           )}
         </div>
         {/* Right side - Change px-2 to p-2 for all-around padding */}
-        <div className="flex items-center space-x-2 p-2">
-          {/* User Avatar - Changed size back to w-8 h-8 */}
-          <div className="w-8 h-8 bg-red-400 rounded-full flex items-center justify-center">
-            <span className="text-stone-200">M</span>
+        <div className="flex items-stretch">
+          {" "}
+          {/* Use items-stretch */}
+          {/* Share Button */}
+          <div className="relative flex h-full">
+            {" "}
+            {/* Wrap button to allow relative dropdown positioning */}
+            <button
+              ref={shareButtonRef}
+              onClick={toggleShareMenu}
+              className={`h-full flex items-center px-4 text-sm ${
+                isShareMenuOpen
+                  ? "bg-stone-600 text-stone-200"
+                  : "text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
+              }`}
+            >
+              {/* <HiOutlineShare className="mr-1.5 -ml-0.5" size={16} /> */}
+              Share
+            </button>
+            {/* Share Dropdown Menu */}
+            <AnimatePresence>
+              {isShareMenuOpen && (
+                <motion.div
+                  ref={shareMenuRef}
+                  className="absolute right-0 w-64 bg-stone-800 border border-stone-700 shadow-xl z-50 p-4" // Removed mt-1
+                  style={{
+                    top: `${headerRef.current?.offsetHeight ?? 0}px`, // Position based on header height
+                  }}
+                  onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+                >
+                  {/* Conditional Rendering based on view state */}
+                  {shareMenuView === "initial" && (
+                    <>
+                      {/* Avatar/Name Row */}
+                      <div className="flex items-end gap-3 mb-4">
+                        {/* Avatar and Color Picker Container */}
+                        <div className="relative flex-shrink-0">
+                          <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium cursor-pointer shadow-md ring-1 ring-stone-500/50"
+                            style={{ backgroundColor: userColor }}
+                            onClick={() =>
+                              setIsColorPickerOpen(!isColorPickerOpen)
+                            }
+                          >
+                            <span className="text-white/90">
+                              {userName ? userName[0].toUpperCase() : ""}
+                            </span>
+                          </div>
+
+                          {/* Color Picker Popover */}
+                          <AnimatePresence>
+                            {isColorPickerOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: -5 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -5 }}
+                                transition={{ duration: 0.1 }}
+                                // Positioned relative to the parent div, below the avatar
+                                className="absolute left-0 top-full mt-2 bg-neutral-900/90 backdrop-blur-sm p-2.5 border border-stone-700 shadow-lg z-10 w-[120px]"
+                              >
+                                <div className="flex flex-wrap gap-1.5">
+                                  {COLORS.map((color) => (
+                                    <div
+                                      key={color}
+                                      className={`w-5 h-5 rounded-full cursor-pointer ${
+                                        userColor === color
+                                          ? "ring-2 ring-white/60"
+                                          : ""
+                                      }`}
+                                      style={{ backgroundColor: color }}
+                                      onClick={() => handleColorSelect(color)}
+                                    />
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Name Input Container */}
+                        <div className="flex-1">
+                          <label className="block text-xs text-stone-400 mb-1">
+                            Display Name
+                          </label>
+                          <input
+                            type="text"
+                            value={userName}
+                            onChange={handleNameChange}
+                            placeholder="Enter your name"
+                            className="w-full bg-neutral-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-2 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Start Session Button */}
+                      <button
+                        onClick={handleStartSession}
+                        disabled={!userName.trim()}
+                        className="w-full px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" // Removed rounded-md
+                      >
+                        Start Session
+                      </button>
+                    </>
+                  )}
+
+                  {shareMenuView === "link" && generatedShareLink && (
+                    <div className="flex flex-col">
+                      {/* <h2 className="text-lg font-medium text-center">Share Your Session</h2> */}
+                      <p className="text-sm text-stone-400 text-left mb-1">
+                        Share this link:
+                      </p>
+                      <div className="flex items-stretch gap-2 bg-neutral-900 border border-stone-700">
+                        <input
+                          type="text"
+                          readOnly
+                          value={generatedShareLink}
+                          className="flex-1 bg-transparent text-stone-300 text-sm outline-none select-all px-2 py-1.5"
+                          onFocus={(e) => e.target.select()}
+                        />
+                        <button
+                          onClick={handleCopyShareLink}
+                          className="px-2 flex items-center justify-center text-stone-400 hover:text-stone-100 bg-stone-700 hover:bg-stone-600 transition-colors flex-shrink-0"
+                          aria-label="Copy link"
+                        >
+                          <FiCopy size={16} />
+                        </button>
+                      </div>
+                      <button
+                        onClick={toggleShareMenu}
+                        className="mt-4 w-full px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+          {/* Original User Avatar - REMOVED */}
+          {/* <div className="w-8 h-8 bg-red-400 rounded-full flex items-center justify-center">
+            <span className="text-stone-200">M</span>
+          </div> */}
           {/* Help Button */}
-          <button className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-neutral-900 active:bg-stone-950 text-stone-500 hover:text-stone-400">
+          <button className="h-full flex items-center justify-center w-10 rounded-none hover:bg-neutral-900 active:bg-stone-950 text-stone-500 hover:text-stone-400">
+            {" "}
+            {/* Adjusted padding/width */}
             <span className="text-sm">?</span>
           </button>
         </div>
