@@ -78,7 +78,7 @@ const WebViewPanel: React.FC<WebViewPanelProps> = ({
               }}
             >
               <FaEarthAmericas
-                size={16}
+                size={14}
                 // Remove positioning classes from icon itself
               />
             </span>
