@@ -332,7 +332,7 @@ const CodeEditorUI = () => {
   const handleRunCode = async () => {
     try {
       if (!activeFileId) {
-        terminalRef.current?.writeToTerminal("No active file to run.\\n");
+        terminalRef.current?.writeToTerminal("No active file to run.\n");
         return;
       }
 
@@ -341,7 +341,7 @@ const CodeEditorUI = () => {
 
       if (!activeFile || contentToRun === undefined) {
         terminalRef.current?.writeToTerminal(
-          "Error: Active file data not found.\\n"
+          "Error: Active file data not found.\n"
         );
         return;
       }
@@ -349,7 +349,7 @@ const CodeEditorUI = () => {
       // Check if the language is executable
       if (!isExecutableLanguage(activeFile.language)) {
         terminalRef.current?.writeToTerminal(
-          `Cannot execute files of type '${activeFile.language}'.\\n`
+          `Cannot execute files of type '${activeFile.language}'.\n`
         );
         return;
       }
@@ -781,7 +781,7 @@ const CodeEditorUI = () => {
       {/* Header - Removed p-2, added items-stretch */}
       <div
         ref={headerRef}
-        className="flex items-stretch justify-between bg-stone-800 bg-opacity-80 border-b border-stone-600 flex-shrink-0 relative h-10"
+        className="flex items-stretch justify-between bg-stone-800 bg-opacity-80 border-b border-stone-600 flex-shrink-0 relative h-11"
       >
         {" "}
         {/* Added fixed height h-10 */}
@@ -849,14 +849,13 @@ const CodeEditorUI = () => {
             </div>
           )}
         </div>
-        {/* Right side - Add padding here if needed */}
-        <div className="flex items-center space-x-2 px-2">
-          {" "}
-          {/* Added padding here */}
-          {/* ... User Avatar / Help buttons ... */}
+        {/* Right side - Change px-2 to p-2 for all-around padding */}
+        <div className="flex items-center space-x-2 p-2">
+          {/* User Avatar - Changed size back to w-8 h-8 */}
           <div className="w-8 h-8 bg-red-400 rounded-full flex items-center justify-center">
             <span className="text-stone-200">M</span>
           </div>
+          {/* Help Button */}
           <button className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-neutral-900 active:bg-stone-950 text-stone-500 hover:text-stone-400">
             <span className="text-sm">?</span>
           </button>
