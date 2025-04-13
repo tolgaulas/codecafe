@@ -36,7 +36,6 @@ import {
   restrictToParentElement,
 } from "@dnd-kit/modifiers";
 import WebViewPanel from "./components/WebViewPanel";
-import { FaEarthAmericas } from "react-icons/fa6";
 
 // Define types for code execution
 interface CodeFile {
@@ -96,18 +95,18 @@ const MIN_EXPLORER_WIDTH = 100;
 const MAX_EXPLORER_WIDTH = 500;
 const EXPLORER_HANDLE_WIDTH = 8; // w-2
 
-// Web View Panel (Right)
-const DEFAULT_WEBVIEW_WIDTH_PERCENT = 0.35; // 35% of available width
-const MAX_WEBVIEW_WIDTH_PERCENT = 0.6; // 60% of available width
-const MIN_WEBVIEW_WIDTH = 300; // Keep min fixed in pixels
-const WEBVIEW_HANDLE_WIDTH = 12;
-
 // Terminal
 const DEFAULT_TERMINAL_HEIGHT_FRACTION = 0.33; // Corresponds to h-1/3
 const MIN_TERMINAL_HEIGHT_PX = 50;
 const MAX_TERMINAL_HEIGHT_PX = window.innerHeight * 0.8; // Example max
 const TERMINAL_COLLAPSE_THRESHOLD_PX = 25;
 const TERMINAL_HANDLE_HEIGHT = 4; // h-1 (was 6)
+
+// --- WebView Resizing Constants ---
+const DEFAULT_WEBVIEW_WIDTH_FRACTION = 0.4; // Start at 40% of the main area
+const MIN_WEBVIEW_WIDTH = 150; // Minimum pixel width
+const MAX_WEBVIEW_WIDTH = window.innerWidth * 0.8; // Example max
+const WEBVIEW_HANDLE_GRAB_WIDTH = 8; // Width of the invisible grab area (like explorer)
 
 // --- Mock File Data (Replace with actual data fetching/structure later) ---
 const MOCK_FILES: {
@@ -243,6 +242,15 @@ function SortableTab({
 }
 
 const CodeEditorUI = () => {
+  // 1. REFS FIRST
+  const terminalRef = useRef<TerminalRef>();
+  const sidebarContainerRef = useRef<HTMLDivElement>(null);
+  const editorTerminalAreaRef = useRef<HTMLDivElement>(null);
+  const mainContentRef = useRef<HTMLDivElement>(null);
+  const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+
+  // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
 
   // Explorer State
@@ -254,24 +262,30 @@ const CodeEditorUI = () => {
     DEFAULT_EXPLORER_WIDTH
   );
 
-  // Web View State (Right Panel)
-  const [webViewWidth, setWebViewWidth] = useState<number>(0); // Start collapsed (pixels)
-  const [isWebViewResizing, setIsWebViewResizing] = useState<boolean>(false);
-  const [previousWebViewWidth, setPreviousWebViewWidth] = useState<number>(() =>
-    Math.max(
-      MIN_WEBVIEW_WIDTH,
-      window.innerWidth * DEFAULT_WEBVIEW_WIDTH_PERCENT
-    )
-  );
-
   // Terminal State
   const [terminalHeight, setTerminalHeight] = useState<number>(
-    window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION // Initial height based on fraction
+    window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
   );
   const [isTerminalResizing, setIsTerminalResizing] = useState<boolean>(false);
   const [previousTerminalHeight, setPreviousTerminalHeight] = useState<number>(
     window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
   );
+
+  // WebView Resizing State (Initialize using ref safely AFTER ref definition)
+  const [webViewWidth, setWebViewWidth] = useState<number>(0);
+  const [isWebViewResizing, setIsWebViewResizing] = useState<boolean>(false);
+  const [previousWebViewWidth, setPreviousWebViewWidth] = useState<number>(
+    DEFAULT_WEBVIEW_WIDTH_FRACTION // Initialize simply, update in effect if needed or handle null ref
+  );
+  // Effect to set initial previousWebViewWidth more accurately once ref is available
+  useEffect(() => {
+    if (mainContentRef.current) {
+      setPreviousWebViewWidth(
+        (mainContentRef.current.offsetWidth ?? window.innerWidth * (1 - 0.15)) *
+          DEFAULT_WEBVIEW_WIDTH_FRACTION
+      );
+    }
+  }, []); // Run only once on mount
 
   // Tab / File Management State
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
@@ -281,13 +295,13 @@ const CodeEditorUI = () => {
   );
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  // Create a ref for the terminal
-  const terminalRef = useRef<TerminalRef>();
-  const sidebarContainerRef = useRef<HTMLDivElement>(null);
-  const editorTerminalAreaRef = useRef<HTMLDivElement>(null); // Ref for the main editor+terminal vertical area
-  const mainContentRef = useRef<HTMLDivElement>(null); // Ref for the overall main content flex row
+  // View Menu State
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const [isWebViewVisible, setIsWebViewVisible] = useState(false);
 
-  // --- dnd-kit Sensors ---
+  // 3. HANDLERS / FUNCTIONS THIRD
+
+  // dnd-kit Sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -295,16 +309,14 @@ const CodeEditorUI = () => {
     })
   );
 
-  // --- Drag Start Handler ---
+  // Drag Handlers
   const handleDragStart = (event: DragStartEvent) => {
     const draggedId = event.active.id as string;
     setDraggingId(draggedId);
   };
 
-  // --- Drag End Handler ---
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-
     if (over && active.id !== over.id) {
       setOpenFiles((items) => {
         const oldIndex = items.findIndex((item) => item.id === active.id);
@@ -315,11 +327,11 @@ const CodeEditorUI = () => {
     setDraggingId(null);
   };
 
-  // Handle code execution
+  // Code Execution Handler
   const handleRunCode = async () => {
     try {
       if (!activeFileId) {
-        terminalRef.current?.writeToTerminal("No active file to run.\n");
+        terminalRef.current?.writeToTerminal("No active file to run.\\n");
         return;
       }
 
@@ -328,7 +340,7 @@ const CodeEditorUI = () => {
 
       if (!activeFile || contentToRun === undefined) {
         terminalRef.current?.writeToTerminal(
-          "Error: Active file data not found.\n"
+          "Error: Active file data not found.\\n"
         );
         return;
       }
@@ -336,7 +348,7 @@ const CodeEditorUI = () => {
       // Check if the language is executable
       if (!isExecutableLanguage(activeFile.language)) {
         terminalRef.current?.writeToTerminal(
-          `Cannot execute files of type '${activeFile.language}'.\n`
+          `Cannot execute files of type '${activeFile.language}'.\\n`
         );
         return;
       }
@@ -359,7 +371,7 @@ const CodeEditorUI = () => {
       );
 
       const executionOutput = response.data.run.stderr
-        ? `${response.data.run.stdout}\nError: ${response.data.run.stderr}`
+        ? `${response.data.run.stdout}\\nError: ${response.data.run.stderr}`
         : response.data.run.stdout;
       // Write directly to terminal
       if (executionOutput !== "") {
@@ -375,7 +387,7 @@ const CodeEditorUI = () => {
     }
   };
 
-  // --- Explorer Resizing Logic ---
+  // Explorer Resizing Handlers
   const handleExplorerResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     setIsExplorerResizing(true);
@@ -384,8 +396,7 @@ const CodeEditorUI = () => {
   const handleExplorerResizeMouseUp = useCallback(() => {
     if (isExplorerResizing) {
       setIsExplorerResizing(false);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      // Cursor/select reset handled by effect
     }
   }, [isExplorerResizing]);
 
@@ -401,112 +412,13 @@ const CodeEditorUI = () => {
     [isExplorerResizing]
   );
 
-  useEffect(() => {
-    if (isExplorerResizing) {
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", handleExplorerResizeMouseMove);
-    } else {
-      window.removeEventListener("mousemove", handleExplorerResizeMouseMove);
-      if (!isWebViewResizing && !isTerminalResizing) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleExplorerResizeMouseMove);
-      if (!isWebViewResizing && !isTerminalResizing) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-  }, [
-    isExplorerResizing,
-    handleExplorerResizeMouseMove,
-    isWebViewResizing,
-    isTerminalResizing,
-  ]);
-
-  // --- Web View Resizing Logic ---
-  const handleWebViewResizePointerDown = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    setIsWebViewResizing(true);
-  };
-
-  const handleWebViewResizePointerMove = useCallback(
-    (e: PointerEvent) => {
-      if (!mainContentRef.current) return;
-
-      const mainRect = mainContentRef.current.getBoundingClientRect();
-      const mouseX = Math.min(
-        Math.max(e.clientX, mainRect.left),
-        mainRect.right
-      );
-
-      // Calculate width based on pointer position
-      const newWidth = mainRect.right - mouseX;
-
-      // Calculate Max Width in Pixels based on current main content width
-      const maxPxWidth = mainRect.width * MAX_WEBVIEW_WIDTH_PERCENT;
-
-      // Apply constraints (Min Pixels, Max Pixels calculated from Percentage)
-      const clampedWidth = Math.max(
-        MIN_WEBVIEW_WIDTH,
-        Math.min(newWidth, maxPxWidth) // Use calculated maxPxWidth
-      );
-
-      setWebViewWidth(clampedWidth);
-    },
-    // Depend on the percentage constant now
-    [MAX_WEBVIEW_WIDTH_PERCENT, MIN_WEBVIEW_WIDTH]
-  );
-
-  useEffect(() => {
-    const handlePointerMove = (e: PointerEvent) => {
-      if (isWebViewResizing) {
-        handleWebViewResizePointerMove(e); // Call the memoized handler
-      }
-    };
-
-    if (isWebViewResizing) {
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      // Add pointermove to the window
-      window.addEventListener("pointermove", handlePointerMove);
-    } else {
-      // Removal is handled implicitly by the effect cleanup
-    }
-
-    // Cleanup function: ALWAYS removes the listener
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      // Reset cursor/select ONLY if no OTHER panel is resizing
-      if (!isExplorerResizing && !isTerminalResizing) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-  }, [
-    isWebViewResizing, // Primary dependency
-    handleWebViewResizePointerMove, // Add the actual handler function
-    // Keep these to correctly manage cursor/style resets
-    isExplorerResizing,
-    isTerminalResizing,
-  ]);
-
-  // --- Terminal Resizing Logic ---
+  // Terminal Resizing Handlers
   const handleTerminalResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    setIsTerminalResizing(true); // Always start resizing on mouse down
-
-    // If it WAS collapsed when clicked (height is 0), restore previous height
+    setIsTerminalResizing(true);
     if (terminalHeight === 0) {
-      // No need to set height here. Just flag resizing as active.
-      // The first mousemove event will calculate the initial height based on cursor position.
+      // Let mouse move handle initial height
     }
-    // If not collapsed, just start resizing with the current height
   };
 
   const handleTerminalResizeMouseUp = useCallback(() => {
@@ -516,33 +428,29 @@ const CodeEditorUI = () => {
         terminalRef.current?.fit();
         setPreviousTerminalHeight(terminalHeight);
       }
+      // Cursor/select reset handled by effect
     }
-  }, [isTerminalResizing, terminalHeight]);
+  }, [isTerminalResizing, terminalHeight]); // Add terminalHeight as dep
 
   const handleTerminalResizeMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!isTerminalResizing || !editorTerminalAreaRef.current) return;
-
       const containerRect =
         editorTerminalAreaRef.current.getBoundingClientRect();
       let newHeight = containerRect.bottom - e.clientY;
-      newHeight = Math.max(0, newHeight); // Ensure non-negative
+      newHeight = Math.max(0, newHeight);
 
-      // Check for collapse threshold during drag
       if (newHeight < TERMINAL_COLLAPSE_THRESHOLD_PX) {
-        // If dragging below threshold, visually snap to 0 height
-        // Store the current height *before* setting it to 0, if it wasn't already 0
         if (terminalHeight > 0) {
           setPreviousTerminalHeight(terminalHeight);
         }
         setTerminalHeight(0);
       } else {
-        // Apply constraints only if above threshold
         let constrainedHeight = Math.max(MIN_TERMINAL_HEIGHT_PX, newHeight);
         constrainedHeight = Math.min(MAX_TERMINAL_HEIGHT_PX, constrainedHeight);
         constrainedHeight = Math.min(
           constrainedHeight,
-          containerRect.height - MIN_TERMINAL_HEIGHT_PX
+          containerRect.height - MIN_TERMINAL_HEIGHT_PX // Prevent pushing editor too small
         );
         setTerminalHeight(constrainedHeight);
       }
@@ -550,21 +458,230 @@ const CodeEditorUI = () => {
     [isTerminalResizing, terminalHeight, previousTerminalHeight]
   );
 
-  // Effect for Terminal Resizing Listeners
-  useEffect(() => {
-    if (isTerminalResizing) {
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", handleTerminalResizeMouseMove);
+  // WebView Resizing Handlers
+  const handleWebViewResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsWebViewResizing(true);
+  };
+
+  const handleWebViewResizeMouseUp = useCallback(() => {
+    if (isWebViewResizing) {
+      setIsWebViewResizing(false);
+      // Cursor/select reset handled by effect
+    }
+  }, [isWebViewResizing]);
+
+  const handleWebViewResizeMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!isWebViewResizing || !mainContentRef.current) return;
+      const mainRect = mainContentRef.current.getBoundingClientRect();
+      let newWidth = mainRect.right - e.clientX;
+      newWidth = Math.max(MIN_WEBVIEW_WIDTH, newWidth);
+      newWidth = Math.min(MAX_WEBVIEW_WIDTH, newWidth);
+      // Optional: Prevent editor area from becoming too small
+      // const editorAreaMinWidth = 200; // Example minimum width for editor+terminal
+      // newWidth = Math.min(newWidth, mainRect.width - (sidebarContainerRef.current?.offsetWidth ?? 0) - editorAreaMinWidth);
+      setWebViewWidth(newWidth);
+    },
+    [isWebViewResizing] // Keep minimal dependency
+  );
+
+  // Global Pointer Up Handler (MUST be defined AFTER individual MouseUp handlers)
+  const handleGlobalPointerUp = useCallback(
+    (e: PointerEvent) => {
+      if (isWebViewResizing) handleWebViewResizeMouseUp();
+      if (isExplorerResizing) handleExplorerResizeMouseUp();
+      if (isTerminalResizing) handleTerminalResizeMouseUp();
+    },
+    [
+      isExplorerResizing,
+      handleExplorerResizeMouseUp,
+      isTerminalResizing,
+      handleTerminalResizeMouseUp,
+      isWebViewResizing,
+      handleWebViewResizeMouseUp, // Now these are defined above
+    ]
+  );
+
+  // UI Interaction Handlers
+  const toggleExplorer = () => {
+    setActiveIcon((prevActiveIcon) => {
+      const isExplorerOpen = explorerWidth > 0;
+      if (isExplorerOpen) {
+        if (explorerWidth > MIN_EXPLORER_WIDTH / 2) {
+          setPreviousExplorerWidth(explorerWidth);
+        }
+        setExplorerWidth(0);
+        return null;
+      } else {
+        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
+        return "files";
+      }
+    });
+  };
+
+  const handleIconClick = (iconName: string | null) => {
+    setActiveIcon((prevActiveIcon) => {
+      let nextActiveIcon = iconName;
+      const currentExplorerWidth = explorerWidth;
+
+      if (iconName === "files" && prevActiveIcon === "files") {
+        toggleExplorer();
+        nextActiveIcon = currentExplorerWidth === 0 ? "files" : null;
+      } else if (iconName === "files") {
+        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
+      } else {
+        // Switching to other icons or null
+        if (currentExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
+          setPreviousExplorerWidth(currentExplorerWidth);
+        }
+        setExplorerWidth(0);
+      }
+      return nextActiveIcon;
+    });
+  };
+
+  // File Handling
+  const handleOpenFile = (fileId: string) => {
+    if (!MOCK_FILES[fileId]) return;
+    const fileData = MOCK_FILES[fileId];
+    if (!openFiles.some((f) => f.id === fileId)) {
+      const newOpenFile: OpenFile = {
+        id: fileId,
+        name: fileData.name,
+        language: fileData.language,
+      };
+      setOpenFiles((prev) => [...prev, newOpenFile]);
+      setFileContents((prev) => ({ ...prev, [fileId]: fileData.content }));
+    }
+    setActiveFileId(fileId);
+  };
+
+  const handleSwitchTab = (fileId: string) => {
+    setActiveFileId(fileId);
+  };
+
+  const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const indexToRemove = openFiles.findIndex((f) => f.id === fileIdToClose);
+    if (indexToRemove === -1) return;
+    let nextActiveId: string | null = null;
+    if (activeFileId === fileIdToClose) {
+      if (openFiles.length > 1) {
+        const remainingFiles = openFiles.filter((f) => f.id !== fileIdToClose);
+        nextActiveId =
+          remainingFiles[Math.max(0, indexToRemove - 1)]?.id ??
+          remainingFiles[0]?.id;
+      }
     } else {
-      window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
-      if (!isExplorerResizing && !isWebViewResizing) {
+      nextActiveId = activeFileId;
+    }
+    setActiveFileId(nextActiveId);
+    setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
+    setFileContents((prev) => {
+      const newContents = { ...prev };
+      delete newContents[fileIdToClose];
+      return newContents;
+    });
+  };
+
+  const handleCodeChange = (newCode: string) => {
+    if (activeFileId) {
+      setFileContents((prev) => ({ ...prev, [activeFileId]: newCode }));
+    }
+  };
+
+  // View Menu / WebView Handlers
+  const toggleWebView = () => {
+    setIsWebViewVisible((prevVisible) => {
+      const nextVisible = !prevVisible;
+      if (nextVisible) {
+        const widthToSet =
+          previousWebViewWidth > MIN_WEBVIEW_WIDTH
+            ? previousWebViewWidth
+            : (mainContentRef.current?.offsetWidth ??
+                window.innerWidth * (1 - 0.15)) *
+              DEFAULT_WEBVIEW_WIDTH_FRACTION;
+        setWebViewWidth(widthToSet);
+      } else {
+        if (webViewWidth > MIN_WEBVIEW_WIDTH / 2) {
+          // Save width before hiding
+          setPreviousWebViewWidth(webViewWidth);
+        }
+        setWebViewWidth(0); // Set width to 0 when hiding
+      }
+      return nextVisible;
+    });
+    setIsViewMenuOpen(false);
+  };
+
+  // Derived State (Memos)
+  const htmlFileContent = useMemo(() => {
+    const htmlFile = openFiles.find((f) => f.language === "html");
+    return htmlFile
+      ? fileContents[htmlFile.id] || ""
+      : "<!-- No HTML file open -->";
+  }, [openFiles, fileContents]);
+
+  const cssFileContent = useMemo(() => {
+    const cssFile = openFiles.find((f) => f.language === "css");
+    return cssFile ? fileContents[cssFile.id] || "" : "/* No CSS file open */";
+  }, [openFiles, fileContents]);
+
+  const jsFileContent = useMemo(() => {
+    const jsFile = openFiles.find((f) => f.language === "javascript");
+    return jsFile ? fileContents[jsFile.id] || "" : "// No JS file open";
+  }, [openFiles, fileContents]);
+
+  // 4. EFFECTS FOURTH
+
+  // Explorer Resizing Effect
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => handleExplorerResizeMouseMove(e);
+    if (isExplorerResizing) {
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.addEventListener("mousemove", handleMouseMove);
+    } else {
+      window.removeEventListener("mousemove", handleMouseMove);
+      if (!isTerminalResizing && !isWebViewResizing) {
+        // Check other states
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
       }
     }
     return () => {
-      window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
+      window.removeEventListener("mousemove", handleMouseMove);
+      // Ensure cursor/select reset if this was the *last* active resize
+      if (!isTerminalResizing && !isWebViewResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+  }, [
+    isExplorerResizing,
+    handleExplorerResizeMouseMove,
+    isTerminalResizing,
+    isWebViewResizing,
+  ]); // Add other resize states
+
+  // Terminal Resizing Effect
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => handleTerminalResizeMouseMove(e);
+    if (isTerminalResizing) {
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+      window.addEventListener("mousemove", handleMouseMove);
+    } else {
+      window.removeEventListener("mousemove", handleMouseMove);
+      if (!isExplorerResizing && !isWebViewResizing) {
+        // Check other states
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
       if (!isExplorerResizing && !isWebViewResizing) {
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
@@ -575,286 +692,71 @@ const CodeEditorUI = () => {
     handleTerminalResizeMouseMove,
     isExplorerResizing,
     isWebViewResizing,
-  ]);
+  ]); // Add other resize states
 
-  // --- Global Pointer Up Handler (Replaces Global MouseUp) ---
-  const handleGlobalPointerUp = useCallback(
-    (e: PointerEvent) => {
-      // Check if we were resizing the WebView and release capture
-      if (isWebViewResizing) {
-        try {
-          (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-        } catch (err) {
-          // Keep this warning for potential future issues
-          console.warn(
-            "Global PointerUp: Failed to release pointer capture",
-            err
-          );
-        }
-        setIsWebViewResizing(false); // Set state AFTER releasing capture
+  // WebView Resizing Effect
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => handleWebViewResizeMouseMove(e);
+    if (isWebViewResizing) {
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+      window.addEventListener("mousemove", handleMouseMove);
+    } else {
+      window.removeEventListener("mousemove", handleMouseMove);
+      if (!isExplorerResizing && !isTerminalResizing) {
+        // Check other states
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
       }
+    }
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      if (!isExplorerResizing && !isTerminalResizing) {
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+  }, [
+    isWebViewResizing,
+    handleWebViewResizeMouseMove,
+    isExplorerResizing,
+    isTerminalResizing,
+  ]); // Add other resize states
 
-      // --- Handle other resizes (Can be refactored later) ---
-      if (isExplorerResizing) {
-        handleExplorerResizeMouseUp();
-      }
-      if (isTerminalResizing) {
-        handleTerminalResizeMouseUp();
-      }
-
-      // Reset cursor/select AFTER checking all states
-      if (isExplorerResizing || isWebViewResizing || isTerminalResizing) {
-      }
-    },
-    [
-      isExplorerResizing,
-      handleExplorerResizeMouseUp,
-      isWebViewResizing,
-      isTerminalResizing,
-      handleTerminalResizeMouseUp,
-    ]
-  );
-
-  // Effect to add/remove the global PointerUp listener
+  // Global Pointer Up Effect
   useEffect(() => {
     document.addEventListener("pointerup", handleGlobalPointerUp);
     document.addEventListener("pointercancel", handleGlobalPointerUp);
-
     return () => {
       document.removeEventListener("pointerup", handleGlobalPointerUp);
       document.removeEventListener("pointercancel", handleGlobalPointerUp);
     };
-  }, [handleGlobalPointerUp]); // Add handleGlobalPointerUp as dependency
+  }, [handleGlobalPointerUp]);
 
-  // --- Effect to Adjust WebView on Window Resize ---
+  // Close View Menu on Outside Click Effect
   useEffect(() => {
-    const handleResize = () => {
-      // Check if web view is open and ref exists
-      if (webViewWidth > 0 && mainContentRef.current) {
-        const mainContentWidth =
-          mainContentRef.current.getBoundingClientRect().width;
-
-        // Calculate the max allowed width based on current container size
-        const maxPxWidth = mainContentWidth * MAX_WEBVIEW_WIDTH_PERCENT;
-
-        // If current width exceeds the new max percentage width
-        if (webViewWidth > maxPxWidth) {
-          // Clamp the width between MIN (pixels) and the new MAX (pixels)
-          const newClampedWidth = Math.max(MIN_WEBVIEW_WIDTH, maxPxWidth);
-          setWebViewWidth(newClampedWidth);
-        }
-        // Also ensure it doesn't go below min width if window shrinks drastically
-        else if (webViewWidth < MIN_WEBVIEW_WIDTH) {
-          setWebViewWidth(MIN_WEBVIEW_WIDTH); // Should ideally not happen if min is enforced elsewhere, but safe check
-        }
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        isViewMenuOpen &&
+        viewMenuRef.current &&
+        !viewMenuRef.current.contains(event.target as Node) &&
+        viewMenuButtonRef.current &&
+        !viewMenuButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsViewMenuOpen(false);
       }
-      // Note: Consider adding debouncing/throttling here for performance
     };
-
-    window.addEventListener("resize", handleResize);
-
-    // Cleanup function
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      window.removeEventListener("resize", handleResize);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [webViewWidth, MAX_WEBVIEW_WIDTH_PERCENT, MIN_WEBVIEW_WIDTH]); // Re-run if state or constants change
+  }, [isViewMenuOpen]); // Keep minimal dependency
 
-  // --- Explorer Toggle Logic ---
-  const toggleExplorer = () => {
-    setActiveIcon((prevActiveIcon) => {
-      const isExplorerOpen = explorerWidth > 0;
-      if (isExplorerOpen) {
-        if (explorerWidth > MIN_EXPLORER_WIDTH / 2) {
-          // Only save substantial width
-          setPreviousExplorerWidth(explorerWidth);
-        }
-        setExplorerWidth(0); // Set width to 0 to hide
-        return null; // Set activeIcon to null
-      } else {
-        // Opening: Restore previous width or default, set activeIcon
-        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
-        return "files";
-      }
-    });
-  };
-
-  // --- Web View Toggle Logic ---
-  const toggleWebView = () => {
-    setActiveIcon((prevActiveIcon) => {
-      const isWebViewOpen = webViewWidth > 0;
-      if (isWebViewOpen) {
-        // Save current pixel width if significant
-        if (webViewWidth > MIN_WEBVIEW_WIDTH / 2) {
-          setPreviousWebViewWidth(webViewWidth);
-        }
-        setWebViewWidth(0);
-        return null;
-      } else {
-        // Restore previous pixel width (initialized to default percentage or last user set)
-        setWebViewWidth(previousWebViewWidth);
-        return "webView";
-      }
-    });
-  };
-
-  // --- Icon Click Logic (Generalized) ---
-  const handleIconClick = (iconName: string | null) => {
-    setActiveIcon((prevActiveIcon) => {
-      let nextActiveIcon = iconName;
-      const currentExplorerWidth = explorerWidth; // Capture current state
-      const currentWebViewWidth = webViewWidth; // Capture current state
-
-      // If clicking the already active 'files' icon, toggle it
-      if (iconName === "files" && prevActiveIcon === "files") {
-        toggleExplorer();
-        // Update nextActiveIcon based on the *expected* state after toggle
-        nextActiveIcon = currentExplorerWidth === 0 ? "files" : null;
-      }
-      // If clicking the already active 'webView' icon, toggle it
-      else if (iconName === "webView" && prevActiveIcon === "webView") {
-        toggleWebView();
-        // Update nextActiveIcon based on the *expected* state after toggle
-        nextActiveIcon = currentWebViewWidth === 0 ? "webView" : null;
-      }
-      // If switching *to* files
-      else if (iconName === "files") {
-        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
-        // Collapse web view and save its width if open
-        if (currentWebViewWidth > MIN_WEBVIEW_WIDTH / 2) {
-          setPreviousWebViewWidth(currentWebViewWidth);
-        }
-        setWebViewWidth(0);
-      }
-      // If switching *to* webView
-      else if (iconName === "webView") {
-        // Open web view using its previous width
-        setWebViewWidth(previousWebViewWidth);
-        // Collapse explorer and save its width if open
-        if (currentExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
-          setPreviousExplorerWidth(currentExplorerWidth);
-        }
-        setExplorerWidth(0);
-      }
-      // If switching to other icons (search, chat, etc.) or null
-      else {
-        // Collapse both and save widths if open
-        if (currentExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
-          setPreviousExplorerWidth(currentExplorerWidth);
-        }
-        if (currentWebViewWidth > MIN_WEBVIEW_WIDTH / 2) {
-          setPreviousWebViewWidth(currentWebViewWidth);
-        }
-        setExplorerWidth(0);
-        setWebViewWidth(0);
-      }
-
-      // No need to save widths again here, handled within the specific conditions
-
-      return nextActiveIcon; // Set the new active icon
-    });
-  };
-
-  // --- File Handling Logic ---
-  const handleOpenFile = (fileId: string) => {
-    if (!MOCK_FILES[fileId]) return; // Ignore if file doesn't exist in mock data
-
-    const fileData = MOCK_FILES[fileId];
-
-    // Check if already open
-    if (!openFiles.some((f) => f.id === fileId)) {
-      // Add to open files
-      const newOpenFile: OpenFile = {
-        id: fileId,
-        name: fileData.name,
-        language: fileData.language,
-      };
-      setOpenFiles((prev) => [...prev, newOpenFile]);
-
-      // Add content to fileContents map
-      setFileContents((prev) => ({ ...prev, [fileId]: fileData.content }));
-    }
-    // Set as active
-    setActiveFileId(fileId);
-  };
-
-  const handleSwitchTab = (fileId: string) => {
-    setActiveFileId(fileId);
-  };
-
-  const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent click from switching to the tab being closed
-
-    const indexToRemove = openFiles.findIndex((f) => f.id === fileIdToClose);
-    if (indexToRemove === -1) return;
-
-    // Determine the next active tab
-    let nextActiveId: string | null = null;
-    if (activeFileId === fileIdToClose) {
-      if (openFiles.length > 1) {
-        const remainingFiles = openFiles.filter((f) => f.id !== fileIdToClose);
-        if (remainingFiles.length > 0) {
-          // If closing the active tab, try to activate the one to the left
-          // If closing the first tab, activate the new first tab (which was the second)
-          nextActiveId =
-            remainingFiles[Math.max(0, indexToRemove - 1)]?.id ??
-            remainingFiles[0]?.id;
-        } else {
-          nextActiveId = null; // No tabs left
-        }
-      }
-    } else {
-      // If closing a background tab, keep the current active tab active
-      nextActiveId = activeFileId;
-    }
-
-    setActiveFileId(nextActiveId);
-
-    // Remove from openFiles
-    setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
-
-    // Remove content (optional, could keep for session restore later)
-    setFileContents((prev) => {
-      const newContents = { ...prev };
-      delete newContents[fileIdToClose];
-      return newContents;
-    });
-  };
-
-  const handleCodeChange = (newCode: string) => {
-    if (activeFileId) {
-      setFileContents((prev) => ({
-        ...prev,
-        [activeFileId]: newCode,
-      }));
-    }
-  };
-
-  // --- Prepare content for WebViewPanel ---
-  const htmlFileContent = useMemo(() => {
-    const htmlFile = openFiles.find((f) => f.language === "html");
-    return htmlFile
-      ? fileContents[htmlFile.id] || ""
-      : "<!-- No HTML file open -->";
-  }, [openFiles, fileContents]);
-
-  const cssFileContent = useMemo(() => {
-    // Find the first CSS file open
-    const cssFile = openFiles.find((f) => f.language === "css");
-    return cssFile ? fileContents[cssFile.id] || "" : "/* No CSS file open */";
-    // Consider concatenating multiple CSS files if needed later
-  }, [openFiles, fileContents]);
-
-  const jsFileContent = useMemo(() => {
-    // Find the first JS file open
-    const jsFile = openFiles.find((f) => f.language === "javascript");
-    return jsFile ? fileContents[jsFile.id] || "" : "// No JS file open";
-    // Consider concatenating or handling modules later if needed
-  }, [openFiles, fileContents]);
-
+  // 5. RETURN JSX LAST
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between bg-stone-800 bg-opacity-80 p-2 border-b border-stone-600 flex-shrink-0">
+      <div className="flex items-center justify-between bg-stone-800 bg-opacity-80 p-2 border-b border-stone-600 flex-shrink-0 relative">
         <div className="flex items-center">
           <div className="flex space-x-2">
             <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
@@ -863,8 +765,25 @@ const CodeEditorUI = () => {
             <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
               Edit
             </button>
-            <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
+            <button
+              className="relative px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
+              onClick={() => setIsViewMenuOpen((prev) => !prev)}
+              ref={viewMenuButtonRef}
+            >
               View
+              {isViewMenuOpen && (
+                <div
+                  ref={viewMenuRef}
+                  className="absolute left-0 top-full mt-1 bg-stone-700 border border-stone-600 rounded shadow-lg z-50 whitespace-nowrap"
+                >
+                  <button
+                    onClick={toggleWebView}
+                    className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
+                  >
+                    {isWebViewVisible ? "Close Web View" : "Open Web View"}
+                  </button>
+                </div>
+              )}
             </button>
             <button
               className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
@@ -896,7 +815,6 @@ const CodeEditorUI = () => {
             className="bg-stone-800 bg-opacity-60 flex flex-col justify-between py-2 border-r border-stone-600 flex-shrink-0 z-10"
             style={{ width: `${ICON_BAR_WIDTH}px` }}
           >
-            {/* Top icons */}
             <div className="flex flex-col items-center space-y-3">
               <button
                 className={`w-full flex justify-center py-1 ${
@@ -920,16 +838,6 @@ const CodeEditorUI = () => {
               </button>
               <button
                 className={`w-full flex justify-center py-1 ${
-                  activeIcon === "webView"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("webView")}
-              >
-                <FaEarthAmericas size={24} />
-              </button>
-              <button
-                className={`w-full flex justify-center py-1 ${
                   activeIcon === "share"
                     ? "text-stone-100"
                     : "text-stone-500 hover:text-stone-200"
@@ -949,7 +857,6 @@ const CodeEditorUI = () => {
                 <GrChatOption size={24} />
               </button>
             </div>
-            {/* Bottom icons */}
             <div className="flex flex-col items-center space-y-3">
               <button
                 className={`w-full flex justify-center py-1 ${
@@ -988,7 +895,6 @@ const CodeEditorUI = () => {
                 EXPLORER
               </div>
               <div className="w-full">
-                {/* File items */}
                 {Object.entries(MOCK_FILES).map(([id, file]) => {
                   const IconComponent =
                     languageIconMap[file.language] || VscFile;
@@ -1027,195 +933,182 @@ const CodeEditorUI = () => {
           </div>
 
           {/* Explorer Resizer Handle */}
-          {activeIcon === "files" && (
+          {activeIcon === "files" && explorerWidth > 0 && (
             <div
-              className={`absolute top-0 h-full cursor-col-resize bg-transparent z-20 ${
-                explorerWidth > 0 ? "block" : "hidden"
-              }`}
+              className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
               style={{
                 width: `${EXPLORER_HANDLE_WIDTH}px`,
                 left: `${
                   ICON_BAR_WIDTH + explorerWidth - EXPLORER_HANDLE_WIDTH / 2
                 }px`,
-                pointerEvents:
-                  activeIcon === "files" && explorerWidth > 0 ? "auto" : "none",
+                pointerEvents: "auto",
               }}
-              onMouseDown={handleExplorerResizeMouseDown} // Correct handler
-            ></div>
+              onMouseDown={handleExplorerResizeMouseDown}
+            />
           )}
         </div>
 
-        {/* Code and Terminal Area */}
-        <div
-          ref={editorTerminalAreaRef}
-          className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
-        >
-          {/* Tabs - Dynamic & Sortable */}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-            onDragStart={handleDragStart}
-            modifiers={[restrictToHorizontalAxis]}
+        {/* Code and Terminal Area + Optional WebView */}
+        <div className="flex flex-1 min-w-0 relative">
+          {/* Code and Terminal Area */}
+          <div
+            ref={editorTerminalAreaRef}
+            className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
           >
-            <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
-              <SortableContext
-                items={openFiles.map((f) => f.id)}
-                strategy={horizontalListSortingStrategy}
-              >
-                {openFiles.map((file) => {
-                  const IconComponent =
-                    languageIconMap[file.language] || VscFile;
-                  const iconColor =
-                    languageColorMap[file.language] || defaultIconColor;
-                  return (
-                    <SortableTab
-                      key={file.id}
-                      file={file}
-                      activeFileId={activeFileId}
-                      draggingId={draggingId}
-                      IconComponent={IconComponent}
-                      iconColor={iconColor}
-                      onSwitchTab={handleSwitchTab}
-                      onCloseTab={handleCloseTab}
-                    />
-                  );
-                })}
-              </SortableContext>
-              <DragOverlay modifiers={[restrictToParentElement]}>
-                {draggingId
-                  ? (() => {
-                      const draggedFile = openFiles.find(
-                        (f) => f.id === draggingId
-                      );
-                      if (!draggedFile) return null;
-                      const IconComponent =
-                        languageIconMap[draggedFile.language] || VscFile;
-                      const iconColor =
-                        languageColorMap[draggedFile.language] ||
-                        defaultIconColor;
-                      return (
-                        <div
-                          className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative shadow-lg ${
-                            activeFileId === draggedFile.id
-                              ? "bg-neutral-900 z-10"
-                              : "bg-stone-700 z-10"
-                          }`}
-                        >
-                          <IconComponent
-                            size={16}
-                            className={`mr-1.5 flex-shrink-0 ${iconColor}`}
-                          />
-                          <span
-                            className={`text-sm -mt-0.5 select-none cursor-default ${
+            {/* Tabs */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              onDragStart={handleDragStart}
+              modifiers={[restrictToHorizontalAxis]}
+            >
+              <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
+                <SortableContext
+                  items={openFiles.map((f) => f.id)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {openFiles.map((file) => {
+                    const IconComponent =
+                      languageIconMap[file.language] || VscFile;
+                    const iconColor =
+                      languageColorMap[file.language] || defaultIconColor;
+                    return (
+                      <SortableTab
+                        key={file.id}
+                        file={file}
+                        activeFileId={activeFileId}
+                        draggingId={draggingId}
+                        IconComponent={IconComponent}
+                        iconColor={iconColor}
+                        onSwitchTab={handleSwitchTab}
+                        onCloseTab={handleCloseTab}
+                      />
+                    );
+                  })}
+                </SortableContext>
+                <DragOverlay modifiers={[restrictToParentElement]}>
+                  {draggingId
+                    ? (() => {
+                        const draggedFile = openFiles.find(
+                          (f) => f.id === draggingId
+                        );
+                        if (!draggedFile) return null;
+                        const IconComponent =
+                          languageIconMap[draggedFile.language] || VscFile;
+                        const iconColor =
+                          languageColorMap[draggedFile.language] ||
+                          defaultIconColor;
+                        return (
+                          <div
+                            className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative shadow-lg ${
                               activeFileId === draggedFile.id
-                                ? "text-stone-200"
-                                : "text-stone-400"
+                                ? "bg-neutral-900 z-10"
+                                : "bg-stone-700 z-10"
                             }`}
                           >
-                            {draggedFile.name}
-                          </span>
-                          <span className="ml-2 text-stone-500 p-0.5 -mt-0.5 opacity-50">
-                            ×
-                          </span>
-                        </div>
-                      );
-                    })()
-                  : null}
-              </DragOverlay>
-              <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
-            </div>
-          </DndContext>
-
-          {/* Code Editor - takes remaining space */}
-          <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
-            {/* Render editor only if a file is active */}
-            {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
-              <CodeEditor
-                theme="codeCafeTheme"
-                language={
-                  editorLanguageMap[
-                    openFiles.find((f) => f.id === activeFileId)?.language ||
-                      "plaintext"
-                  ]
-                }
-                showLineNumbers={true}
-                code={fileContents[activeFileId] || ""}
-                onCodeChange={handleCodeChange}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-stone-500">
-                Select a file to start editing.
+                            <IconComponent
+                              size={16}
+                              className={`mr-1.5 flex-shrink-0 ${iconColor}`}
+                            />
+                            <span
+                              className={`text-sm -mt-0.5 select-none cursor-default ${
+                                activeFileId === draggedFile.id
+                                  ? "text-stone-200"
+                                  : "text-stone-400"
+                              }`}
+                            >
+                              {draggedFile.name}
+                            </span>
+                            <span className="ml-2 text-stone-500 p-0.5 -mt-0.5 opacity-50">
+                              ×
+                            </span>
+                          </div>
+                        );
+                      })()
+                    : null}
+                </DragOverlay>
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
               </div>
-            )}
-          </div>
+            </DndContext>
 
-          {/* Terminal Resizer */}
-          <div
-            className={`w-full bg-stone-700 flex-shrink-0 ${
-              terminalHeight === 0
-                ? "cursor-pointer hover:bg-stone-500"
-                : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500"
-            }`}
-            style={{ height: `${TERMINAL_HANDLE_HEIGHT}px` }}
-            onMouseDown={handleTerminalResizeMouseDown}
-          />
-
-          {/* Terminal */}
-          <div
-            className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
-              terminalHeight === 0 ? "hidden" : "flex"
-            }`}
-            style={{ height: `${terminalHeight}px` }}
-          >
-            <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
-              <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
+            {/* Code Editor */}
+            <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
+              {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
+                <CodeEditor
+                  theme="codeCafeTheme"
+                  language={
+                    editorLanguageMap[
+                      openFiles.find((f) => f.id === activeFileId)?.language ||
+                        "plaintext"
+                    ]
+                  }
+                  showLineNumbers={true}
+                  code={fileContents[activeFileId] || ""}
+                  onCodeChange={handleCodeChange}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full text-stone-500">
+                  Select a file to start editing.
+                </div>
+              )}
             </div>
-            <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
-              <TerminalComponent ref={terminalRef} height={terminalHeight} />
-            </div>
-          </div>
-        </div>
 
-        {/* Right Panel Area */}
-        <div className="flex flex-shrink-0 h-full relative">
-          {/* Web View Resizer Handle */}
-          {activeIcon === "webView" && (
+            {/* Terminal Resizer */}
             <div
-              className={`absolute top-0 h-full cursor-col-resize bg-transparent z-30 ${
-                webViewWidth > 0 ? "block" : "hidden"
+              className={`w-full bg-stone-700 flex-shrink-0 ${
+                terminalHeight === 0
+                  ? "cursor-pointer hover:bg-stone-500"
+                  : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500"
               }`}
+              style={{ height: `${TERMINAL_HANDLE_HEIGHT}px` }}
+              onMouseDown={handleTerminalResizeMouseDown}
+            />
+
+            {/* Terminal */}
+            <div
+              className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
+                terminalHeight === 0 ? "hidden" : "flex"
+              }`}
+              style={{ height: `${terminalHeight}px` }}
+            >
+              <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
+                <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
+              </div>
+              <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
+                <TerminalComponent ref={terminalRef} height={terminalHeight} />
+              </div>
+            </div>
+          </div>
+
+          {/* Invisible WebView Resizer Handle (Positioned Absolutely) */}
+          {isWebViewVisible && webViewWidth > 0 && (
+            <div
+              className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
               style={{
-                width: `${WEBVIEW_HANDLE_WIDTH}px`,
-                left: `-${WEBVIEW_HANDLE_WIDTH / 2}px`,
-                touchAction: "none", // Prevent scrolling on touch devices
-                pointerEvents:
-                  activeIcon === "webView" && webViewWidth > 0
-                    ? "auto"
-                    : "none",
+                width: `${WEBVIEW_HANDLE_GRAB_WIDTH}px`,
+                // Position it centered over the boundary
+                left: `calc(100% - ${webViewWidth}px - ${
+                  WEBVIEW_HANDLE_GRAB_WIDTH / 2
+                }px)`,
               }}
-              onPointerDown={handleWebViewResizePointerDown} // Use onPointerDown
-              // No need for onMouseDown anymore
-            ></div>
+              onMouseDown={handleWebViewResizeMouseDown}
+            />
           )}
 
-          {/* Web View Panel */}
-          <div
-            className={`overflow-hidden h-full ${
-              activeIcon === "webView" && webViewWidth > 0
-                ? "visible border-l border-stone-600"
-                : "invisible"
-            }`}
-            style={{ width: `${webViewWidth}px` }}
-          >
-            {webViewWidth > 0 && (
+          {/* WebView Panel (border provides the 1px visual line) */}
+          {isWebViewVisible && webViewWidth > 0 && (
+            <div
+              className="flex-shrink-0 border-l border-stone-600 overflow-hidden" // Keep the border-l for visual
+              style={{ width: `${webViewWidth}px` }}
+            >
               <WebViewPanel
                 htmlContent={htmlFileContent}
                 cssContent={cssFileContent}
                 jsContent={jsFileContent}
               />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1234,6 +1127,22 @@ const CodeEditorUI = () => {
           <span>Spaces: 2</span>
         </div>
       </div>
+
+      {/* Resizing Overlay */}
+      {(isExplorerResizing || isTerminalResizing || isWebViewResizing) && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9999, // Ensure it's on top
+            cursor: document.body.style.cursor, // Inherit cursor from body style set by effects
+            // background: 'rgba(0, 255, 0, 0.1)', // Uncomment for debugging visibility
+          }}
+        />
+      )}
     </div>
   );
 };
