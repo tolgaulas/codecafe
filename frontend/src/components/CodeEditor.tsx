@@ -214,7 +214,11 @@ const CodeEditor = ({
     const model = editor.getModel();
     if (!model) return;
 
-    console.log("[CodeEditor updateDecorations] Called with users:", users);
+    // *** Log the model URI and the users being processed ***
+    console.log(
+      `[CodeEditor updateDecorations] Applying decorations for model URI: ${model.uri.toString()}, Users:`,
+      users
+    );
 
     const decorations = users.flatMap((user) => {
       // @ts-ignore <-- Ignore potential null warning for model in flatMap
@@ -305,7 +309,7 @@ const CodeEditor = ({
     });
 
     console.log(
-      "[CodeEditor updateDecorations] Generated Decorations Array:",
+      `[CodeEditor updateDecorations] Generated Decorations for ${model.uri.toString()}:`,
       decorations
     );
 
@@ -318,7 +322,7 @@ const CodeEditor = ({
       );
       decorationsRef.current = decorationIds;
       console.log(
-        "[CodeEditor updateDecorations] Applied Decorations, IDs:",
+        `[CodeEditor updateDecorations] Applied Decorations to ${model.uri.toString()}, IDs:`,
         decorationIds
       );
     } catch (error) {
@@ -334,70 +338,81 @@ const CodeEditor = ({
     }
   };
 
-  // Handle editor mount and cursor position changes
+  // Handle editor mount
   const handleEditorDidMount = (
     editor: monaco.editor.IStandaloneCodeEditor
   ) => {
     editorRef.current = editor;
-    const model = editor.getModel();
-
-    if (model) {
-      editor.onDidChangeCursorPosition(
-        (e: monaco.editor.ICursorPositionChangedEvent) => {
-          const currentEditor = editorRef.current!;
-          const currentModel = currentEditor.getModel()!;
-          if (isUpdatingRef.current || !currentModel) return;
-
-          const position = e.position;
-          const selection = currentEditor.getSelection();
-
-          onCursorPositionChange?.(position.lineNumber);
-
-          let otSelectionToSend: OTSelection | null = null;
-          if (selection) {
-            try {
-              const anchorOffset = positionToOffset(
-                currentModel,
-                selection.getStartPosition()
-              );
-              const headOffset = positionToOffset(
-                currentModel,
-                selection.getEndPosition()
-              );
-              const range = new OTSelection.SelectionRange(
-                anchorOffset,
-                headOffset
-              );
-              otSelectionToSend = new OTSelection([range]);
-            } catch (error) {
-              console.error(
-                "[CodeEditor] Error converting positions to selection offsets:",
-                error,
-                selection
-              );
-            }
-          }
-
-          sendSelectionData?.({
-            cursorPosition: {
-              lineNumber: position.lineNumber,
-              column: position.column,
-            },
-            selection: otSelectionToSend,
-          });
-        }
-      );
-    } else {
-      console.warn(
-        "[CodeEditor] Model not available on mount, cannot attach cursor listener."
-      );
-    }
-
-    updateDecorations();
+    // *** DO NOT attach listeners here anymore ***
+    updateDecorations(); // Initial decoration update
     if (onEditorDidMount) {
       onEditorDidMount(editor);
     }
   };
+
+  // Effect to manage cursor/selection listener
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !sendSelectionData) return; // Need editor and the callback prop
+
+    console.log(
+      "[CodeEditor useEffect] Attaching onDidChangeCursorPosition listener."
+    );
+    const listener = editor.onDidChangeCursorPosition(
+      (e: monaco.editor.ICursorPositionChangedEvent) => {
+        const currentEditor = editorRef.current; // Re-check ref inside callback
+        if (isUpdatingRef.current || !currentEditor) return;
+        const currentModel = currentEditor.getModel();
+        if (!currentModel) return;
+
+        const position = e.position;
+        const selection = currentEditor.getSelection();
+
+        // Call the prop directly
+        let otSelectionToSend: OTSelection | null = null;
+        if (selection) {
+          try {
+            const anchorOffset = positionToOffset(
+              currentModel,
+              selection.getStartPosition()
+            );
+            const headOffset = positionToOffset(
+              currentModel,
+              selection.getEndPosition()
+            );
+            const range = new OTSelection.SelectionRange(
+              anchorOffset,
+              headOffset
+            );
+            otSelectionToSend = new OTSelection([range]);
+          } catch (error) {
+            console.error(
+              "[CodeEditor] Error converting positions to selection offsets:",
+              error,
+              selection
+            );
+          }
+        }
+
+        // Call the function passed via props
+        sendSelectionData({
+          cursorPosition: {
+            lineNumber: position.lineNumber,
+            column: position.column,
+          },
+          selection: otSelectionToSend,
+        });
+      }
+    );
+
+    // Cleanup function to remove the listener when component unmounts or sendSelectionData changes
+    return () => {
+      console.log(
+        "[CodeEditor useEffect] Disposing onDidChangeCursorPosition listener."
+      );
+      listener.dispose();
+    };
+  }, [sendSelectionData]); // Dependency: re-run if sendSelectionData function identity changes
 
   const handleEditorChange = (value: string | undefined) => {
     if (value == undefined || isUpdatingRef.current) return;
@@ -415,7 +430,7 @@ const CodeEditor = ({
         onChange={handleEditorChange}
         beforeMount={() => onLoadingChange?.(true)} // Add loading state
         onMount={(editor) => {
-          handleEditorDidMount(editor);
+          handleEditorDidMount(editor); // Does not attach listener anymore
           setTimeout(() => {
             onLoadingChange?.(false);
           }, 550);

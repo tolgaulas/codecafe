@@ -87,8 +87,11 @@ public class OtController {
      * Handle selection changes from clients (Optional).
      * Based on ot.js Server/EditorSocketIOServer behavior.
      *
-     * @param payload JSON representation of the selection (e.g., { ranges: [{ anchor: number, head: number }] })\n     * @param headerAccessor Accessor for STOMP headers.\n     * @param principal Optional principal.\n     */
-    @MessageMapping("/selection")
+     * @param payload JSON representation of the selection (e.g., { ranges: [{ anchor: number, head: number }] })
+     * @param headerAccessor Accessor for STOMP headers.
+     * @param principal Optional principal.
+     */
+    // @MessageMapping("/selection") // Removed mapping to resolve conflict with EditorController
     public void handleSelection(@Payload IncomingSelectionPayload payload,
                                 SimpMessageHeaderAccessor headerAccessor,
                                 Principal principal) {

@@ -1252,11 +1252,22 @@ const CodeEditorUI = () => {
 
               // Update the remoteUsers state
               setRemoteUsers((prevRemoteUsers) => {
-                const usersForDoc = prevRemoteUsers[documentId] || [];
+                // Create a deep copy to modify safely
+                const nextRemoteUsers = JSON.parse(
+                  JSON.stringify(prevRemoteUsers)
+                ) as typeof prevRemoteUsers;
+
+                // Ensure the array for the current document exists
+                if (!nextRemoteUsers[documentId]) {
+                  nextRemoteUsers[documentId] = [];
+                }
+                const usersForDoc = nextRemoteUsers[documentId]; // Get the array reference
+
                 const existingUserIndex = usersForDoc.findIndex(
-                  (u: RemoteUser) => u.id === remoteUserId // Add type hint for 'u'
+                  (u: RemoteUser) => u.id === remoteUserId
                 );
 
+                // Use OTSelection.fromJSON here as backend sends the JSON representation
                 const selectionFromPayload = userInfo.selection
                   ? OTSelection.fromJSON(userInfo.selection)
                   : null;
@@ -1265,38 +1276,54 @@ const CodeEditorUI = () => {
                   id: remoteUserId,
                   name: userInfo.name || `User ${remoteUserId.substring(0, 4)}`,
                   color: userInfo.color || "#CCCCCC",
-                  cursorPosition: userInfo.cursorPosition,
-                  selection: selectionFromPayload,
+                  cursorPosition: userInfo.cursorPosition, // This comes directly from backend DTO
+                  selection: selectionFromPayload, // Store the OTSelection object
                 };
 
-                let newUsersForDoc;
+                // Update or add the user in the current document's list
                 if (existingUserIndex > -1) {
-                  newUsersForDoc = [
-                    ...usersForDoc.slice(0, existingUserIndex),
-                    updatedUserInfo,
-                    ...usersForDoc.slice(existingUserIndex + 1),
-                  ];
+                  usersForDoc[existingUserIndex] = updatedUserInfo;
                 } else {
-                  newUsersForDoc = [...usersForDoc, updatedUserInfo];
+                  usersForDoc.push(updatedUserInfo);
                 }
+                // No need to reassign nextRemoteUsers[documentId] = usersForDoc; as usersForDoc is a reference
 
-                const newState = {
-                  ...prevRemoteUsers,
-                  [documentId]: newUsersForDoc,
-                };
+                // --- Clear selection for this user in OTHER documents ---
+                Object.keys(nextRemoteUsers).forEach((otherDocId) => {
+                  if (otherDocId !== documentId) {
+                    const usersInOtherDoc = nextRemoteUsers[otherDocId];
+                    if (usersInOtherDoc) {
+                      // Check if the document exists in state
+                      const userIndexInOtherDoc = usersInOtherDoc.findIndex(
+                        (u: RemoteUser) => u.id === remoteUserId
+                      );
+                      if (userIndexInOtherDoc > -1) {
+                        // Clear selection and cursor, keep other info
+                        usersInOtherDoc[userIndexInOtherDoc] = {
+                          ...usersInOtherDoc[userIndexInOtherDoc],
+                          selection: null,
+                          cursorPosition: null,
+                        };
+                      }
+                    }
+                  }
+                });
+                // ------------------------------------------------------
 
                 console.log(
                   `[CodeEditorUI] Updated remoteUsers state:`,
-                  newState
+                  nextRemoteUsers
                 );
 
+                // Avoid unnecessary re-renders if state didn't actually change
                 if (
-                  JSON.stringify(prevRemoteUsers) === JSON.stringify(newState)
+                  JSON.stringify(prevRemoteUsers) ===
+                  JSON.stringify(nextRemoteUsers)
                 ) {
                   return prevRemoteUsers;
                 }
 
-                return newState;
+                return nextRemoteUsers; // Return the modified state
               });
             } catch (error) {
               console.error(
@@ -1586,14 +1613,9 @@ const CodeEditorUI = () => {
   const handleSendSelectionData = useCallback(
     (data: {
       cursorPosition: { lineNumber: number; column: number } | null;
-      selection: {
-        startLineNumber: number;
-        startColumn: number;
-        endLineNumber: number;
-        endColumn: number;
-      } | null;
+      // Fix: Expect OTSelection, matching the prop type
+      selection: OTSelection | null;
     }) => {
-      // *** Log the received data object ***
       console.log(
         "[CodeEditorUI handleSendSelectionData] Received data from CodeEditor:",
         data
@@ -1605,20 +1627,18 @@ const CodeEditorUI = () => {
         sessionId &&
         userName.trim()
       ) {
-        // Construct the payload matching CursorMessage.java DTO
         const payload = {
           documentId: activeFileId,
           userInfo: {
-            // Nest user details here
             id: userId,
             name: userName.trim(),
             color: userColor,
-            cursorPosition: data.cursorPosition, // Pass position directly
-            selection: data.selection, // Pass the plain selection object received from CodeEditor directly
+            cursorPosition: data.cursorPosition,
+            // Fix: Convert received OTSelection to JSON for the backend DTO
+            selection: data.selection ? data.selection.toJSON() : null,
           },
         };
 
-        // Send the payload
         console.log(
           "[CodeEditorUI handleSendSelectionData] Sending payload object:",
           payload
