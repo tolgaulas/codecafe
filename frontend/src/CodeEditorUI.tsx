@@ -1409,14 +1409,20 @@ const CodeEditorUI = () => {
 
               // *** ADD LOGGING HERE ***
               console.log(
-                `[CodeEditorUI] Received selection payload for doc ${documentId} from user ${remoteUserId}:`,
-                payload
+                `[DEBUG] Received selection message. Comparing remoteUserId (${remoteUserId}) with local userId (${userId})`
               );
 
               // Ignore own selection broadcasts
               if (remoteUserId === userId) {
+                console.log(
+                  `[DEBUG] IDs match. Ignoring own selection broadcast.`
+                ); // Log ignore
                 return; // Ignore own selection broadcasts
               }
+              // Log if the filter passes
+              console.log(
+                `[DEBUG] IDs do NOT match. Proceeding to update remoteUsers state.`
+              );
 
               // Update the remoteUsers state
               setRemoteUsers((prevRemoteUsers) => {
@@ -2421,6 +2427,8 @@ const CodeEditorUI = () => {
                   users={currentRemoteUsers} // Pass remote user data
                   // *** Add the missing prop here ***
                   sendSelectionData={handleSendSelectionData}
+                  // *** Add the new prop here ***
+                  localUserId={userId} // Pass the local userId
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-stone-500">

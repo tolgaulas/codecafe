@@ -65,6 +65,7 @@ export interface CodeEditorProps {
   users?: RemoteUser[]; // Optional: Array of remote users for displaying cursors/selections
   onEditorDidMount?: (editor: editor.IStandaloneCodeEditor) => void; // Optional: Callback when editor instance is mounted
   onLoadingChange?: (isLoading: boolean) => void; // Optional: Callback for loading state
+  localUserId?: string; // Optional: The ID of the local user, to prevent self-rendering of cursors
 }
 
 // Props for WebViewPanel component

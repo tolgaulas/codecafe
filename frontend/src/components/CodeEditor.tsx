@@ -22,6 +22,7 @@ const CodeEditor = ({
   wordWrap,
   showLineNumbers,
   onEditorDidMount,
+  localUserId,
 }: CodeEditorProps) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorationsRef = useRef<string[]>([]);
@@ -165,6 +166,8 @@ const CodeEditor = ({
       }
 
       ${users
+        // Filter out the local user before generating styles
+        .filter((user) => user.id !== localUserId)
         .map(
           (user) => `
         @keyframes blink-${user.id} {
@@ -212,23 +215,39 @@ const CodeEditor = ({
         styleSheetRef.current = null;
       }
     };
-  }, [users]);
+  }, [users, localUserId]);
 
   // Function to apply decorations based on the users prop
   const updateDecorations = () => {
-    const editor = editorRef.current;
-    if (!editor || !users) return;
-    const model = editor.getModel();
-    if (!model) return;
+    if (!editorRef.current) return;
 
-    // *** Log the model URI and the users being processed ***
+    const model = editorRef.current.getModel();
+    if (!model) {
+      console.warn(
+        "[CodeEditor updateDecorations] Cannot get model from editor."
+      );
+      return;
+    }
+
+    const modelUri = model.uri.toString();
     console.log(
-      `[CodeEditor updateDecorations] Applying decorations for model URI: ${model.uri.toString()}, Users:`,
+      `[CodeEditor updateDecorations] Applying decorations for model URI: ${modelUri}, Users:`,
       users
     );
 
-    const decorations = users.flatMap((user) => {
-      const decorationArray = [];
+    // Filter out the local user before generating decorations
+    const remoteUsersToDecorate = users.filter(
+      (user) => user.id !== localUserId
+    );
+
+    const decorations: monaco.editor.IModelDeltaDecoration[] = [];
+
+    // Use the filtered list here
+    remoteUsersToDecorate.forEach((user) => {
+      console.log(
+        `[CodeEditor updateDecorations] User ${user.id} - Checking selection:`,
+        user.selection
+      );
 
       // Render Selection **ONLY IF** selection is not null
       if (
@@ -265,7 +284,7 @@ const CodeEditor = ({
               monacoRange
             );
 
-            decorationArray.push({
+            decorations.push({
               range: monacoRange,
               options: {
                 className: `user-${user.id}-selection`,
@@ -304,7 +323,7 @@ const CodeEditor = ({
           `[CodeEditor updateDecorations] User ${user.id} - Created Cursor Range:`,
           cursorPosRange
         );
-        decorationArray.push({
+        decorations.push({
           range: cursorPosRange,
           options: {
             className: `user-${user.id}-cursor`,
@@ -316,25 +335,23 @@ const CodeEditor = ({
           },
         });
       }
-
-      return decorationArray;
     });
 
     console.log(
-      `[CodeEditor updateDecorations] Generated Decorations for ${model.uri.toString()}:`,
+      `[CodeEditor updateDecorations] Generated Decorations for ${modelUri}:`,
       decorations
     );
 
     // Apply the decorations
     try {
       // @ts-ignore <-- Ignore potential null warning for editor
-      const decorationIds = editor.deltaDecorations(
+      const decorationIds = editorRef.current.deltaDecorations(
         decorationsRef.current,
         decorations
       );
       decorationsRef.current = decorationIds;
       console.log(
-        `[CodeEditor updateDecorations] Applied Decorations to ${model.uri.toString()}, IDs:`,
+        `[CodeEditor updateDecorations] Applied Decorations to ${modelUri}, IDs:`,
         decorationIds
       );
     } catch (error) {
@@ -343,7 +360,7 @@ const CodeEditor = ({
         error
       );
       // @ts-ignore <-- Ignore potential null warning for editor
-      decorationsRef.current = editor.deltaDecorations(
+      decorationsRef.current = editorRef.current.deltaDecorations(
         decorationsRef.current,
         []
       );
