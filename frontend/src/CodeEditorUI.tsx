@@ -632,11 +632,7 @@ const CodeEditorUI = () => {
     if (!MOCK_FILES[fileId]) return;
     const fileData = MOCK_FILES[fileId];
 
-    // Determine content to load based on session state
-    const contentToLoad = isSessionActive
-      ? "// Loading session content..." // Show loading if session active
-      : fileData.content; // Otherwise, load mock content
-
+    // If the file isn't already open, add it to the list and potentially set initial content.
     if (!openFiles.some((f) => f.id === fileId)) {
       const newOpenFile: OpenFile = {
         id: fileId,
@@ -644,11 +640,25 @@ const CodeEditorUI = () => {
         language: fileData.language,
       };
       setOpenFiles((prev) => [...prev, newOpenFile]);
-      // Use contentToLoad when adding the file content initially
-      setFileContents((prev) => ({ ...prev, [fileId]: contentToLoad }));
-    }
-    // If the file is already open, we don't modify its content here.
 
+      // Set initial content ONLY if NOT in an active session.
+      // If in a session, let the WebSocket fetch the current state.
+      if (!isSessionActive) {
+        setFileContents((prev) => ({
+          ...prev,
+          // Only add content if it doesn't already exist (e.g., from a previous non-session state)
+          [fileId]: prev[fileId] ?? fileData.content,
+        }));
+      } else {
+        // Optional: You could set it to undefined or keep the existing value if any.
+        // Setting it ensures the key exists, but content will come from WS.
+        setFileContents((prev) => ({
+          ...prev,
+          [fileId]: prev[fileId], // Keep existing content or undefined
+        }));
+      }
+    }
+    // If the file is already open, just switch to it.
     setActiveFileId(fileId);
   };
 
@@ -1030,7 +1040,38 @@ const CodeEditorUI = () => {
           },
           applyOperation: (operation: TextOperation) => {
             console.log(`[Client -> Editor Apply] Op: ${operation.toString()}`);
-            adapterRef.current?.applyOperation(operation);
+            adapterRef.current?.applyOperation(operation); // Apply op to the Monaco editor instance
+
+            // *** ADDED: Apply incoming op to fileContents for WebView updates ***
+            setFileContents((prevContents) => {
+              // Ensure we are using the active file ID from the effect's scope
+              const currentContent = prevContents[currentActiveFileId] ?? "";
+              try {
+                const newContent = operation.apply(currentContent);
+                // Avoid unnecessary state updates if content didn't change
+                if (newContent === currentContent) {
+                  return prevContents;
+                }
+                console.log(
+                  `[Client Apply] Updating fileContents for ${currentActiveFileId} due to remote change.`
+                );
+                return {
+                  ...prevContents,
+                  [currentActiveFileId]: newContent,
+                };
+              } catch (applyError) {
+                console.error(
+                  `[Client Apply] Error applying remote op to fileContents for ${currentActiveFileId}:`,
+                  applyError,
+                  "Op:",
+                  operation.toString(),
+                  "Content:",
+                  currentContent
+                );
+                return prevContents; // Return previous state on error
+              }
+            });
+            // **********************************************************************
           },
           getSelection: () => {
             return adapterRef.current?.getSelection() ?? null;
@@ -1109,7 +1150,38 @@ const CodeEditorUI = () => {
                     console.log(
                       `[Adapter Callback] Calling applyClient. Client State: ${clientRef.current.state.constructor.name}, Revision: ${clientRef.current.revision}`
                     );
-                    clientRef.current?.applyClient(op);
+                    clientRef.current?.applyClient(op); // Send op to server state machine
+
+                    // *** ADDED: Apply local op directly to fileContents for WebView updates ***
+                    setFileContents((prevContents) => {
+                      const currentContent =
+                        prevContents[currentActiveFileId] ?? "";
+                      try {
+                        const newContent = op.apply(currentContent);
+                        // Avoid unnecessary state updates if content didn't change (e.g., empty op)
+                        if (newContent === currentContent) {
+                          return prevContents;
+                        }
+                        console.log(
+                          `[Adapter Callback] Updating fileContents for ${currentActiveFileId} due to local change.`
+                        );
+                        return {
+                          ...prevContents,
+                          [currentActiveFileId]: newContent,
+                        };
+                      } catch (applyError) {
+                        console.error(
+                          `[Adapter Callback] Error applying local op to fileContents for ${currentActiveFileId}:`,
+                          applyError,
+                          "Op:",
+                          op.toString(),
+                          "Content:",
+                          currentContent
+                        );
+                        return prevContents; // Return previous state on error
+                      }
+                    });
+                    // **************************************************************************
                   },
                   selectionChange: () => {
                     // console.log(`[Editor -> Client SelChange] File: ${currentActiveFileId}`);
@@ -1165,6 +1237,7 @@ const CodeEditorUI = () => {
               }
 
               // *** Apply to ACTIVE file via OT Client ***
+              // Use the activeFileId captured by the effect's closure
               if (payload.documentId === currentActiveFileId) {
                 if (clientRef.current) {
                   try {
@@ -1183,38 +1256,10 @@ const CodeEditorUI = () => {
                   );
                 }
               }
-              // *** Apply directly to ANY OTHER file state (inactive or not currently open) ***
-              else {
-                console.log(
-                  `Applying server op directly to background file state: ${payload.documentId}`
-                );
-                try {
-                  const operation = TextOperation.fromJSON(payload.operation);
-                  // Apply the operation directly to the state string for the file
-                  setFileContents((prevContents) => {
-                    const currentContent =
-                      prevContents[payload.documentId] ?? ""; // Get current content or default to empty
-                    if (currentContent === "// Loading session content...") {
-                      // If the file is still in the initial loading state, maybe wait for full state?
-                      // Or apply tentatively. Let's apply for now.
-                      console.warn(
-                        `Applying op to background file ${payload.documentId} that might still be loading.`
-                      );
-                    }
-                    const newContent = operation.apply(currentContent); // Apply the text operation
-                    return {
-                      ...prevContents,
-                      [payload.documentId]: newContent,
-                    };
-                  });
-                } catch (e) {
-                  console.error(
-                    `Error applying server op to background file ${payload.documentId}:`,
-                    e,
-                    payload.operation
-                  );
-                }
-              }
+              // *** DO NOTHING FOR INACTIVE FILES ***
+              // The full state will be fetched when the user switches to that file.
+              // The previous attempt to apply ops directly to fileContents state was removed.
+
               // File not open check removed - we store all updates now
             } catch (error) {
               console.error(
