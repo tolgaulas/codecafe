@@ -49,6 +49,7 @@ import {
   OTSelection,
   Client,
   IClientCallbacks,
+  offsetToPosition,
 } from "./TextOperationSystem";
 import JoinSessionPanel from "./components/JoinSessionPanel"; // Import the new component
 import { UserInfo, RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
@@ -1058,6 +1059,44 @@ const CodeEditorUI = () => {
               console.log(
                 "[DEBUG] Attempting to send selection via clientCallbacks.sendSelection"
               );
+
+              // Extract cursor position from selection if available
+              let cursorPosition = null;
+              if (
+                selection &&
+                selection.ranges &&
+                selection.ranges.length > 0
+              ) {
+                const primaryRange = selection.ranges[0];
+                // Get the editor model to convert selection offset to position
+                if (currentEditorInstance) {
+                  const model = currentEditorInstance.getModel();
+                  if (model) {
+                    try {
+                      // Use the head position of the selection as the cursor position
+                      // (where the cursor would be visually located in a selection)
+                      const headPos = offsetToPosition(
+                        model,
+                        primaryRange.head
+                      );
+                      cursorPosition = {
+                        lineNumber: headPos.lineNumber,
+                        column: headPos.column,
+                      };
+                      console.log(
+                        "[DEBUG] Inferred cursor position from selection:",
+                        cursorPosition
+                      );
+                    } catch (error) {
+                      console.error(
+                        "[DEBUG] Failed to infer cursor position from selection:",
+                        error
+                      );
+                    }
+                  }
+                }
+              }
+
               const payload = {
                 documentId: currentActiveFileId,
                 sessionId: sessionId, // Include sessionId
@@ -1065,7 +1104,7 @@ const CodeEditorUI = () => {
                   id: userId,
                   name: userName.trim(), // <<< Include name >>>
                   color: userColor, // <<< Include color >>>
-                  cursorPosition: null, // OT Client doesn't directly provide this; rely on handleSendSelectionData
+                  cursorPosition: cursorPosition, // Use inferred cursor position instead of null
                   selection: selection?.toJSON() ?? null,
                 },
               };
@@ -1337,43 +1376,43 @@ const CodeEditorUI = () => {
 
               // *** Apply to fileContents state for WebView update ***
               // We still need the documentId from the payload here to update the correct key in the state
-              try {
-                const operationForState = TextOperation.fromJSON(
-                  payload.operation
-                );
-                setFileContents((prevContents) => {
-                  const docIdToUpdate = payload.documentId;
-                  // Double-check if docIdToUpdate actually matches currentActiveFileId?
-                  // Might be overly cautious, but ensures state update aligns with subscription.
-                  if (docIdToUpdate !== currentActiveFileId) {
-                    console.warn(
-                      `[Server -> Client Op] Received op for doc ${docIdToUpdate} on topic for ${currentActiveFileId}. Ignoring for fileContents update.`
-                    );
-                    return prevContents;
-                  }
-                  const currentContent = prevContents[docIdToUpdate] ?? ""; // Get content for the specific doc
-                  const newContent = operationForState.apply(currentContent);
+              // try {
+              //   const operationForState = TextOperation.fromJSON(
+              //     payload.operation
+              //   );
+              //   setFileContents((prevContents) => {
+              //     const docIdToUpdate = payload.documentId;
+              //     // Double-check if docIdToUpdate actually matches currentActiveFileId?
+              //     // Might be overly cautious, but ensures state update aligns with subscription.
+              //     if (docIdToUpdate !== currentActiveFileId) {
+              //       console.warn(
+              //         `[Server -> Client Op] Received op for doc ${docIdToUpdate} on topic for ${currentActiveFileId}. Ignoring for fileContents update.`
+              //       );
+              //       return prevContents;
+              //     }
+              //     const currentContent = prevContents[docIdToUpdate] ?? ""; // Get content for the specific doc
+              //     const newContent = operationForState.apply(currentContent);
 
-                  // Avoid unnecessary state updates if content didn't change
-                  if (newContent === currentContent) {
-                    return prevContents;
-                  }
+              //     // Avoid unnecessary state updates if content didn't change
+              //     if (newContent === currentContent) {
+              //       return prevContents;
+              //     }
 
-                  console.log(
-                    `[Server -> Client Op] Updating fileContents for ${docIdToUpdate} (WebView).`
-                  );
-                  return {
-                    ...prevContents,
-                    [docIdToUpdate]: newContent, // Update the specific document's content
-                  };
-                });
-              } catch (e) {
-                console.error(
-                  `[Server -> Client Op] Error applying server op to fileContents STATE for ${payload.documentId}:`,
-                  e,
-                  payload.operation
-                );
-              }
+              //     console.log(
+              //       `[Server -> Client Op] Updating fileContents for ${docIdToUpdate} (WebView).`
+              //     );
+              //     return {
+              //       ...prevContents,
+              //       [docIdToUpdate]: newContent, // Update the specific document's content
+              //     };
+              //   });
+              // } catch (e) {
+              //   console.error(
+              //     `[Server -> Client Op] Error applying server op to fileContents STATE for ${payload.documentId}:`,
+              //     e,
+              //     payload.operation
+              //   );
+              // }
               // ************************************************************
 
               // File not open check removed - we store all updates now
@@ -1414,9 +1453,21 @@ const CodeEditorUI = () => {
               const { documentId, userInfo } = payload;
               const remoteUserId = userInfo.id;
 
-              // *** ADD LOGGING HERE ***
+              // Enhanced debugging for cursor positions and selections
               console.log(
                 `[DEBUG] Received selection message. Comparing remoteUserId (${remoteUserId}) with local userId (${userId})`
+              );
+              console.log(
+                `[DEBUG] Full userInfo received:`,
+                JSON.stringify(userInfo, null, 2)
+              );
+              console.log(
+                `[DEBUG] User ${remoteUserId} cursorPosition:`,
+                userInfo.cursorPosition
+              );
+              console.log(
+                `[DEBUG] User ${remoteUserId} selection:`,
+                userInfo.selection
               );
 
               // Ignore own selection broadcasts

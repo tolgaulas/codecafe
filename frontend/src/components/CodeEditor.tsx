@@ -231,98 +231,46 @@ const CodeEditor = ({
 
     const modelUri = model.uri.toString();
     console.log(
-      `[CodeEditor updateDecorations] Applying decorations for model URI: ${modelUri}, Users:`,
-      users
+      `[CodeEditor updateDecorations] Applying decorations for model URI: ${modelUri}, Raw Users Prop:`,
+      JSON.stringify(users) // Log raw prop
     );
+    console.log(`[CodeEditor updateDecorations] Local User ID: ${localUserId}`); // Log local ID
 
     // Filter out the local user before generating decorations
     const remoteUsersToDecorate = users.filter(
       (user) => user.id !== localUserId
+    );
+    console.log(
+      `[CodeEditor updateDecorations] Filtered Remote Users to Decorate (${remoteUsersToDecorate.length}):`,
+      JSON.stringify(remoteUsersToDecorate) // Log filtered users
     );
 
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
 
     // Use the filtered list here
     remoteUsersToDecorate.forEach((user) => {
+      // +++ Add detailed log for each user +++
       console.log(
-        `[CodeEditor updateDecorations] User ${user.id} - Checking selection:`,
-        user.selection
+        `[CodeEditor updateDecorations] Processing User: ${user.id} (${user.name})`,
+        `CursorPos: ${JSON.stringify(user.cursorPosition)}`,
+        `Selection: ${JSON.stringify(user.selection)}`
       );
 
-      // Render Selection **ONLY IF** selection is not null
-      if (
-        user.selection &&
-        user.selection.ranges &&
-        user.selection.ranges.length > 0
-      ) {
-        const primaryRange = user.selection.ranges[0];
-        if (primaryRange) {
-          console.log(
-            `[CodeEditor updateDecorations] User ${user.id} - Primary Range Offsets:`,
-            primaryRange
-          );
-          try {
-            // @ts-ignore <-- Ignore potential null warning for model
-            const anchorPos = offsetToPosition(model, primaryRange.anchor);
-            // @ts-ignore <-- Ignore potential null warning for model
-            const headPos = offsetToPosition(model, primaryRange.head);
-            console.log(
-              `[CodeEditor updateDecorations] User ${user.id} - Converted AnchorPos:`,
-              anchorPos,
-              `HeadPos:`,
-              headPos
-            );
-
-            const monacoRange = new monaco.Range(
-              anchorPos.lineNumber,
-              anchorPos.column,
-              headPos.lineNumber,
-              headPos.column
-            );
-            console.log(
-              `[CodeEditor updateDecorations] User ${user.id} - Created Monaco Range:`,
-              monacoRange
-            );
-
-            decorations.push({
-              range: monacoRange,
-              options: {
-                className: `user-${user.id}-selection`,
-                hoverMessage: { value: `Selected by ${user.name}` },
-              },
-            });
-          } catch (error) {
-            console.error(
-              "[CodeEditor updateDecorations] Error converting selection offsets:",
-              error,
-              primaryRange
-            );
-          }
-        }
-      }
-
-      // --- Debugging Cursor ---
-      console.log(
-        `[CodeEditor updateDecorations] User ${user.id} - Checking cursorPosition:`,
-        user.cursorPosition
-      );
-      // Render Cursor **ONLY IF** cursorPosition is not null
+      // First handle cursor position (independent of selection)
       if (user.cursorPosition) {
-        // --- Debugging Cursor ---
         console.log(
-          `[CodeEditor updateDecorations] User ${user.id} - PASSED null check, rendering cursor decoration for position:`,
-          user.cursorPosition
+          `[CodeEditor updateDecorations] User ${user.id} - Rendering cursor decoration for position:`,
+          user.cursorPosition // Keep original log
         );
+
         const cursorPosRange = new monaco.Range(
           user.cursorPosition.lineNumber,
           user.cursorPosition.column,
           user.cursorPosition.lineNumber,
           user.cursorPosition.column
         );
-        console.log(
-          `[CodeEditor updateDecorations] User ${user.id} - Created Cursor Range:`,
-          cursorPosRange
-        );
+
+        // Add the cursor decoration (always show when cursor position exists)
         decorations.push({
           range: cursorPosRange,
           options: {
@@ -334,17 +282,114 @@ const CodeEditor = ({
             },
           },
         });
+      } else {
+        // +++ Add log for missing cursor pos +++
+        console.log(
+          `[CodeEditor updateDecorations] User ${user.id} - No cursorPosition found. Attempting to infer from selection.`
+        );
+        // Try to infer cursor position from selection if available
+        // This ensures cursors appear even when only selection data is transmitted
+        if (
+          user.selection &&
+          user.selection.ranges &&
+          user.selection.ranges.length > 0
+        ) {
+          const primaryRange = user.selection.ranges[0];
+          if (primaryRange) {
+            try {
+              // Use head position for cursor (usually where the cursor would be in a selection)
+              const headPos = offsetToPosition(model, primaryRange.head);
+
+              const cursorPosRange = new monaco.Range(
+                headPos.lineNumber,
+                headPos.column,
+                headPos.lineNumber,
+                headPos.column
+              );
+
+              // Add inferred cursor decoration
+              decorations.push({
+                range: cursorPosRange,
+                options: {
+                  className: `user-${user.id}-cursor`,
+                  beforeContentClassName: "cursor-label",
+                  before: {
+                    content: user.name,
+                    inlineClassName: `user-${user.id}-label`,
+                  },
+                },
+              });
+            } catch (error) {
+              console.error(
+                "[CodeEditor updateDecorations] Error inferring cursor from selection:",
+                error
+              );
+            }
+          }
+        }
+      }
+
+      // Then handle selection (only if non-empty)
+      if (
+        user.selection &&
+        user.selection.ranges &&
+        user.selection.ranges.length > 0
+      ) {
+        const primaryRange = user.selection.ranges[0];
+        if (primaryRange) {
+          console.log(
+            `[CodeEditor updateDecorations] User ${user.id} - Checking selection:`,
+            primaryRange
+          );
+
+          try {
+            // Convert offsets to positions
+            const anchorPos = offsetToPosition(model, primaryRange.anchor);
+            const headPos = offsetToPosition(model, primaryRange.head);
+
+            // Only create a selection decoration if it's non-empty
+            if (
+              anchorPos.lineNumber !== headPos.lineNumber ||
+              anchorPos.column !== headPos.column
+            ) {
+              console.log(
+                `[CodeEditor updateDecorations] User ${user.id} - Creating selection decoration for non-empty range`
+              );
+
+              const monacoRange = new monaco.Range(
+                anchorPos.lineNumber,
+                anchorPos.column,
+                headPos.lineNumber,
+                headPos.column
+              );
+
+              // Add the selection decoration
+              decorations.push({
+                range: monacoRange,
+                options: {
+                  className: `user-${user.id}-selection`,
+                  hoverMessage: { value: `Selected by ${user.name}` },
+                },
+              });
+            }
+          } catch (error) {
+            console.error(
+              "[CodeEditor updateDecorations] Error converting selection offsets:",
+              error,
+              primaryRange
+            );
+          }
+        }
       }
     });
 
     console.log(
-      `[CodeEditor updateDecorations] Generated Decorations for ${modelUri}:`,
-      decorations
+      `[CodeEditor updateDecorations] Generated Decorations array before applying (${decorations.length}):`,
+      JSON.stringify(decorations) // Log the final array
     );
 
     // Apply the decorations
     try {
-      // @ts-ignore <-- Ignore potential null warning for editor
       const decorationIds = editorRef.current.deltaDecorations(
         decorationsRef.current,
         decorations
@@ -359,7 +404,6 @@ const CodeEditor = ({
         "[CodeEditor updateDecorations] Error applying decorations:",
         error
       );
-      // @ts-ignore <-- Ignore potential null warning for editor
       decorationsRef.current = editorRef.current.deltaDecorations(
         decorationsRef.current,
         []
