@@ -313,16 +313,26 @@ const CodeEditorUI = () => {
   }, []); // Run only once on mount
 
   // Tab / File Management State
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([]);
-  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  // Set initial open files based on MOCK_FILES keys
+  const initialOpenFileIds = Object.keys(MOCK_FILES);
+  const initialOpenFilesData = initialOpenFileIds.map((id) => ({
+    id: id,
+    name: MOCK_FILES[id].name,
+    language: MOCK_FILES[id].language,
+  }));
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>(initialOpenFilesData); // Start with mock files open
+  const [activeFileId, setActiveFileId] = useState<string | null>(
+    initialOpenFileIds.length > 0 ? initialOpenFileIds[0] : null
+  ); // Start with the first mock file active
+
   const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
     () => {
-      // Use a function initializer to avoid recomputing on every render
-      return {
-        "index.html": MOCK_FILES["index.html"].content,
-        "style.css": MOCK_FILES["style.css"].content,
-        "script.js": MOCK_FILES["script.js"].content,
-      };
+      // Initialize with all mock file contents
+      const initialContents: { [id: string]: string } = {};
+      Object.keys(MOCK_FILES).forEach((id) => {
+        initialContents[id] = MOCK_FILES[id].content;
+      });
+      return initialContents;
     }
   );
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -359,6 +369,9 @@ const CodeEditorUI = () => {
 
   // Flag to control editor readiness for OT
   const [isEditorReadyForOT, setIsEditorReadyForOT] = useState(false);
+
+  // Add state for WebSocket connection status
+  const [isConnected, setIsConnected] = useState(false);
 
   // Add new state for join process
   const [joinState, setJoinState] = useState<JoinStateType>("idle");
@@ -932,6 +945,7 @@ const CodeEditorUI = () => {
         clientRef.current = null; // Reset client
         adapterRef.current?.detach(); // Detach adapter
         adapterRef.current = null; // Reset adapter
+        setIsConnected(false); // Set connected state to false
       }
       return; // Exit effect if conditions not met
     }
@@ -985,6 +999,7 @@ const CodeEditorUI = () => {
         console.log(
           `[STOMP Connected] Frame: ${frame}, File: ${currentActiveFileId}`
         );
+        setIsConnected(true); // Set connected state to true
 
         // Define callbacks WITH documentId included
         const clientCallbacks: IClientCallbacks = {
@@ -1041,37 +1056,6 @@ const CodeEditorUI = () => {
           applyOperation: (operation: TextOperation) => {
             console.log(`[Client -> Editor Apply] Op: ${operation.toString()}`);
             adapterRef.current?.applyOperation(operation); // Apply op to the Monaco editor instance
-
-            // *** ADDED: Apply incoming op to fileContents for WebView updates ***
-            setFileContents((prevContents) => {
-              // Ensure we are using the active file ID from the effect's scope
-              const currentContent = prevContents[currentActiveFileId] ?? "";
-              try {
-                const newContent = operation.apply(currentContent);
-                // Avoid unnecessary state updates if content didn't change
-                if (newContent === currentContent) {
-                  return prevContents;
-                }
-                console.log(
-                  `[Client Apply] Updating fileContents for ${currentActiveFileId} due to remote change.`
-                );
-                return {
-                  ...prevContents,
-                  [currentActiveFileId]: newContent,
-                };
-              } catch (applyError) {
-                console.error(
-                  `[Client Apply] Error applying remote op to fileContents for ${currentActiveFileId}:`,
-                  applyError,
-                  "Op:",
-                  operation.toString(),
-                  "Content:",
-                  currentContent
-                );
-                return prevContents; // Return previous state on error
-              }
-            });
-            // **********************************************************************
           },
           getSelection: () => {
             return adapterRef.current?.getSelection() ?? null;
@@ -1236,16 +1220,18 @@ const CodeEditorUI = () => {
                 return;
               }
 
-              // *** Apply to ACTIVE file via OT Client ***
+              // *** Apply to ACTIVE file EDITOR via OT Client (if applicable) ***
               // Use the activeFileId captured by the effect's closure
               if (payload.documentId === currentActiveFileId) {
                 if (clientRef.current) {
                   try {
-                    const operation = TextOperation.fromJSON(payload.operation);
-                    clientRef.current.applyServer(operation);
+                    const operationForClient = TextOperation.fromJSON(
+                      payload.operation
+                    );
+                    clientRef.current.applyServer(operationForClient);
                   } catch (e) {
                     console.error(
-                      `[Server -> Client Op] Error applying server op to ACTIVE file ${currentActiveFileId}:`,
+                      `[Server -> Client Op] Error applying server op to ACTIVE file EDITOR ${currentActiveFileId}:`,
                       e,
                       payload.operation
                     );
@@ -1256,9 +1242,38 @@ const CodeEditorUI = () => {
                   );
                 }
               }
-              // *** DO NOTHING FOR INACTIVE FILES ***
-              // The full state will be fetched when the user switches to that file.
-              // The previous attempt to apply ops directly to fileContents state was removed.
+
+              // *** ALWAYS Apply to fileContents state for WebView update ***
+              try {
+                const operationForState = TextOperation.fromJSON(
+                  payload.operation
+                );
+                setFileContents((prevContents) => {
+                  const docIdToUpdate = payload.documentId;
+                  const currentContent = prevContents[docIdToUpdate] ?? ""; // Get content for the specific doc
+                  const newContent = operationForState.apply(currentContent);
+
+                  // Avoid unnecessary state updates if content didn't change
+                  if (newContent === currentContent) {
+                    return prevContents;
+                  }
+
+                  console.log(
+                    `[Server -> Client Op] Updating fileContents for ${docIdToUpdate} (WebView).`
+                  );
+                  return {
+                    ...prevContents,
+                    [docIdToUpdate]: newContent, // Update the specific document's content
+                  };
+                });
+              } catch (e) {
+                console.error(
+                  `[Server -> Client Op] Error applying server op to fileContents STATE for ${payload.documentId}:`,
+                  e,
+                  payload.operation
+                );
+              }
+              // ************************************************************
 
               // File not open check removed - we store all updates now
             } catch (error) {
@@ -1415,6 +1430,7 @@ const CodeEditorUI = () => {
           `[Client -> Server ReqState] Requesting state for ${currentActiveFileId}...`
         );
         stompClient.send(
+          // Corrected back to send
           "/app/get-document-state",
           {},
           JSON.stringify({ documentId: currentActiveFileId })
@@ -1425,6 +1441,7 @@ const CodeEditorUI = () => {
           `[STOMP Error] Connection Failed for ${currentActiveFileId}:`,
           error
         );
+        setIsConnected(false); // Set connected state to false on error
         // Optionally set code state to show error
         // setFileContents(prev => ({...prev, [currentActiveFileId]: "// Connection failed."})) ;
         setIsSessionActive(false); // Consider if this should affect the whole session
@@ -1432,6 +1449,10 @@ const CodeEditorUI = () => {
         clientRef.current = null;
         adapterRef.current?.detach();
         adapterRef.current = null;
+        setIsConnected(false); // Ensure connected is false on cleanup
+        console.log(
+          `[WS Cleanup] Finished cleanup for ${currentActiveFileId}.`
+        );
       }
     );
 
@@ -1449,6 +1470,7 @@ const CodeEditorUI = () => {
       });
       subscriptions = [];
       if (stompClientRef.current?.connected) {
+        // Use stompClientRef here
         console.log("[WS Cleanup] Disconnecting STOMP client in cleanup.");
         stompClientRef.current.disconnect(() =>
           console.log("[STOMP] Disconnected via effect cleanup.")
@@ -1459,10 +1481,57 @@ const CodeEditorUI = () => {
       clientRef.current = null;
       adapterRef.current?.detach();
       adapterRef.current = null;
+      setIsConnected(false); // Ensure connected is false on cleanup
       console.log(`[WS Cleanup] Finished cleanup for ${currentActiveFileId}.`);
     };
-    // Depend on session, active file, and editor readiness
+    // Depend only on session, active file, and editor readiness
   }, [isSessionActive, sessionId, activeFileId, userId, isEditorReadyForOT]);
+
+  // Effect to send initial presence when connection is ready and user info is available
+  useEffect(() => {
+    if (
+      isConnected &&
+      userName.trim() &&
+      activeFileId &&
+      stompClientRef.current?.connected
+    ) {
+      // Introduce a small delay to allow state propagation
+      const timer = setTimeout(() => {
+        if (stompClientRef.current?.connected) {
+          // Re-check connection inside timeout
+          console.log(
+            `[Presence Effect] Sending initial presence for ${userId} in ${activeFileId}. Connected: ${isConnected}`
+          );
+          const initialPresencePayload = {
+            documentId: activeFileId,
+            userInfo: {
+              id: userId,
+              name: userName.trim(),
+              color: userColor,
+              cursorPosition: null,
+              selection: null,
+            },
+          };
+          stompClientRef.current.send(
+            "/app/selection",
+            {},
+            JSON.stringify(initialPresencePayload)
+          );
+        } else {
+          console.log(
+            "[Presence Effect] Connection lost before sending presence message in timeout."
+          );
+        }
+      }, 100); // 100ms delay
+
+      // Cleanup the timer if dependencies change before it fires
+      return () => clearTimeout(timer);
+    } else {
+      // Optional: Log why it didn't send
+      // console.log(`[Presence Effect] Conditions not met. isConnected: ${isConnected}, UserName: ${!!userName.trim()}, ActiveFileId: ${!!activeFileId}, StompConnected: ${!!stompClientRef.current?.connected}`);
+    }
+    // This effect should run whenever connection status or user details change.
+  }, [isConnected, userName, userColor, activeFileId, userId]);
 
   // Derived State (Memos)
   const htmlFileContent = useMemo(() => {
