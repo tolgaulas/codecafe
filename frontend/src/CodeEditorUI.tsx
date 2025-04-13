@@ -753,14 +753,21 @@ const CodeEditorUI = () => {
   // Share Menu Handlers <-- Add Share Menu Handlers
   const toggleShareMenu = () => {
     setIsShareMenuOpen((prev) => {
-      const closing = prev;
-      if (closing) {
-        // Reset view state when closing
-        setShareMenuView("initial");
-        setGeneratedShareLink(null);
+      const nextOpen = !prev;
+      if (nextOpen) {
+        // If opening, decide view based on session state
+        if (isSessionActive && generatedShareLink) {
+          setShareMenuView("link");
+        } else {
+          setShareMenuView("initial");
+        }
+        setIsColorPickerOpen(false); // Always close picker when opening menu
+      } else {
+        // If closing, just close the color picker
+        setIsColorPickerOpen(false);
       }
-      setIsColorPickerOpen(false); // Close color picker when toggling menu
-      return !prev;
+      // Removed logic that reset shareMenuView and generatedShareLink on close
+      return nextOpen;
     });
   };
 
@@ -878,9 +885,9 @@ const CodeEditorUI = () => {
       setShareMenuView("link"); // Switch to link view
 
       // Update URL without reloading
-      const url = new URL(window.location.href);
-      url.searchParams.set("session", newSessionId);
-      window.history.pushState({}, "", url.toString());
+      // const url = new URL(window.location.href); // <-- Removed
+      // url.searchParams.set("session", newSessionId); // <-- Removed
+      // window.history.pushState({}, "", url.toString()); // <-- Removed
     } catch (error) {
       console.error(
         "[handleStartSession] Error creating session or setting initial content:",
@@ -1813,9 +1820,7 @@ const CodeEditorUI = () => {
         shareButtonRef.current &&
         !shareButtonRef.current.contains(event.target as Node)
       ) {
-        // Reset view state when closing via outside click
-        setShareMenuView("initial");
-        setGeneratedShareLink(null);
+        // Only close the menu and color picker, don't reset the view state
         setIsShareMenuOpen(false);
         setIsColorPickerOpen(false); // Also close color picker
       }
