@@ -778,38 +778,46 @@ const CodeEditorUI = () => {
   // 5. RETURN JSX LAST
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
-      {/* Header - Assign headerRef */}
+      {/* Header - Removed p-2, added items-stretch */}
       <div
         ref={headerRef}
-        className="flex items-center justify-between bg-stone-800 bg-opacity-80 p-2 border-b border-stone-600 flex-shrink-0 relative"
+        className="flex items-stretch justify-between bg-stone-800 bg-opacity-80 border-b border-stone-600 flex-shrink-0 relative h-10"
       >
-        {/* Left Buttons Container */}
-        <div className="flex items-center">
-          <div className="flex space-x-2">
-            {/* ... File, Edit, View, Run buttons ... */}
-            {/* View Button */}
-            <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
+        {" "}
+        {/* Added fixed height h-10 */}
+        {/* Left Buttons Container - Ensure it stretches height */}
+        <div className="flex items-stretch">
+          {/* Removed space-x-2, buttons will manage their padding */}
+          <div className="flex h-full">
+            {/* File Button - Updated classes */}
+            <button className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600">
               File
             </button>
-            <button className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent">
+            {/* Edit Button - Updated classes */}
+            <button className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600">
               Edit
             </button>
+            {/* View Button - Updated classes */}
             <button
-              className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
+              className={`h-full flex items-center px-3 text-sm ${
+                isViewMenuOpen
+                  ? "bg-stone-600 text-stone-200"
+                  : "text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
+              } relative`} // Added conditional background and text color
               onClick={() => setIsViewMenuOpen((prev) => !prev)}
               ref={viewMenuButtonRef}
             >
               View
             </button>
-            {/* Run Button */}
+            {/* Run Button - Updated classes */}
             <button
-              className="px-2 py-1 text-sm rounded active:bg-stone-950 active:scale-95 text-stone-500 hover:text-stone-200 hover:bg-transparent"
+              className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
               onClick={handleRunCode}
             >
               Run
             </button>
           </div>
-          {/* View Dropdown Menu - Positioned using style, removed rounded */}
+          {/* View Dropdown Menu - Positioning might need slight adjustment if header height changed */}
           {isViewMenuOpen && (
             <div
               ref={viewMenuRef}
@@ -819,6 +827,7 @@ const CodeEditorUI = () => {
                 top: `${headerRef.current?.offsetHeight ?? 0}px`, // Position based on header height
               }}
             >
+              {/* ... dropdown buttons ... */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -828,7 +837,6 @@ const CodeEditorUI = () => {
               >
                 {isWebViewVisible ? "Close Web View" : "Open Web View"}
               </button>
-              {/* Added Terminal Toggle Button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -841,9 +849,11 @@ const CodeEditorUI = () => {
             </div>
           )}
         </div>
-        {/* ... User Avatar / Help buttons ... */}
-        {/* ... rest of header ... */}
-        <div className="flex items-center space-x-2">
+        {/* Right side - Add padding here if needed */}
+        <div className="flex items-center space-x-2 px-2">
+          {" "}
+          {/* Added padding here */}
+          {/* ... User Avatar / Help buttons ... */}
           <div className="w-8 h-8 bg-red-400 rounded-full flex items-center justify-center">
             <span className="text-stone-200">M</span>
           </div>
