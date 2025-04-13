@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
 import TerminalComponent from "./components/TerminalComponent";
@@ -101,9 +101,9 @@ const MAX_EXPLORER_WIDTH = 500;
 const EXPLORER_HANDLE_WIDTH = 8; // w-2
 
 // Web View Panel (Right)
-const DEFAULT_WEBVIEW_WIDTH = 600; // Example default width
-const MIN_WEBVIEW_WIDTH = 300; // Increased minimum width
-const MAX_WEBVIEW_WIDTH = 850;
+const DEFAULT_WEBVIEW_WIDTH_PERCENT = 0.35; // 35% of available width
+const MAX_WEBVIEW_WIDTH_PERCENT = 0.6; // 60% of available width
+const MIN_WEBVIEW_WIDTH = 300; // Keep min fixed in pixels
 const WEBVIEW_HANDLE_WIDTH = 12;
 
 // Terminal
@@ -259,10 +259,13 @@ const CodeEditorUI = () => {
   );
 
   // Web View State (Right Panel)
-  const [webViewWidth, setWebViewWidth] = useState<number>(0); // Start collapsed
+  const [webViewWidth, setWebViewWidth] = useState<number>(0); // Start collapsed (pixels)
   const [isWebViewResizing, setIsWebViewResizing] = useState<boolean>(false);
-  const [previousWebViewWidth, setPreviousWebViewWidth] = useState<number>(
-    DEFAULT_WEBVIEW_WIDTH
+  const [previousWebViewWidth, setPreviousWebViewWidth] = useState<number>(() =>
+    Math.max(
+      MIN_WEBVIEW_WIDTH,
+      window.innerWidth * DEFAULT_WEBVIEW_WIDTH_PERCENT
+    )
   );
 
   // Terminal State
@@ -430,39 +433,38 @@ const CodeEditorUI = () => {
 
   // --- Web View Resizing Logic ---
   const handleWebViewResizePointerDown = (e: React.PointerEvent) => {
-    // Check if it's the primary button (usually left mouse button)
     if (e.button !== 0) return;
     e.preventDefault();
-    // Capture the pointer
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     setIsWebViewResizing(true);
   };
 
   const handleWebViewResizePointerMove = useCallback(
     (e: PointerEvent) => {
-      // Use PointerEvent type
-      // No need to check isWebViewResizing here, listener is only active when true
       if (!mainContentRef.current) return;
 
-      // Existing logic remains the same...
       const mainRect = mainContentRef.current.getBoundingClientRect();
-
       const mouseX = Math.min(
         Math.max(e.clientX, mainRect.left),
         mainRect.right
       );
 
+      // Calculate width based on pointer position
       const newWidth = mainRect.right - mouseX;
 
+      // Calculate Max Width in Pixels based on current main content width
+      const maxPxWidth = mainRect.width * MAX_WEBVIEW_WIDTH_PERCENT;
+
+      // Apply constraints (Min Pixels, Max Pixels calculated from Percentage)
       const clampedWidth = Math.max(
         MIN_WEBVIEW_WIDTH,
-        Math.min(newWidth, MAX_WEBVIEW_WIDTH)
+        Math.min(newWidth, maxPxWidth) // Use calculated maxPxWidth
       );
 
       setWebViewWidth(clampedWidth);
     },
-    // Remove isWebViewResizing from dependencies, it's implicitly handled by the listener's existence
-    [MIN_WEBVIEW_WIDTH, MAX_WEBVIEW_WIDTH] // Dependencies are constants now
+    // Depend on the percentage constant now
+    [MAX_WEBVIEW_WIDTH_PERCENT, MIN_WEBVIEW_WIDTH]
   );
 
   useEffect(() => {
@@ -628,6 +630,39 @@ const CodeEditorUI = () => {
     };
   }, [handleGlobalPointerUp]); // Add handleGlobalPointerUp as dependency
 
+  // --- Effect to Adjust WebView on Window Resize ---
+  useEffect(() => {
+    const handleResize = () => {
+      // Check if web view is open and ref exists
+      if (webViewWidth > 0 && mainContentRef.current) {
+        const mainContentWidth =
+          mainContentRef.current.getBoundingClientRect().width;
+
+        // Calculate the max allowed width based on current container size
+        const maxPxWidth = mainContentWidth * MAX_WEBVIEW_WIDTH_PERCENT;
+
+        // If current width exceeds the new max percentage width
+        if (webViewWidth > maxPxWidth) {
+          // Clamp the width between MIN (pixels) and the new MAX (pixels)
+          const newClampedWidth = Math.max(MIN_WEBVIEW_WIDTH, maxPxWidth);
+          setWebViewWidth(newClampedWidth);
+        }
+        // Also ensure it doesn't go below min width if window shrinks drastically
+        else if (webViewWidth < MIN_WEBVIEW_WIDTH) {
+          setWebViewWidth(MIN_WEBVIEW_WIDTH); // Should ideally not happen if min is enforced elsewhere, but safe check
+        }
+      }
+      // Note: Consider adding debouncing/throttling here for performance
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    // Cleanup function
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [webViewWidth, MAX_WEBVIEW_WIDTH_PERCENT, MIN_WEBVIEW_WIDTH]); // Re-run if state or constants change
+
   // --- Explorer Toggle Logic ---
   const toggleExplorer = () => {
     setActiveIcon((prevActiveIcon) => {
@@ -652,14 +687,16 @@ const CodeEditorUI = () => {
     setActiveIcon((prevActiveIcon) => {
       const isWebViewOpen = webViewWidth > 0;
       if (isWebViewOpen) {
+        // Save current pixel width if significant
         if (webViewWidth > MIN_WEBVIEW_WIDTH / 2) {
           setPreviousWebViewWidth(webViewWidth);
         }
         setWebViewWidth(0);
         return null;
       } else {
-        setWebViewWidth(previousWebViewWidth || DEFAULT_WEBVIEW_WIDTH);
-        return "webView"; // Set activeIcon to webView
+        // Restore previous pixel width (initialized to default percentage or last user set)
+        setWebViewWidth(previousWebViewWidth);
+        return "webView";
       }
     });
   };
@@ -668,48 +705,54 @@ const CodeEditorUI = () => {
   const handleIconClick = (iconName: string | null) => {
     setActiveIcon((prevActiveIcon) => {
       let nextActiveIcon = iconName;
+      const currentExplorerWidth = explorerWidth; // Capture current state
+      const currentWebViewWidth = webViewWidth; // Capture current state
 
       // If clicking the already active 'files' icon, toggle it
       if (iconName === "files" && prevActiveIcon === "files") {
         toggleExplorer();
-        nextActiveIcon = explorerWidth > 0 ? "files" : null; // Update based on toggle result
+        // Update nextActiveIcon based on the *expected* state after toggle
+        nextActiveIcon = currentExplorerWidth === 0 ? "files" : null;
       }
       // If clicking the already active 'webView' icon, toggle it
       else if (iconName === "webView" && prevActiveIcon === "webView") {
         toggleWebView();
-        nextActiveIcon = webViewWidth > 0 ? "webView" : null;
+        // Update nextActiveIcon based on the *expected* state after toggle
+        nextActiveIcon = currentWebViewWidth === 0 ? "webView" : null;
       }
       // If switching *to* files
       else if (iconName === "files") {
         setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
-        setWebViewWidth(0); // Collapse web view
+        // Collapse web view and save its width if open
+        if (currentWebViewWidth > MIN_WEBVIEW_WIDTH / 2) {
+          setPreviousWebViewWidth(currentWebViewWidth);
+        }
+        setWebViewWidth(0);
       }
       // If switching *to* webView
       else if (iconName === "webView") {
-        setWebViewWidth(previousWebViewWidth || DEFAULT_WEBVIEW_WIDTH);
-        setExplorerWidth(0); // Collapse explorer
+        // Open web view using its previous width
+        setWebViewWidth(previousWebViewWidth);
+        // Collapse explorer and save its width if open
+        if (currentExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
+          setPreviousExplorerWidth(currentExplorerWidth);
+        }
+        setExplorerWidth(0);
       }
       // If switching to other icons (search, chat, etc.) or null
       else {
-        setExplorerWidth(0); // Collapse both
+        // Collapse both and save widths if open
+        if (currentExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
+          setPreviousExplorerWidth(currentExplorerWidth);
+        }
+        if (currentWebViewWidth > MIN_WEBVIEW_WIDTH / 2) {
+          setPreviousWebViewWidth(currentWebViewWidth);
+        }
+        setExplorerWidth(0);
         setWebViewWidth(0);
       }
 
-      // Save previous widths if collapsing
-      if (
-        iconName !== "files" &&
-        explorerWidth > 0 &&
-        explorerWidth > MIN_EXPLORER_WIDTH / 2
-      ) {
-        setPreviousExplorerWidth(explorerWidth);
-      }
-      if (
-        iconName !== "webView" &&
-        webViewWidth > 0 &&
-        webViewWidth > MIN_WEBVIEW_WIDTH / 2
-      ) {
-        setPreviousWebViewWidth(webViewWidth);
-      }
+      // No need to save widths again here, handled within the specific conditions
 
       return nextActiveIcon; // Set the new active icon
     });
@@ -789,6 +832,28 @@ const CodeEditorUI = () => {
       }));
     }
   };
+
+  // --- Prepare content for WebViewPanel ---
+  const htmlFileContent = useMemo(() => {
+    const htmlFile = openFiles.find((f) => f.language === "html");
+    return htmlFile
+      ? fileContents[htmlFile.id] || ""
+      : "<!-- No HTML file open -->";
+  }, [openFiles, fileContents]);
+
+  const cssFileContent = useMemo(() => {
+    // Find the first CSS file open
+    const cssFile = openFiles.find((f) => f.language === "css");
+    return cssFile ? fileContents[cssFile.id] || "" : "/* No CSS file open */";
+    // Consider concatenating multiple CSS files if needed later
+  }, [openFiles, fileContents]);
+
+  const jsFileContent = useMemo(() => {
+    // Find the first JS file open
+    const jsFile = openFiles.find((f) => f.language === "javascript");
+    return jsFile ? fileContents[jsFile.id] || "" : "// No JS file open";
+    // Consider concatenating or handling modules later if needed
+  }, [openFiles, fileContents]);
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
@@ -1147,7 +1212,13 @@ const CodeEditorUI = () => {
             }`}
             style={{ width: `${webViewWidth}px` }}
           >
-            <WebViewPanel />
+            {webViewWidth > 0 && (
+              <WebViewPanel
+                htmlContent={htmlFileContent}
+                cssContent={cssFileContent}
+                jsContent={jsFileContent}
+              />
+            )}
           </div>
         </div>
       </div>

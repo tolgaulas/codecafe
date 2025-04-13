@@ -1,11 +1,64 @@
-import React from "react";
+import React, { useMemo } from "react";
 import "./WebViewPanel.css"; // Import the specific CSS
 
-const WebViewPanel: React.FC = () => {
+// Define props interface
+interface WebViewPanelProps {
+  htmlContent?: string;
+  cssContent?: string;
+  jsContent?: string;
+}
+
+const WebViewPanel: React.FC<WebViewPanelProps> = ({
+  htmlContent = "",
+  cssContent = "",
+  jsContent = "",
+}) => {
+  // Construct srcDoc using useMemo to avoid unnecessary recalculations
+  const srcDoc = useMemo(() => {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          /* Basic reset for preview */
+          body { margin: 0; padding: 8px; font-family: sans-serif; }
+          ${cssContent}
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+        <script>
+          /* Optional: Add error handling for preview script */
+          try {
+            ${jsContent}
+          } catch (error) {
+            console.error('Preview Script Error:', error);
+            // Optionally display error in the preview itself
+            const errorDiv = document.createElement('div');
+            errorDiv.style.position = 'fixed';
+            errorDiv.style.bottom = '0';
+            errorDiv.style.left = '0';
+            errorDiv.style.right = '0';
+            errorDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+            errorDiv.style.color = 'white';
+            errorDiv.style.padding = '5px';
+            errorDiv.style.fontSize = '12px';
+            errorDiv.style.zIndex = '9999';
+            errorDiv.textContent = 'Preview Script Error: ' + error.message;
+            document.body.appendChild(errorDiv);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+  }, [htmlContent, cssContent, jsContent]); // Dependencies for useMemo
+
   return (
     // Wrapper div for scoping CSS
     <div id="web-view-content" className="h-full flex flex-col">
-      {/* Replicated Browser Chrome HTML */}
+      {/* Browser Chrome UI (Optional - can be simplified if needed) */}
       <div id="browser" className="clear flex-shrink-0">
         {/* tabs */}
         <ul className="tabs">
@@ -70,16 +123,14 @@ const WebViewPanel: React.FC = () => {
 
       {/* Actual content iframe area */}
       <div className="page flex-1 min-h-0">
-        {/* TODO: Replace this with the actual iframe for rendering user code */}
         <iframe
           title="WebView Preview"
           width="100%"
           height="100%"
-          srcDoc="<html><body>Preview Area</body></html>"
+          srcDoc={srcDoc}
           frameBorder="0"
-          className="bg-white" // Added white background for visibility
-          // IMPORTANT: Add sandbox attribute here when loading user code!
-          // sandbox="allow-scripts"
+          className="bg-white"
+          sandbox="allow-scripts"
         ></iframe>
       </div>
     </div>
