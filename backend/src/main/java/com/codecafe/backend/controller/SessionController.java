@@ -98,8 +98,8 @@ public class SessionController {
         }
 
         try {
-            // Call OtService to set the initial content
-            otService.setDocumentContent(payload.getDocumentId(), payload.getContent());
+            // Call OtService to set the initial content, NOW INCLUDING sessionId
+            otService.setDocumentContent(sessionId, payload.getDocumentId(), payload.getContent());
             logger.info(String.format("Successfully set initial content for doc [%s] in session [%s]", payload.getDocumentId(), sessionId));
             return ResponseEntity.ok().build();
         } catch (Exception e) {

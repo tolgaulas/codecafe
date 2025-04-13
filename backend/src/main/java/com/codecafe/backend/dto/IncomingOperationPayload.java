@@ -13,16 +13,18 @@ public class IncomingOperationPayload {
     private int revision;
     private List<Object> operation; // Raw operation list (numbers or strings)
     private String documentId;
+    private String sessionId;
 
     // Default constructor for deserialization
     public IncomingOperationPayload() {
     }
 
-    public IncomingOperationPayload(String clientId, int revision, List<Object> operation, String documentId) {
+    public IncomingOperationPayload(String clientId, int revision, List<Object> operation, String documentId, String sessionId) {
         this.clientId = clientId;
         this.revision = revision;
         this.operation = operation;
         this.documentId = documentId;
+        this.sessionId = sessionId;
     }
 
     // Getters and Setters
@@ -59,6 +61,14 @@ public class IncomingOperationPayload {
         this.documentId = documentId;
     }
 
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
     // equals, hashCode, toString (optional but good practice)
 
     @Override
@@ -69,12 +79,13 @@ public class IncomingOperationPayload {
         return revision == that.revision &&
                 Objects.equals(clientId, that.clientId) &&
                 Objects.equals(operation, that.operation) &&
-                Objects.equals(documentId, that.documentId);
+                Objects.equals(documentId, that.documentId) &&
+                Objects.equals(sessionId, that.sessionId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(clientId, revision, operation, documentId);
+        return Objects.hash(clientId, revision, operation, documentId, sessionId);
     }
 
     @Override
@@ -84,6 +95,7 @@ public class IncomingOperationPayload {
                 ", revision=" + revision +
                 ", operation=" + operation +
                 ", documentId='" + documentId + '\'' +
+                ", sessionId='" + sessionId + '\'' +
                 '}';
     }
 } 

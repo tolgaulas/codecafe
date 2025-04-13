@@ -51,29 +51,32 @@ public class OtController {
 
         String clientId = payload.getClientId();
         String documentId = payload.getDocumentId();
+        String sessionId = payload.getSessionId();
 
-        if (clientId == null || documentId == null) {
-            logger.warning("Received operation without clientId or documentId in payload. Discarding.");
+        if (clientId == null || documentId == null || sessionId == null) {
+            logger.warning("Received operation without clientId, documentId, or sessionId in payload. Discarding.");
             return;
         }
 
-        logger.info(String.format("OtController received operation payload from client [%s] for doc [%s]: Revision=%d, Op=%s",
-                 clientId, documentId, payload.getRevision(), payload.getOperation()));
+        logger.info(String.format("OtController received operation payload from client [%s] for session [%s], doc [%s]: Revision=%d, Op=%s",
+                 clientId, sessionId, documentId, payload.getRevision(), payload.getOperation()));
 
         try {
             // Process the operation using the new service method
             // Deserialize List<Object> into TextOperation using the constructor
             TextOperation operation = new TextOperation(payload.getOperation()); 
-            TextOperation transformedOp = otService.receiveOperation(documentId, payload.getRevision(), operation);
+            TextOperation transformedOp = otService.receiveOperation(sessionId, documentId, payload.getRevision(), operation);
 
-            // 1. Broadcast the transformed operation to ALL clients
+            // 1. Broadcast the transformed operation
             Map<String, Object> broadcastPayload = new HashMap<>();
             broadcastPayload.put("documentId", documentId);
             broadcastPayload.put("clientId", clientId);
             broadcastPayload.put("operation", transformedOp.getOps());
 
-            messagingTemplate.convertAndSend("/topic/operations", broadcastPayload);
-            logger.fine(String.format("Broadcasted transformed op from client [%s] for doc [%s] to /topic/operations", clientId, documentId));
+            // Broadcast to the session-and-document-specific topic
+            String destination = String.format("/topic/sessions/%s/operations/document/%s", sessionId, documentId);
+            messagingTemplate.convertAndSend(destination, broadcastPayload);
+            logger.fine(String.format("Broadcasted transformed op from client [%s] for session [%s], doc [%s] to %s", clientId, sessionId, documentId, destination));
 
             // 2. Send ACK back to the original sender ONLY
             String ackDestination = "/topic/ack/" + clientId;
@@ -81,10 +84,10 @@ public class OtController {
             logger.fine("Sent ACK to client [" + clientId + "] at " + ackDestination);
 
         } catch (IllegalArgumentException e) {
-            logger.warning(String.format("Error processing operation from client [%s] for doc [%s]: %s", clientId, documentId, e.getMessage()));
+            logger.warning(String.format("Error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
             // Optionally send an error message back to the client
         } catch (Exception e) {
-            logger.severe(String.format("Unexpected error processing operation from client [%s] for doc [%s]: %s", clientId, documentId, e.getMessage()));
+            logger.severe(String.format("Unexpected error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
             // Handle unexpected errors
         }
     }
@@ -132,6 +135,7 @@ public class OtController {
     @MessageMapping("/get-document-state")
     public void getDocumentState(@Payload Map<String, String> payload, Principal principal) {
         String documentId = payload.get("documentId");
+        String sessionId = payload.get("sessionId");
 
         // --- Determine Requesting User ID (Placeholder) ---
         String requestingUserId = null;
@@ -147,22 +151,22 @@ public class OtController {
         }
         // ---------------------------------------------------
 
-        if (documentId == null) {
-            logger.warning("Received get-document-state request without documentId. Ignoring.");
+        if (documentId == null || sessionId == null) {
+            logger.warning("Received get-document-state request without documentId or sessionId. Ignoring.");
             return;
         }
 
-        logger.info("Received request for document state for doc [" + documentId + "] from user [" + (requestingUserId != null ? requestingUserId : "unknown") + "]");
+        logger.info("Received request for document state for session [" + sessionId + "], doc [" + documentId + "] from user [" + (requestingUserId != null ? requestingUserId : "unknown") + "]");
 
         // --- Fetch Participants (Placeholder) ---
         List<UserInfoDTO> participants = Collections.emptyList(); // Default to empty list
         try {
-            // TODO: Replace this with your actual service call, passing requestingUserId for exclusion
-            participants = sessionRegistryService.getActiveParticipantsForDocument(documentId, requestingUserId);
-            logger.info("Fetched participants for document [" + documentId + "] (excluding user [" + requestingUserId + "])");
+            // Pass sessionId to getActiveParticipantsForDocument
+            participants = sessionRegistryService.getActiveParticipantsForDocument(sessionId, documentId, requestingUserId);
+            logger.info(String.format("Fetched %d participants for session [%s], document [%s] (excluding user [%s])", participants.size(), sessionId, documentId, requestingUserId));
 
         } catch (Exception e) {
-            logger.severe("Error fetching participants for document [" + documentId + "]: " + e.getMessage());
+            logger.severe(String.format("Error fetching participants for session [%s], document [%s]: %s", sessionId, documentId, e.getMessage()));
         }
         // ---------------------------------------
 
@@ -170,8 +174,8 @@ public class OtController {
         // --- Use DocumentState DTO for the response ---
         DocumentState stateResponse = new DocumentState();
         stateResponse.setDocumentId(documentId);
-        stateResponse.setDocument(otService.getDocumentContent(documentId));
-        stateResponse.setRevision(otService.getRevision(documentId));
+        stateResponse.setDocument(otService.getDocumentContent(sessionId, documentId));
+        stateResponse.setRevision(otService.getRevision(sessionId, documentId));
         // --- Set the fetched participants list --- 
         stateResponse.setParticipants(participants); // Uncommented
         // -----------------------------------------
@@ -181,7 +185,9 @@ public class OtController {
                     ", Participants Count=" + stateResponse.getParticipants().size() + // Use getter
                     " for doc [" + documentId + "]");
 
-        // Send state back using the DTO
-        messagingTemplate.convertAndSend("/topic/document-state", stateResponse);
+        // Send state back to the specific session and document topic
+        String destination = String.format("/topic/sessions/%s/state/document/%s", sessionId, documentId);
+        messagingTemplate.convertAndSend(destination, stateResponse);
+        logger.info(String.format("Sent document state for session [%s], doc [%s] to %s", sessionId, documentId, destination));
     }
 }

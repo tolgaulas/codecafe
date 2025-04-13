@@ -5,6 +5,7 @@ public class CursorMessage {
     private UserInfo userInfo;
     // Keep documentId if cursors are document-specific, remove if session-wide
     private String documentId;
+    private String sessionId;
 
 
     // Getters and Setters
@@ -24,12 +25,21 @@ public class CursorMessage {
         this.documentId = documentId;
     }
 
+     public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
 
     @Override
     public String toString() {
         return "CursorMessage{" +
                 "userInfo=" + userInfo +
                 ", documentId='" + documentId + "\'" +
+                ", sessionId='" + sessionId + "\'" +
                 '}';
     }
 }

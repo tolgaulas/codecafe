@@ -999,15 +999,21 @@ const CodeEditorUI = () => {
         // Define callbacks WITH documentId included
         const clientCallbacks: IClientCallbacks = {
           sendOperation: (revision: number, operation: TextOperation) => {
-            if (stompClientRef.current?.connected && currentActiveFileId) {
+            if (
+              stompClientRef.current?.connected &&
+              currentActiveFileId &&
+              sessionId
+            ) {
+              // Check sessionId existence
               console.log(
-                `[sendOperation Callback] Preparing to send Op for ${currentActiveFileId} @ rev ${revision}`
+                `[sendOperation Callback] Preparing to send Op for ${currentActiveFileId} (Session: ${sessionId}) @ rev ${revision}` // Include sessionId in log
               );
               const payload = {
                 documentId: currentActiveFileId,
                 clientId: userId,
                 revision: revision,
                 operation: operation.toJSON(),
+                sessionId: sessionId, // Add sessionId to payload
               };
               console.log(`[Client -> Server Op] /app/operation`, payload);
               stompClientRef.current.send(
@@ -1017,7 +1023,7 @@ const CodeEditorUI = () => {
               );
             } else {
               console.error(
-                "Cannot send operation - STOMP not connected or no active file"
+                "Cannot send operation - STOMP not connected, no active file, or no session ID"
               );
             }
           },
@@ -1063,13 +1069,19 @@ const CodeEditorUI = () => {
         // Subscribe to topics (handle documentId filtering)
 
         // Document State Handling
+        const stateTopic = `/topic/sessions/${sessionId}/state/document/${currentActiveFileId}`;
+        console.log(
+          `[STOMP Setup] Subscribing to Document State topic: ${stateTopic}`
+        );
         subscriptions.push(
-          stompClient.subscribe("/topic/document-state", (message: any) => {
+          stompClient.subscribe(stateTopic, (message: any) => {
+            // Use the dynamic topic
             try {
               const state = JSON.parse(message.body);
               console.log(`[Server -> Client State] Received:`, state);
 
               // *** Check if state is for the currently active file ***
+              // This check might still be useful as a sanity check, though less critical now
               if (state.documentId !== currentActiveFileId) {
                 console.log(
                   `   Ignoring state for inactive file: ${state.documentId} (current: ${currentActiveFileId})`
@@ -1189,9 +1201,14 @@ const CodeEditorUI = () => {
           })
         );
 
-        // Operations Handling
+        // Operations Handling (Subscribe to SESSION and DOCUMENT specific topic)
+        const operationsTopic = `/topic/sessions/${sessionId}/operations/document/${currentActiveFileId}`;
+        console.log(
+          `[STOMP Setup] Subscribing to Operations topic: ${operationsTopic}`
+        );
         subscriptions.push(
-          stompClient.subscribe("/topic/operations", (message: any) => {
+          stompClient.subscribe(operationsTopic, (message: any) => {
+            // Use the dynamic topic
             try {
               const payload = JSON.parse(message.body);
               if (
@@ -1215,36 +1232,43 @@ const CodeEditorUI = () => {
                 return;
               }
 
-              // *** Apply to ACTIVE file EDITOR via OT Client (if applicable) ***
-              // Use the activeFileId captured by the effect's closure
-              if (payload.documentId === currentActiveFileId) {
-                if (clientRef.current) {
-                  try {
-                    const operationForClient = TextOperation.fromJSON(
-                      payload.operation
-                    );
-                    clientRef.current.applyServer(operationForClient);
-                  } catch (e) {
-                    console.error(
-                      `[Server -> Client Op] Error applying server op to ACTIVE file EDITOR ${currentActiveFileId}:`,
-                      e,
-                      payload.operation
-                    );
-                  }
-                } else {
-                  console.warn(
-                    `[Server -> Client Op] Received op for ACTIVE file ${payload.documentId} before client init.`
+              // *** No need to check documentId again here, as we subscribed specifically ***
+              // *** Apply to ACTIVE file EDITOR via OT Client ***
+              if (clientRef.current) {
+                try {
+                  const operationForClient = TextOperation.fromJSON(
+                    payload.operation
+                  );
+                  clientRef.current.applyServer(operationForClient);
+                } catch (e) {
+                  console.error(
+                    `[Server -> Client Op] Error applying server op to ACTIVE file EDITOR ${currentActiveFileId}:`,
+                    e,
+                    payload.operation
                   );
                 }
+              } else {
+                console.warn(
+                  `[Server -> Client Op] Received op for ACTIVE file ${payload.documentId} before client init.`
+                );
               }
 
-              // *** ALWAYS Apply to fileContents state for WebView update ***
+              // *** Apply to fileContents state for WebView update ***
+              // We still need the documentId from the payload here to update the correct key in the state
               try {
                 const operationForState = TextOperation.fromJSON(
                   payload.operation
                 );
                 setFileContents((prevContents) => {
                   const docIdToUpdate = payload.documentId;
+                  // Double-check if docIdToUpdate actually matches currentActiveFileId?
+                  // Might be overly cautious, but ensures state update aligns with subscription.
+                  if (docIdToUpdate !== currentActiveFileId) {
+                    console.warn(
+                      `[Server -> Client Op] Received op for doc ${docIdToUpdate} on topic for ${currentActiveFileId}. Ignoring for fileContents update.`
+                    );
+                    return prevContents;
+                  }
                   const currentContent = prevContents[docIdToUpdate] ?? ""; // Get content for the specific doc
                   const newContent = operationForState.apply(currentContent);
 
@@ -1281,13 +1305,14 @@ const CodeEditorUI = () => {
           })
         );
 
-        // Selections Handling (Replaces /topic/cursors)
-        const selectionTopic = "/topic/selections";
+        // Selections Handling (Subscribe to SESSION and DOCUMENT specific topic)
+        const selectionTopic = `/topic/sessions/${sessionId}/selections/document/${currentActiveFileId}`; // Use the dynamic topic
         console.log(
-          `[CodeEditorUI WS Setup] Subscribing to ${selectionTopic}...`
-        ); // Log subscription attempt
+          `[CodeEditorUI WS Setup] Subscribing to Selections topic: ${selectionTopic}...`
+        );
         subscriptions.push(
           stompClient.subscribe(selectionTopic, (message: any) => {
+            // Use the dynamic topic
             try {
               const payload = JSON.parse(message.body);
               // Expecting payload: { documentId: string, userInfo: UserInfo }
@@ -1422,13 +1447,16 @@ const CodeEditorUI = () => {
 
         // Request initial state FOR THE CURRENT ACTIVE FILE
         console.log(
-          `[Client -> Server ReqState] Requesting state for ${currentActiveFileId}...`
+          `[Client -> Server ReqState] Requesting state for session ${sessionId}, doc ${currentActiveFileId}...` // Update log
         );
         stompClient.send(
           // Corrected back to send
           "/app/get-document-state",
           {},
-          JSON.stringify({ documentId: currentActiveFileId })
+          JSON.stringify({
+            documentId: currentActiveFileId,
+            sessionId: sessionId, // Add sessionId
+          })
         );
       },
       (error: any) => {
@@ -1765,6 +1793,7 @@ const CodeEditorUI = () => {
       ) {
         const payload = {
           documentId: activeFileId,
+          sessionId: sessionId, // Add sessionId
           userInfo: {
             id: userId,
             name: userName.trim(),
