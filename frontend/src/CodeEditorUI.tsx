@@ -827,11 +827,22 @@ const CodeEditorUI = () => {
       setFileContents((prevContents) => {
         const newContents = { ...prevContents };
         keyFiles.forEach((fileId) => {
-          const sentContent = fileContents[fileId]; // Get the content that was sent
-          if (sentContent !== undefined) {
-            newContents[fileId] = sentContent;
+          // CORRECTED: Read from prevContents
+          const contentThatWasSent = prevContents[fileId];
+          if (contentThatWasSent !== undefined) {
+            // CORRECTED: Assign the value read from prevContents
+            newContents[fileId] = contentThatWasSent;
+          } else {
+            // Optional: Handle case where key file content wasn't in prevContents?
+            console.warn(
+              `[handleStartSession] Content for key file ${fileId} missing in previous state during update.`
+            );
           }
         });
+        console.log(
+          "[handleStartSession] Correctly updating local fileContents state post-init:",
+          newContents
+        );
         return newContents;
       });
       console.log(
@@ -992,18 +1003,20 @@ const CodeEditorUI = () => {
           },
           sendSelection: (selection: OTSelection | null) => {
             if (stompClientRef.current?.connected && currentActiveFileId) {
+              // CORRECTED PAYLOAD STRUCTURE
               const payload = {
                 documentId: currentActiveFileId,
-                clientId: userId,
-                selection: selection?.toJSON() ?? null,
+                userInfo: {
+                  // <<< Use nested userInfo
+                  id: userId,
+                  name: userName.trim(), // <<< Include name
+                  color: userColor, // <<< Include color
+                  cursorPosition: null, // OT Client doesn't manage raw cursor, set to null or derive if needed
+                  selection: selection?.toJSON() ?? null,
+                },
               };
-              console.log(`[Client -> Server Sel] /app/selection`, payload);
-              // Send the payload
-              // *** ADD LOGGING HERE ***
-              console.log(
-                "[CodeEditorUI handleSendSelectionData] Sending payload object:",
-                payload
-              );
+              // Log uses different text to distinguish from the direct editor event
+              console.log(`[OT Client -> Server Sel] /app/selection`, payload);
               stompClientRef.current.send(
                 "/app/selection",
                 {},
