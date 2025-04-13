@@ -1305,7 +1305,7 @@ const CodeEditorUI = () => {
 
               // Ignore own selection broadcasts
               if (remoteUserId === userId) {
-                return;
+                return; // Ignore own selection broadcasts
               }
 
               // Update the remoteUsers state
@@ -1487,6 +1487,20 @@ const CodeEditorUI = () => {
   const currentRemoteUsers = useMemo(() => {
     return activeFileId ? remoteUsers[activeFileId] || [] : [];
   }, [remoteUsers, activeFileId]);
+
+  // Derive a unique list of all remote participants in the session (excluding self)
+  const uniqueRemoteParticipants = useMemo(() => {
+    const allUsers = Object.values(remoteUsers).flat();
+    const uniqueUsersMap = new Map<string, RemoteUser>();
+    allUsers.forEach((user) => {
+      if (user.id !== userId) {
+        // Exclude the current user
+        // Only add if the user has a valid name and color (implicitly handled by update logic)
+        uniqueUsersMap.set(user.id, user);
+      }
+    });
+    return Array.from(uniqueUsersMap.values());
+  }, [remoteUsers, userId]);
 
   // 4. EFFECTS FOURTH
 
@@ -1789,9 +1803,26 @@ const CodeEditorUI = () => {
           )}
         </div>
         {/* Right side - Change px-2 to p-2 for all-around padding */}
-        <div className="flex items-stretch">
+        <div className="flex items-stretch mr-2">
           {" "}
-          {/* Use items-stretch */}
+          {/* Use items-stretch, added mr-2 for spacing */}
+          {/* Participant Circles - NEW */}
+          {isSessionActive && uniqueRemoteParticipants.length > 0 && (
+            <div className="flex items-center px-2 -space-x-2">
+              {uniqueRemoteParticipants.map((user) => (
+                <div
+                  key={user.id}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ring-1 ring-stone-900/50 cursor-default shadow-sm"
+                  style={{ backgroundColor: user.color }}
+                  title={user.name} // Tooltip with full name
+                >
+                  <span className="text-white/90 select-none">
+                    {user.name ? user.name[0].toUpperCase() : "?"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Share Button */}
           <div className="relative flex h-full">
             {" "}
