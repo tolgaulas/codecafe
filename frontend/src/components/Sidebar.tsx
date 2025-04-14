@@ -47,8 +47,9 @@ interface SidebarProps {
 
   // File Explorer Props (managed in App.tsx)
   activeFileId: string | null;
-  handleOpenFile: (fileId: string) => void;
+  handleOpenFile: (fileId: string, isSessionActive: boolean) => void;
   mockFiles: typeof MOCK_FILES; // Pass MOCK_FILES constant
+  isSessionActive: boolean; // <-- Add prop
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -72,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeFileId,
   handleOpenFile,
   mockFiles,
+  isSessionActive, // <-- Destructure prop
 }) => {
   // Moved from App.tsx
   const handleIconClick = (iconName: string | null) => {
@@ -224,7 +226,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
                           : "hover:bg-stone-700"
                       }`}
-                      onClick={() => handleOpenFile(id)} // Use passed prop
+                      onClick={() => handleOpenFile(id, isSessionActive)} // <-- Call with isSessionActive
                     >
                       <IconComponent
                         size={18}

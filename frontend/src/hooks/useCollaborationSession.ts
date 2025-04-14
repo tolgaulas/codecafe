@@ -367,13 +367,47 @@ export const useCollaborationSession = ({
                   clientCallbacks
                 );
 
-                // Notify App component of initial state
+                // 1. Notify App component of initial state (updates Zustand store)
                 onStateReceived(
                   state.documentId,
-                  state.document,
+                  state.document, // Use state.document which should be the full content string
                   state.revision,
                   processedParticipants
                 );
+
+                // 2. Directly update the Monaco Editor via the Adapter IF it's the active document
+                // This is crucial for initial load when joining.
+                if (
+                  state.documentId === currentFileIdRef.current && // Double check it's still active
+                  adapterRef.current &&
+                  editorInstance // Ensure editor is mounted
+                ) {
+                  const currentEditorValue = editorInstance
+                    .getModel()
+                    ?.getValue();
+                  if (currentEditorValue !== state.document) {
+                    console.log(
+                      `   Updating Monaco editor content for ${state.documentId} from initial state.`
+                    );
+                    adapterRef.current.ignoreNextChange = true; // Prevent loopback
+                    try {
+                      // Use setValue for initial state setting
+                      editorInstance.setValue(state.document);
+                      // TODO: Consider cursor preservation if needed
+                    } catch (error) {
+                      console.error(
+                        "Error setting editor value from initial state:",
+                        error
+                      );
+                      adapterRef.current.ignoreNextChange = false; // Reset on error
+                    }
+                    // Flag should be reset automatically by adapter later
+                  } else {
+                    console.log(
+                      `   Editor content for ${state.documentId} already matches initial state.`
+                    );
+                  }
+                }
 
                 // Register adapter callbacks AFTER client is initialized and initial state is handled
                 if (adapterRef.current) {

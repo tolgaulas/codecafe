@@ -38,7 +38,7 @@ interface FileTabsProps {
   // activeFileId: string | null;
   // setActiveFileId: (id: string | null) => void;
   handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea
-  handleCloseTab: (fileIdToClose: string, e: React.MouseEvent) => void; // Still passed from App via MainEditorArea
+  handleCloseTab: (fileIdToClose: string) => void; // <-- Update signature (no event)
 
   // Drag & Drop State & Handlers (Get state/setters from store instead of props)
   // draggingId: string | null;

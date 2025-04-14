@@ -33,7 +33,7 @@ interface MainEditorAreaProps {
   // activeFileId: string | null;
   // setActiveFileId: (id: string | null) => void;
   handleSwitchTab: (fileId: string) => void; // Still passed from App
-  handleCloseTab: (fileIdToClose: string, e: React.MouseEvent) => void; // Still passed from App
+  handleCloseTab: (fileIdToClose: string) => void; // <-- Update signature
   // draggingId: string | null;
   // setDraggingId: (id: string | null) => void;
   // dropIndicator: { tabId: string | null; side: "left" | "right" | null };
@@ -59,6 +59,7 @@ interface MainEditorAreaProps {
   cssFileContent: string;
   jsFileContent: string;
   toggleWebView: () => void; // Pass toggle function for WebViewPanel close button
+  isSessionActive: boolean; // <-- Add prop
 }
 
 const MainEditorArea: React.FC<MainEditorAreaProps> = ({
@@ -83,6 +84,7 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
   cssFileContent,
   jsFileContent,
   toggleWebView,
+  isSessionActive, // <-- Destructure prop
 }) => {
   // --- Get state from Zustand Store ---
   const {
@@ -123,6 +125,7 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
               onEditorDidMount={handleEditorDidMount}
               users={currentRemoteUsers}
               localUserId={localUserId}
+              isSessionActive={isSessionActive} // <-- Pass down
             />
           ) : (
             <div className="flex items-center justify-center h-full text-stone-500">

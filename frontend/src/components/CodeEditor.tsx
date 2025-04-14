@@ -9,6 +9,11 @@ import {
   offsetToPosition,
 } from "../TextOperationSystem";
 
+// Extend props to include isSessionActive
+interface ExtendedCodeEditorProps extends CodeEditorProps {
+  isSessionActive?: boolean; // Optional for now
+}
+
 const CodeEditor = ({
   onCodeChange,
   users = [],
@@ -23,7 +28,8 @@ const CodeEditor = ({
   showLineNumbers,
   onEditorDidMount,
   localUserId,
-}: CodeEditorProps) => {
+  isSessionActive = false, // Default to false if not provided
+}: ExtendedCodeEditorProps) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorationsRef = useRef<string[]>([]);
   const isUpdatingRef = useRef(false);
@@ -99,6 +105,15 @@ const CodeEditor = ({
 
   // Handle code updates with improved cursor preservation
   useEffect(() => {
+    // *** ONLY RUN IF NOT IN A SESSION ***
+    if (isSessionActive) {
+      console.log(
+        "[CodeEditor code update Effect] Skipping due to active session."
+      );
+      return;
+    }
+    // *** END CONDITION ***
+
     if (!editorRef.current || code === undefined || isUpdatingRef.current)
       return;
 
@@ -137,7 +152,7 @@ const CodeEditor = ({
     } finally {
       isUpdatingRef.current = false;
     }
-  }, [code]);
+  }, [code, isSessionActive]);
 
   // Update styles for user cursors
   useEffect(() => {

@@ -120,39 +120,22 @@ const App = () => {
   const {
     openFiles,
     activeFileId,
-    draggingId, // Still needed by MainEditorArea -> FileTabs
-    dropIndicator, // Still needed by MainEditorArea -> FileTabs
-    setOpenFiles, // Needed for handleOpenFile/handleCloseTab
-    setActiveFileId, // Needed for handleOpenFile/handleCloseTab/handleSwitchTab
-    setDraggingId, // Still needed by MainEditorArea -> FileTabs
-    setDropIndicator, // Still needed by MainEditorArea -> FileTabs
+    draggingId,
+    dropIndicator,
+    setOpenFiles,
+    setActiveFileId,
+    setDraggingId,
+    setDropIndicator,
   } = useFileStore();
-  // --- End Zustand Store ---
 
-  // File Contents State (Remains in App for now due to collaboration logic)
-  const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
-    () => {
-      const initialContents: { [id: string]: string } = {};
-      // Use store's initial files to initialize content
-      useFileStore.getState().openFiles.forEach((file) => {
-        const fileData = MOCK_FILES[file.id];
-        if (fileData) {
-          initialContents[file.id] = fileData.content;
-        } else {
-          // Handle error case if file from store isn't in MOCK_FILES (shouldn't happen with current init)
-          initialContents[
-            file.id
-          ] = `// Error: Content for ${file.id} not found`;
-        }
-      });
-      return initialContents;
-    }
-  );
-  // const [draggingId, setDraggingId] = useState<string | null>(null); // Moved to Zustand
-  // const [dropIndicator, setDropIndicator] = useState<{
-  //   tabId: string | null;
-  //   side: "left" | "right" | null;
-  // }>({ tabId: null, side: null }); // Moved to Zustand
+  // Select specific state slices needed by App.tsx itself
+  const fileContents = useFileStore((state) => state.fileContents);
+
+  // Get actions (these have stable references, don't need selectors usually)
+  const openFile = useFileStore((state) => state.openFile);
+  const closeFile = useFileStore((state) => state.closeFile);
+  const switchTab = useFileStore((state) => state.switchTab);
+  const setFileContent = useFileStore((state) => state.setFileContent);
 
   // View Menu State
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
@@ -271,14 +254,10 @@ const App = () => {
     onStateReceived: useCallback(
       (fileId, content, revision, participants) => {
         console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
-        // Update local content ONLY if it differs significantly (avoid minor formatting changes)
-        // Or simply trust the server state entirely on initial load for the file.
-        setFileContents((prev) => ({
-          ...prev,
-          [fileId]: content, // Overwrite with server state
-        }));
-        // Update remote users for this specific file
-        // Ensure we filter out the current user if the server sends them back
+        // Update fileContents in the store
+        setFileContent(fileId, content);
+
+        // Update remote users (still local state for now)
         const filteredParticipants = participants.filter(
           (p) => p.id !== userId
         );
@@ -287,15 +266,15 @@ const App = () => {
           [fileId]: filteredParticipants,
         }));
       },
-      [activeFileId, userId]
+      [activeFileId, userId, setFileContent]
     ), // Add userId dependency
-    onOperationReceived: useCallback((fileId, operation) => {
-      // Apply the operation received from the server (via the hook) to the local fileContents state
-      // This keeps fileContents in sync for things like the WebView
-      // console.log(`[App onOperationReceived] Op for ${fileId}: ${operation.toString()}`);
-      setFileContents((prev) => {
-        const currentContent = prev[fileId] ?? "";
+    onOperationReceived: useCallback(
+      (fileId, operation) => {
+        // Apply the operation received from the server to the store's fileContents state
         try {
+          // Get current content from the store
+          const currentContent =
+            useFileStore.getState().fileContents[fileId] ?? "";
           const newContent = operation.apply(currentContent);
           console.log(
             `[App onOperationReceived] Applied Op for ${fileId}. Prev Length: ${
@@ -304,8 +283,10 @@ const App = () => {
               currentContent !== newContent
             }`
           );
-          if (newContent === currentContent) return prev; // No change
-          return { ...prev, [fileId]: newContent };
+          if (newContent !== currentContent) {
+            // Update the store
+            setFileContent(fileId, newContent);
+          }
         } catch (applyError) {
           console.error(
             `[App onOperationReceived] Error applying server op to fileContents for ${fileId}:`,
@@ -313,12 +294,12 @@ const App = () => {
             "Op:",
             operation.toString(),
             "Content:",
-            currentContent
+            useFileStore.getState().fileContents[fileId] ?? ""
           );
-          return prev; // Return previous state on error
         }
-      });
-    }, []), // No dependencies needed for setFileContents based on prev state
+      },
+      [setFileContent]
+    ), // No dependencies needed for setFileContents based on prev state
     onRemoteUsersUpdate: useCallback(
       (fileId, updatedUsersInfo) => {
         // This callback now receives potentially partial updates (single user) from the hook.
@@ -399,7 +380,7 @@ const App = () => {
     // setIsEditorReadyForOT(true); // Removed - hook uses editorInstance directly
   };
 
-  // Code Execution Handler
+  // Code Execution Handler (Use store state)
   const handleRunCode = async () => {
     try {
       if (!activeFileId) {
@@ -408,6 +389,7 @@ const App = () => {
       }
 
       const activeFile = openFiles.find((f) => f.id === activeFileId);
+      // Get content from the store
       const contentToRun = fileContents[activeFileId];
 
       if (!activeFile || contentToRun === undefined) {
@@ -479,98 +461,17 @@ const App = () => {
   //   }
   // };
 
-  // File Handling (Update to use Zustand setters)
-  const handleOpenFile = (fileId: string) => {
-    if (!MOCK_FILES[fileId]) return;
-    const fileData = MOCK_FILES[fileId];
+  // File Handling (REMOVED - Logic moved to useFileStore)
+  // const handleOpenFile = (fileId: string) => { ... };
+  // const handleSwitchTab = (fileId: string) => { ... };
+  // const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => { ... };
 
-    // Use store state directly
-    const currentOpenFiles = useFileStore.getState().openFiles;
-    if (!currentOpenFiles.some((f) => f.id === fileId)) {
-      const newOpenFile: OpenFile = {
-        id: fileId,
-        name: fileData.name,
-        language: fileData.language as EditorLanguageKey, // Cast assuming MOCK_FILES is correct
-      };
-      // Use Zustand action
-      setOpenFiles((prev) => [...prev, newOpenFile]);
-
-      // File content logic remains here for now
-      if (!isSessionActive) {
-        setFileContents((prev) => ({
-          ...prev,
-          [fileId]: prev[fileId] ?? fileData.content,
-        }));
-      } else {
-        setFileContents((prev) => ({
-          ...prev,
-          [fileId]: prev[fileId], // Keep existing, wait for WS
-        }));
-      }
-    }
-    // Use Zustand action
-    setActiveFileId(fileId);
-  };
-
-  const handleSwitchTab = (fileId: string) => {
-    // Use Zustand action
-    setActiveFileId(fileId);
-  };
-
-  const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Get state from store *before* update
-    const currentOpenFiles = useFileStore.getState().openFiles;
-    const currentActiveFileId = useFileStore.getState().activeFileId;
-
-    const indexToRemove = currentOpenFiles.findIndex(
-      (f) => f.id === fileIdToClose
-    );
-    if (indexToRemove === -1) return;
-
-    let nextActiveId: string | null = null;
-    if (currentActiveFileId === fileIdToClose) {
-      if (currentOpenFiles.length > 1) {
-        // Important: Filter based on currentOpenFiles *before* the update
-        const remainingFiles = currentOpenFiles.filter(
-          (f) => f.id !== fileIdToClose
-        );
-        // Calculate next ID based on the *state before removal*
-        const newIndex = Math.max(0, indexToRemove - 1);
-        nextActiveId =
-          remainingFiles[newIndex]?.id ?? remainingFiles[0]?.id ?? null; // Ensure fallback to null
-      } else {
-        nextActiveId = null; // Closing the last tab
-      }
-    } else {
-      nextActiveId = currentActiveFileId; // Active tab is not the one being closed
-    }
-
-    // Update open files using Zustand action
-    setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
-    // THEN set the next active ID using Zustand action
-    setActiveFileId(nextActiveId);
-
-    // Remove associated remote users (still managed locally in App for now)
-    setRemoteUsers((prev) => {
-      const newState = { ...prev };
-      delete newState[fileIdToClose];
-      return newState;
-    });
-    // Note: fileContents state can keep the content even if tab is closed
-  };
-
-  // Modified Code Change Handler
+  // Modified Code Change Handler (Update to use store action)
   const handleCodeChange = (newCode: string) => {
-    // If NOT in an active session, update local state directly.
-    // If in a session, the MonacoAdapter within the collaboration hook
-    // will detect the change and trigger the OT client (`applyClient`).
-    // The server will broadcast the operation, and the hook's `onOperationReceived`
-    // callback will update the `fileContents` state.
-    // So, we only update `fileContents` here if NOT in a session.
     if (!isSessionActive && activeFileId) {
       console.log("[handleCodeChange] Updating local state (not in session)");
-      setFileContents((prev) => ({ ...prev, [activeFileId]: newCode }));
+      // Update the store directly
+      setFileContent(activeFileId, newCode);
     } else if (isSessionActive && activeFileId) {
       console.log(
         "[handleCodeChange] Change detected in session, OT hook will handle state update."
@@ -616,9 +517,9 @@ const App = () => {
     setIsColorPickerOpen((prev) => !prev);
   };
 
-  // Start Session Handler (Modified to set isSessionActive AFTER backend confirms)
+  // Start Session Handler (Use store state)
   const handleStartSession = async () => {
-    if (!userName.trim()) return; // Prevent starting with empty name
+    if (!userName.trim()) return;
 
     setIsColorPickerOpen(false); // Ensure color picker is closed
 
@@ -640,10 +541,13 @@ const App = () => {
         newSessionId
       );
 
+      // Get current file contents from the store
+      const currentFileContents = useFileStore.getState().fileContents;
+
       // 2. Set initial content for key files on the backend
       const keyFiles = ["index.html", "style.css", "script.js"];
       const initialContentPromises = keyFiles.map((fileId) => {
-        const currentContent = fileContents[fileId];
+        const currentContent = currentFileContents[fileId]; // Use content from store
         if (currentContent !== undefined) {
           // Only send if content exists locally
           console.log(
@@ -740,24 +644,21 @@ const App = () => {
     setIsSessionActive(true);
   };
 
-  // Derived State (Memos)
+  // Derived State (Memos) - Use store state
   const htmlFileContent = useMemo(() => {
-    // Directly access the content from the state, provide default if not found
     return (
       fileContents["index.html"] ||
       "<!DOCTYPE html><html><head></head><body><!-- index.html not loaded --></body></html>"
     );
-  }, [fileContents]); // Depend only on fileContents
+  }, [fileContents]); // Depend on fileContents from store
 
   const cssFileContent = useMemo(() => {
-    // Directly access the content from the state, provide default if not found
     return fileContents["style.css"] || "/* style.css not loaded */";
-  }, [fileContents]); // Depend only on fileContents
+  }, [fileContents]); // Depend on fileContents from store
 
   const jsFileContent = useMemo(() => {
-    // Directly access the content from the state, provide default if not found
     return fileContents["script.js"] || "// script.js not loaded";
-  }, [fileContents]); // Depend only on fileContents
+  }, [fileContents]); // Depend on fileContents from store
 
   // Get remote users for the currently active file (Updated to use remoteUsers state)
   const currentRemoteUsers = useMemo(() => {
@@ -875,8 +776,10 @@ const App = () => {
           handleToggleColorPicker={handleToggleColorPicker}
           handleConfirmJoin={handleConfirmJoin}
           activeFileId={activeFileId}
-          handleOpenFile={handleOpenFile}
-          mockFiles={MOCK_FILES} // <-- Add this prop back
+          isSessionActive={isSessionActive}
+          // Pass store action directly, ensure Sidebar expects correct signature
+          handleOpenFile={(fileId) => openFile(fileId, isSessionActive)}
+          mockFiles={MOCK_FILES}
         />
         {/* Code and Terminal Area + Optional WebView - Use new component */}
         <MainEditorArea
@@ -884,24 +787,16 @@ const App = () => {
           tabContainerRef={tabContainerRef}
           terminalRef={terminalRef}
           editorInstanceRef={editorInstanceRef}
-          // Remove props managed by useFileStore
-          // openFiles={openFiles}
-          // setOpenFiles={setOpenFiles}
-          // activeFileId={activeFileId}
-          // setActiveFileId={setActiveFileId}
-          handleSwitchTab={handleSwitchTab} // Still needed by FileTabs via MainEditorArea
-          handleCloseTab={handleCloseTab} // Still needed by FileTabs via MainEditorArea
-          // Remove Store state/setters that FileTabs will get directly
-          // draggingId={draggingId} // Pass from store
-          // setDraggingId={setDraggingId} // Pass from store
-          // dropIndicator={dropIndicator} // Pass from store
-          // setDropIndicator={setDropIndicator} // Pass from store
+          // Pass store actions
+          handleSwitchTab={switchTab}
+          handleCloseTab={closeFile}
           // Keep remaining props
-          fileContents={fileContents}
+          fileContents={fileContents} // Pass content from store
           handleCodeChange={handleCodeChange}
           handleEditorDidMount={handleEditorDidMount}
           currentRemoteUsers={currentRemoteUsers}
           localUserId={userId}
+          isSessionActive={isSessionActive}
           terminalPanelHeight={terminalPanelHeight}
           isTerminalCollapsed={isTerminalCollapsed}
           handleTerminalPanelMouseDown={handleTerminalPanelMouseDown}

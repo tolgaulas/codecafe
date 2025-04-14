@@ -1,30 +1,41 @@
 import { create } from "zustand";
 import { OpenFile, EditorLanguageKey } from "../types/editor"; // Adjust path if needed
 import { MOCK_FILES } from "../constants/mockFiles"; // Adjust path if needed
+import { arrayMove } from "@dnd-kit/sortable"; // Import arrayMove for use in actions
 
-// --- Initial State ---
-// We need to compute the initial state outside the store definition
-// as it depends on MOCK_FILES.
+// --- Initial State Computation ---
 const initialOpenFileIds = ["index.html", "style.css", "script.js"];
+
 const initialOpenFilesData = initialOpenFileIds.map((id): OpenFile => {
   const fileData = MOCK_FILES[id];
   if (!fileData) {
     console.error(`Initial file ${id} not found in MOCK_FILES!`);
-    // Provide a default OpenFile structure for error cases
     return { id, name: "Error", language: "plaintext" as EditorLanguageKey };
   }
   return {
     id: id,
     name: fileData.name,
-    language: fileData.language as EditorLanguageKey, // Assume language is correct in MOCK_FILES
+    language: fileData.language as EditorLanguageKey,
   };
 });
+
+const initialFileContents: { [id: string]: string } = {};
+initialOpenFileIds.forEach((id) => {
+  const fileData = MOCK_FILES[id];
+  if (fileData) {
+    initialFileContents[id] = fileData.content;
+  } else {
+    initialFileContents[id] = `// Error: Content for ${id} not found`;
+  }
+});
+
 const initialActiveFileId = initialOpenFileIds[0] || null;
 
 // --- State Interface ---
 interface FileState {
   openFiles: OpenFile[];
   activeFileId: string | null;
+  fileContents: { [id: string]: string }; // Added file contents
   draggingId: string | null;
   dropIndicator: { tabId: string | null; side: "left" | "right" | null };
 }
@@ -35,26 +46,115 @@ interface FileActions {
     files: OpenFile[] | ((prev: OpenFile[]) => OpenFile[])
   ) => void;
   setActiveFileId: (id: string | null) => void;
+  setFileContent: (id: string, content: string) => void; // Added
   setDraggingId: (id: string | null) => void;
   setDropIndicator: (indicator: FileState["dropIndicator"]) => void;
-  // More complex actions like openFile, closeFile will be added later
-  // or remain in App.tsx initially calling these basic setters.
+  // --- Complex Actions ---
+  openFile: (fileId: string, isSessionActive: boolean) => void; // Added
+  closeFile: (fileIdToClose: string) => void; // Added
+  switchTab: (fileId: string) => void; // Added (simple alias for setActiveFileId)
 }
 
 // --- Store Implementation ---
-export const useFileStore = create<FileState & FileActions>((set) => ({
+export const useFileStore = create<FileState & FileActions>((set, get) => ({
   // --- Initial State ---
   openFiles: initialOpenFilesData,
   activeFileId: initialActiveFileId,
+  fileContents: initialFileContents, // Added
   draggingId: null,
   dropIndicator: { tabId: null, side: null },
 
-  // --- Actions ---
+  // --- Basic Setters ---
   setOpenFiles: (files) =>
     set((state) => ({
       openFiles: typeof files === "function" ? files(state.openFiles) : files,
     })),
   setActiveFileId: (id) => set({ activeFileId: id }),
+  setFileContent: (id, content) =>
+    set((state) => ({
+      fileContents: { ...state.fileContents, [id]: content },
+    })),
   setDraggingId: (id) => set({ draggingId: id }),
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
+
+  // --- Complex Actions ---
+  switchTab: (fileId) => {
+    set({ activeFileId: fileId });
+  },
+
+  openFile: (fileId, isSessionActive) => {
+    const fileData = MOCK_FILES[fileId];
+    if (!fileData) {
+      console.error(`Cannot open file: ${fileId} not found in MOCK_FILES.`);
+      return;
+    }
+
+    const state = get(); // Get current state
+    const fileAlreadyOpen = state.openFiles.some((f) => f.id === fileId);
+
+    if (!fileAlreadyOpen) {
+      const newOpenFile: OpenFile = {
+        id: fileId,
+        name: fileData.name,
+        language: fileData.language as EditorLanguageKey,
+      };
+
+      // Prepare new state updates together
+      const newStateUpdate: Partial<FileState> = {
+        openFiles: [...state.openFiles, newOpenFile],
+        activeFileId: fileId,
+      };
+
+      // Only set initial content if not in a session and content doesn't exist
+      if (!isSessionActive && state.fileContents[fileId] === undefined) {
+        newStateUpdate.fileContents = {
+          ...state.fileContents,
+          [fileId]: fileData.content,
+        };
+      }
+
+      set(newStateUpdate);
+    } else {
+      // File is already open, just switch to it
+      set({ activeFileId: fileId });
+    }
+  },
+
+  closeFile: (fileIdToClose) => {
+    const state = get(); // Get current state *before* modification
+    const indexToRemove = state.openFiles.findIndex(
+      (f) => f.id === fileIdToClose
+    );
+
+    if (indexToRemove === -1) return; // File not open
+
+    let nextActiveId: string | null = state.activeFileId;
+
+    // If the closed tab was the active one, determine the next active tab
+    if (state.activeFileId === fileIdToClose) {
+      if (state.openFiles.length > 1) {
+        const newIndex = Math.max(0, indexToRemove - 1);
+        // Get the ID from the *current* openFiles list before filtering
+        nextActiveId =
+          state.openFiles[newIndex]?.id ?? state.openFiles[0]?.id ?? null;
+        // Correction: Calculate based on remaining files AFTER filtering conceptually
+        const remainingFiles = state.openFiles.filter(
+          (f) => f.id !== fileIdToClose
+        );
+        nextActiveId =
+          remainingFiles[Math.max(0, indexToRemove - 1)]?.id ??
+          remainingFiles[0]?.id ??
+          null;
+      } else {
+        nextActiveId = null; // Closing the last tab
+      }
+    }
+
+    // Update state: filter closed file and set new active ID
+    set({
+      openFiles: state.openFiles.filter((f) => f.id !== fileIdToClose),
+      activeFileId: nextActiveId,
+      // We don't remove fileContents here, it might be needed later if reopened
+    });
+  },
 }));
