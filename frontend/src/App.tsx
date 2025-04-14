@@ -1,86 +1,33 @@
 import React from "react"; // Add this import
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
-import CodeEditor from "./components/CodeEditor";
-import TerminalComponent from "./components/TerminalComponent";
-import { FaRegFolder, FaGlobe } from "react-icons/fa";
-import { VscAccount, VscLiveShare, VscSearch } from "react-icons/vsc";
-import { VscFiles } from "react-icons/vsc";
-import { VscSettingsGear } from "react-icons/vsc";
-import { GrChatOption, GrShareOption } from "react-icons/gr";
-import { VscFile } from "react-icons/vsc";
-import { FiCopy } from "react-icons/fi";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import { COLORS } from "./constants/colors";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-  DragMoveEvent,
-  DragOverlay,
-  DragStartEvent,
-  pointerWithin,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  horizontalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  restrictToHorizontalAxis,
-  restrictToParentElement,
-} from "@dnd-kit/modifiers";
-import WebViewPanel from "./components/WebViewPanel";
-import { motion, AnimatePresence } from "framer-motion";
 import { v4 as uuidv4 } from "uuid";
 import { editor } from "monaco-editor";
-import { TextOperation, OTSelection } from "./TextOperationSystem";
-import JoinSessionPanel from "./components/JoinSessionPanel"; // Import the new component
-import { UserInfo, RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
+import { RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
 import StatusBar from "./components/StatusBar"; // Add this import
 import {
   CodeExecutionRequest,
   CodeExecutionResponse,
   TerminalRef,
-  ExecutableLanguageKey,
-  EditorLanguageKey,
   JoinStateType,
-  OpenFile,
 } from "./types/editor"; // Import new types
 
-// --- New Imports ---
-import {
-  editorLanguageMap, // Kept for editor component
-  languageIconMap,
-  languageColorMap,
-  defaultIconColor,
-} from "./constants/mappings";
 import {
   ICON_BAR_WIDTH,
   DEFAULT_EXPLORER_WIDTH,
   MIN_EXPLORER_WIDTH,
   MAX_EXPLORER_WIDTH,
-  EXPLORER_HANDLE_WIDTH,
   MIN_JOIN_PANEL_WIDTH,
   DEFAULT_TERMINAL_HEIGHT_FRACTION,
   MIN_TERMINAL_HEIGHT_PX,
-  MAX_TERMINAL_HEIGHT_PX,
   TERMINAL_COLLAPSE_THRESHOLD_PX,
-  TERMINAL_HANDLE_HEIGHT,
   DEFAULT_WEBVIEW_WIDTH_FRACTION,
   MIN_WEBVIEW_WIDTH,
-  MAX_WEBVIEW_WIDTH,
-  WEBVIEW_HANDLE_GRAB_WIDTH,
 } from "./constants/layout";
 import { MOCK_FILES } from "./constants/mockFiles";
 import { isExecutableLanguage } from "./utils/languageUtils";
-import { SortableTab } from "./components/SortableTab"; // Import the moved component
 import { useResizablePanel } from "./hooks/useResizablePanel"; // Import the hook
 import { useCollaborationSession } from "./hooks/useCollaborationSession"; // <-- Import the new hook
 import Header from "./components/Header"; // <-- Add import for Header
@@ -811,9 +758,15 @@ const App = () => {
       </div>
       {/* Status Bar */}
       <StatusBar
-        connectionStatus={isConnected ? "connected" : "disconnected"}
+        connectionStatus={
+          isSessionActive
+            ? isConnected
+              ? "connected"
+              : "disconnected"
+            : undefined
+        }
       />{" "}
-      {/* Pass connection status */}
+      {/* Pass connection status only if session is active */}
       {/* --- Update Resizing Overlay Check --- START --- */}
       {(isExplorerPanelResizing ||
         isTerminalPanelResizing ||

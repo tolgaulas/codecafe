@@ -8,9 +8,7 @@ interface StatusBarProps {
   connectionStatus?: ConnectionStatus; // Make it optional for now
 }
 
-const StatusBar: React.FC<StatusBarProps> = ({
-  connectionStatus = "disconnected",
-}) => {
+const StatusBar: React.FC<StatusBarProps> = ({ connectionStatus }) => {
   // Helper function to determine status indicator style
   const getStatusIndicator = (status: ConnectionStatus) => {
     switch (status) {
@@ -43,11 +41,14 @@ const StatusBar: React.FC<StatusBarProps> = ({
   return (
     <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-center px-4 py-1 text-xs border-t border-stone-600 flex-shrink-0">
       <div className="flex items-center space-x-4">
-        {/* Connection Status Indicator */}
-        <span className="flex items-center">
-          {getStatusIndicator(connectionStatus)}
-          {connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}
-        </span>
+        {/* Connection Status Indicator - Conditionally render */}
+        {connectionStatus && (
+          <span className="flex items-center">
+            {getStatusIndicator(connectionStatus)}
+            {connectionStatus.charAt(0).toUpperCase() +
+              connectionStatus.slice(1)}
+          </span>
+        )}
         {/* TODO: Replace with dynamic data */}
         <span>
           {/* {activeFileId && openFiles.find((f) => f.id === activeFileId)

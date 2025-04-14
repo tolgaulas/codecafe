@@ -3,7 +3,7 @@ import {
   Client,
   OTSelection,
   IClientCallbacks,
-} from "../../TextOperationSystem";
+} from "../../ot/TextOperationSystem";
 
 // Helper to compare TextOperations (relies on your TextOperation having a similar structure/equality check)
 // For Jest/Vitest, `toEqual` often performs deep equality checks.

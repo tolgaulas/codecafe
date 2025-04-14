@@ -7,7 +7,7 @@ import {
   OTSelection,
   positionToOffset,
   offsetToPosition,
-} from "../TextOperationSystem";
+} from "../ot/TextOperationSystem";
 
 // Extend props to include isSessionActive
 interface ExtendedCodeEditorProps extends CodeEditorProps {

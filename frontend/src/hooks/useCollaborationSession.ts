@@ -9,7 +9,7 @@ import {
   Client,
   IClientCallbacks,
   offsetToPosition,
-} from "../TextOperationSystem";
+} from "../ot/TextOperationSystem";
 import { UserInfo, RemoteUser } from "../types/props";
 import { v4 as uuidv4 } from "uuid"; // Needed for unique client ID if not passed
 

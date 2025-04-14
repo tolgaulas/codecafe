@@ -2,7 +2,7 @@ import { User } from "./user";
 import { CursorData } from "./cursorData";
 import * as monaco from "monaco-editor";
 import { editor } from "monaco-editor";
-import { OTSelection } from "../TextOperationSystem"; // Assuming OTSelection is defined here
+import { OTSelection } from "../ot/TextOperationSystem"; // Assuming OTSelection is defined here
 
 export interface ShareProfileProps {
   onNameChange: (name: string) => void;
