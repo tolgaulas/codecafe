@@ -127,7 +127,8 @@ export const useCollaborationSession = ({
     }
 
     console.log("[useCollaborationSession Setup] Connecting via SockJS...");
-    const socket = new SockJS("http://localhost:8080/ws");
+    const socketUrl = import.meta.env.VITE_BACKEND_URL + "/ws";
+    const socket = new SockJS(socketUrl);
     const stompClient = Stomp.over(socket);
     stompClient.debug = () => {}; // Suppress STOMP debug logs in console
     stompClientRef.current = stompClient;

@@ -43,7 +43,7 @@ const App = () => {
   const editorTerminalAreaRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const tabContainerRef = useRef<HTMLDivElement>(null);
-  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null); // Keep ref for editor instance
+  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
   // STATE
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
@@ -296,7 +296,7 @@ const App = () => {
       };
 
       const response = await axios.post<CodeExecutionResponse>(
-        "http://localhost:8080/api/execute",
+        `${import.meta.env.VITE_BACKEND_URL}/api/execute`,
         requestBody,
         {
           headers: {
@@ -376,7 +376,7 @@ const App = () => {
   const handleStartSession = async () => {
     if (!userName.trim()) return;
 
-    setIsColorPickerOpen(false); // Ensure color picker is closed
+    setIsColorPickerOpen(false);
 
     try {
       // Create the session
@@ -384,7 +384,7 @@ const App = () => {
       //   `[handleStartSession] Creating session for user: ${userName.trim()}`
       // );
       const createResponse = await axios.post<{ sessionId: string }>(
-        "http://localhost:8080/api/sessions/create",
+        `${import.meta.env.VITE_BACKEND_URL}/api/sessions/create`,
         {
           creatorName: userName.trim(),
         }
@@ -408,7 +408,9 @@ const App = () => {
           // );
           return axios
             .post(
-              `http://localhost:8080/api/sessions/${newSessionId}/set-document`,
+              `${
+                import.meta.env.VITE_BACKEND_URL
+              }/api/sessions/${newSessionId}/set-document`,
               {
                 documentId: fileId,
                 content: currentContent,

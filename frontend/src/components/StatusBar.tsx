@@ -1,6 +1,6 @@
 import { ConnectionStatus, StatusBarProps } from "../types/props";
 
-const StatusBar: React.FC<StatusBarProps> = ({
+const StatusBar = ({
   connectionStatus,
   language = "plaintext",
   line = 1, // Default line
