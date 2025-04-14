@@ -53,37 +53,22 @@ import {
 } from "./TextOperationSystem";
 import JoinSessionPanel from "./components/JoinSessionPanel"; // Import the new component
 import { UserInfo, RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
-
-// Define types for code execution
-interface CodeFile {
-  content: string;
-}
-
-interface CodeExecutionRequest {
-  language: string;
-  version: string;
-  files: CodeFile[];
-}
-
-interface CodeExecutionResponse {
-  run: {
-    stdout: string;
-    stderr: string;
-  };
-}
-
-// Define the Terminal ref interface
-interface TerminalRef {
-  writeToTerminal: (text: string) => void;
-  fit: () => void;
-}
+import StatusBar from "./components/StatusBar"; // Add this import
+import {
+  CodeFile,
+  CodeExecutionRequest,
+  CodeExecutionResponse,
+  TerminalRef,
+  ExecutableLanguageKey,
+  EditorLanguageKey,
+  JoinStateType,
+  OpenFile,
+  SortableTabProps,
+} from "./types/editor"; // Import new types
 
 // Define type for language keys
-type ExecutableLanguageKey = keyof typeof LANGUAGE_VERSIONS; // Languages the backend can run
-type EditorLanguageKey = ExecutableLanguageKey | "css" | "html" | "plaintext"; // Languages the editor supports
 
 // Add new state type for join process
-type JoinStateType = "idle" | "prompting" | "joined";
 
 // Map Monaco language identifiers if they differ (optional, but good practice)
 const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
@@ -100,12 +85,6 @@ const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
   html: "html",
   plaintext: "plaintext",
 };
-
-interface OpenFile {
-  id: string; // Unique ID, e.g., file path or generated UUID
-  name: string;
-  language: EditorLanguageKey; // Use the broader editor language type
-}
 
 // --- Constants ---
 // Explorer
@@ -188,16 +167,6 @@ const languageColorMap: { [key in EditorLanguageKey]?: string } = {
 const defaultIconColor = "text-stone-400"; // Default color for other files/icons
 
 // --- Sortable Tab Component ---
-interface SortableTabProps {
-  file: OpenFile;
-  activeFileId: string | null;
-  draggingId: string | null;
-  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
-  iconColor: string;
-  onSwitchTab: (id: string) => void;
-  onCloseTab: (id: string, e: React.MouseEvent) => void;
-}
-
 function SortableTab({
   file,
   activeFileId,
@@ -2553,20 +2522,7 @@ const CodeEditorUI = () => {
       </div>
 
       {/* Status Bar */}
-      <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-center px-4 py-1 text-xs border-t border-stone-600 flex-shrink-0">
-        <div className="flex items-center space-x-4">
-          <span>
-            {activeFileId && openFiles.find((f) => f.id === activeFileId)
-              ? openFiles.find((f) => f.id === activeFileId)?.language
-              : "plaintext"}
-          </span>
-          <span>UTF-8</span>
-        </div>
-        <div className="flex items-center space-x-4">
-          <span>Ln 3, Col 12</span>
-          <span>Spaces: 2</span>
-        </div>
-      </div>
+      <StatusBar />
 
       {/* Resizing Overlay */}
       {(isExplorerResizing || isTerminalResizing || isWebViewResizing) && (
