@@ -2,7 +2,7 @@ import { User } from "./user";
 import { CursorData } from "./cursorData";
 import * as monaco from "monaco-editor";
 import { editor } from "monaco-editor";
-import { OTSelection } from "../ot/TextOperationSystem"; // Assuming OTSelection is defined here
+import { OTSelection, TextOperation } from "../ot/TextOperationSystem"; // Assuming OTSelection is defined here
 
 export interface ShareProfileProps {
   onNameChange: (name: string) => void;
@@ -121,4 +121,68 @@ export interface HeaderProps {
   isSessionActive: boolean;
   uniqueRemoteParticipants: RemoteUser[];
   setIsColorPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+// --- Status Bar Component Types ---
+export type ConnectionStatus = "connected" | "disconnected" | "connecting";
+
+export interface StatusBarProps {
+  connectionStatus?: ConnectionStatus;
+  language?: string;
+  line?: number;
+  column?: number;
+}
+
+// Props for useCollaborationSession hook
+export interface UseCollaborationSessionProps {
+  sessionId: string | null;
+  userId: string;
+  userInfo: Pick<UserInfo, "name" | "color">;
+  activeFileId: string | null;
+  editorInstance: editor.IStandaloneCodeEditor | null;
+  isSessionActive: boolean;
+  onStateReceived: (
+    fileId: string,
+    content: string,
+    revision: number,
+    participants: RemoteUser[]
+  ) => void;
+  onOperationReceived: (fileId: string, operation: TextOperation) => void;
+  onRemoteUsersUpdate: (fileId: string, users: RemoteUser[]) => void;
+  onConnectionStatusChange?: (isConnected: boolean) => void;
+  onError?: (error: Error | string) => void;
+  webViewFileIds?: string[];
+}
+
+// Return type for useCollaborationSession hook
+export interface UseCollaborationSessionReturn {
+  isConnected: boolean;
+}
+
+// Props for useResizablePanel hook
+export interface UseResizablePanelOptions {
+  initialSize: number | (() => number);
+  minSize?: number;
+  maxSize?: number;
+  direction: "horizontal-right" | "horizontal-left" | "vertical";
+  containerRef: React.RefObject<HTMLElement>; // Ref of the container the panel is within
+  panelRef?: React.RefObject<HTMLElement>; // Optional ref of the panel itself
+  handleRef?: React.RefObject<HTMLElement>; // Optional ref of the resize handle
+  onResizeStart?: () => void;
+  onResizeEnd?: (finalSize: number) => void;
+  onToggle?: (isOpen: boolean) => void;
+  collapseThreshold?: number; // Size below which the panel collapses
+  storageKey?: string; // Optional key to persist size in localStorage
+  defaultOpenSize?: number | (() => number);
+}
+
+// Return type for useResizablePanel hook
+export interface UseResizablePanelReturn {
+  size: number;
+  setSize: React.Dispatch<React.SetStateAction<number>>;
+  isResizing: boolean;
+  previousSize: number;
+  isCollapsed: boolean;
+  handleMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
+  togglePanel: () => void;
 }

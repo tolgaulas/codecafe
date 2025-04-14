@@ -1,21 +1,22 @@
-import React, { useMemo } from "react";
-import "./WebViewPanel.css"; // Import the specific CSS
-import { FaEarthAmericas } from "react-icons/fa6"; // CORRECTED Import path
+import { useMemo } from "react";
+import "./WebViewPanel.css";
+import { FaEarthAmericas } from "react-icons/fa6";
+import { WebViewPanelProps } from "../types/props";
 
 // Define props interface
-interface WebViewPanelProps {
-  htmlContent?: string;
-  cssContent?: string;
-  jsContent?: string;
-  onClose?: () => void;
-}
+// interface WebViewPanelProps {
+//   htmlContent?: string;
+//   cssContent?: string;
+//   jsContent?: string;
+//   onClose?: () => void;
+// }
 
-const WebViewPanel: React.FC<WebViewPanelProps> = ({
+const WebViewPanel = ({
   htmlContent = "",
   cssContent = "",
   jsContent = "",
   onClose,
-}) => {
+}: WebViewPanelProps) => {
   // Construct srcDoc using useMemo to avoid unnecessary recalculations
   const srcDoc = useMemo(() => {
     return `
@@ -56,45 +57,38 @@ const WebViewPanel: React.FC<WebViewPanelProps> = ({
       </body>
       </html>
     `;
-  }, [htmlContent, cssContent, jsContent]); // Dependencies for useMemo
+  }, [htmlContent, cssContent, jsContent]);
 
   // Prevent default link behavior and call onClose
   const handleCloseClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    onClose?.(); // Call the passed-in function if it exists
+    onClose?.();
   };
 
   return (
-    // Wrapper div for scoping CSS
     <div id="web-view-content" className="h-full flex flex-col">
-      {/* Browser Chrome UI (Optional - can be simplified if needed) */}
+      {/* Browser */}
       <div id="browser" className="clear flex-shrink-0">
         {/* tabs */}
         <ul className="tabs">
           {/* Single placeholder tab */}
           <li className="active">
-            {/* Absolutely positioned icon wrapper (mimics example CSS) */}
             <span
               style={{
                 position: "absolute",
                 left: "-6px",
                 top: "6px",
-                zIndex: 9, // Match example
-                transform: "skewX(-25deg)", // Apply inverse skew directly
-                // Add display:block or inline-block for size to apply correctly
+                zIndex: 9,
+                transform: "skewX(-25deg)",
                 display: "inline-block",
               }}
             >
-              <FaEarthAmericas
-                size={14}
-                // Remove positioning classes from icon itself
-              />
+              <FaEarthAmericas size={14} />
             </span>
-            {/* Text span with inverse skew and padding */}
             <span
               style={{
                 transform: "skewX(-25deg)",
-                display: "inline-block", // Ensure it takes space for padding
+                display: "inline-block",
               }}
             >
               Preview
@@ -105,9 +99,6 @@ const WebViewPanel: React.FC<WebViewPanelProps> = ({
             </a>
           </li>
         </ul>
-        {/* add tab */}
-        {/* <a href="#" className="add"></a> */}
-        {/* bar */}
         <div className="bar clear">
           <ul>
             <li>

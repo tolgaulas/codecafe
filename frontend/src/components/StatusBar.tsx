@@ -1,22 +1,12 @@
-import React from "react";
-
-// Define possible connection states
-type ConnectionStatus = "connected" | "disconnected" | "connecting";
-
-interface StatusBarProps {
-  connectionStatus?: ConnectionStatus;
-  language?: string; // Add language prop
-  line?: number; // Add line number prop
-  column?: number; // Add column number prop
-}
+import { ConnectionStatus, StatusBarProps } from "../types/props";
 
 const StatusBar: React.FC<StatusBarProps> = ({
   connectionStatus,
-  language = "plaintext", // Default language
+  language = "plaintext",
   line = 1, // Default line
   column = 1, // Default column
-}) => {
-  // Helper function to determine status indicator style
+}: StatusBarProps) => {
+  // function to determine status indicator style
   const getStatusIndicator = (status: ConnectionStatus) => {
     switch (status) {
       case "connected":
@@ -48,7 +38,7 @@ const StatusBar: React.FC<StatusBarProps> = ({
   return (
     <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-center px-4 py-1 text-xs border-t border-stone-600 flex-shrink-0">
       <div className="flex items-center space-x-4">
-        {/* Connection Status Indicator - Conditionally render */}
+        {/* Connection Status Indicator */}
         {connectionStatus && (
           <span className="flex items-center">
             {getStatusIndicator(connectionStatus)}
@@ -56,12 +46,10 @@ const StatusBar: React.FC<StatusBarProps> = ({
               connectionStatus.slice(1)}
           </span>
         )}
-        {/* Display dynamic language */}
         <span>{language}</span>
         <span>UTF-8</span>
       </div>
       <div className="flex items-center space-x-4">
-        {/* Display dynamic line and column */}
         <span>
           Ln {line}, Col {column}
         </span>

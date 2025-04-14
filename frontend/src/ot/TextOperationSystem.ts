@@ -1,16 +1,13 @@
 import {
   editor,
-  IRange,
   Position,
   Selection,
   IDisposable,
   Range as MonacoRange,
 } from "monaco-editor";
-import { v4 as uuidv4 } from "uuid"; // Keep for potential other uses
-import { debounce } from "lodash"; // Import debounce
 
 // #############################################################################
-// ## Core TextOperation Logic (Directly adapted from ot.js principles)
+// ## Core TextOperation Logic (Special thanks to ot.js for the original implementation!)
 // #############################################################################
 
 export class TextOperation {
@@ -144,7 +141,6 @@ export class TextOperation {
 
   // Apply the operation to a string, returning a new string.
   apply(str: string): string {
-    // No initial baseLength check - problematic after transform
     let newStr = [];
     let strIndex = 0;
     for (let i = 0; i < this.ops.length; i++) {
@@ -160,8 +156,7 @@ export class TextOperation {
       } else if (TextOperation.isInsert(op)) {
         newStr.push(op);
       } else {
-        // delete op
-        strIndex -= op; // op is negative
+        strIndex -= op;
         if (strIndex > str.length) {
           throw new Error(
             "Operation check error: Delete length should not exceed string length."
@@ -169,10 +164,6 @@ export class TextOperation {
         }
       }
     }
-    // Final check removed as it's invalid after transforms
-    // if (strIndex !== str.length) {
-    //   throw new Error("Operation check error: Operation length mismatch.");
-    // }
     return newStr.join("");
   }
 
@@ -197,9 +188,9 @@ export class TextOperation {
             }) at index ${strIndex}. Original Op: ${this.toString()}`
           );
         }
-        const endIndex = Math.min(strIndex - op, str.length); // -op is positive delete count
+        const endIndex = Math.min(strIndex - op, str.length);
         inverse.insert(str.slice(strIndex, endIndex));
-        strIndex -= op; // op is negative
+        strIndex -= op;
       }
     }
     return inverse;
@@ -320,8 +311,7 @@ export class TextOperation {
         );
       }
     }
-    // Don't need the compose logs anymore if using reference impl
-    // console.log(`[Compose End] Final composed: ${operation.toString()}, base=${operation.baseLength}, target=${operation.targetLength}`);
+
     return operation;
   }
 
@@ -377,7 +367,6 @@ export class TextOperation {
         continue;
       }
 
-      // --- BEGIN RESTORED CHECKS ---
       if (typeof op1 === "undefined") {
         throw new Error(
           "Cannot transform operations: first operation is too short."
@@ -388,7 +377,6 @@ export class TextOperation {
           "Cannot transform operations: second operation is too short."
         );
       }
-      // --- END RESTORED CHECKS ---
 
       let minLength;
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
@@ -496,7 +484,7 @@ export class TextOperation {
 }
 
 // #############################################################################
-// ## Monaco Adapter Logic (based on ot.js CodeMirrorAdapter)
+// ## Monaco Adapter Logic
 // #############################################################################
 
 // Helper functions to convert between Monaco Position and document offset
@@ -638,7 +626,7 @@ export class MonacoAdapter {
           previousDocValue: previousDocValue,
         }
       );
-      // Potentially throw an error here or handle it, as this indicates a bug
+
       // throw new Error("Internal error: Mismatch in operation baseLength calculation.");
     }
 
@@ -743,19 +731,11 @@ export class MonacoAdapter {
     }
 
     console.log("Adapter: Processing user change event.");
-    // currentLength is calculated from currentValue, so it's AFTER the change
-    // const currentLength = getModelLength(this.model); // Not directly needed here
 
-    // --- Estimate previous value --- START
-    // REMOVE estimation logic - rely on this.lastValue
-    // let estimatedPreviousValue = currentValue;
-    // try { ... } catch { ... }
-    // --- Estimate previous value --- END
-
-    const valueBeforeChange = this.lastValue; // Use the tracked value
+    const valueBeforeChange = this.lastValue;
     console.log(
       "Calling operationFromMonacoChanges with previousDocValue:",
-      JSON.stringify(valueBeforeChange) // Log valueBeforeChange
+      JSON.stringify(valueBeforeChange)
     );
 
     try {
@@ -784,9 +764,6 @@ export class MonacoAdapter {
         err,
         e.changes
       );
-      // Restore lastValue on error? Or just leave it as currentValue?
-      // Leaving it as currentValue seems safer if an error occurred during op generation.
-      // this.lastValue = currentValue; // No longer used
     }
 
     if (this.selectionChanged) {
@@ -802,7 +779,6 @@ export class MonacoAdapter {
   private onDidCursorPositionChange(): void {
     if (this.ignoreNextChange) {
       // console.log("Adapter: Ignoring cursor change during programmatic update.");
-      // Still mark selection as potentially changed, to be triggered after ignore flag reset
       this.selectionChanged = true;
       return;
     }
@@ -898,11 +874,7 @@ export class MonacoAdapter {
     }
   }
 
-  setOtherSelection(
-    selection: OTSelection,
-    color: string,
-    clientId: string
-  ): { clear: () => void } {
+  setOtherSelection(): { clear: () => void } {
     // ... (implementation requires CSS and decoration management) ...
     console.warn("setOtherSelection not fully implemented for Monaco");
     return { clear: () => {} }; // Placeholder
@@ -914,9 +886,7 @@ export class MonacoAdapter {
 // #############################################################################
 
 export class OTSelection {
-  // Define the Range class *inside* OTSelection, renamed to SelectionRange
   static SelectionRange = class SelectionRange {
-    // Renamed Range to SelectionRange
     anchor: number;
     head: number;
 
@@ -926,12 +896,10 @@ export class OTSelection {
     }
 
     static fromJSON(obj: { anchor: number; head: number }): SelectionRange {
-      // Renamed Range to SelectionRange
-      return new SelectionRange(obj.anchor, obj.head); // Renamed Range to SelectionRange
+      return new SelectionRange(obj.anchor, obj.head);
     }
 
     equals(other: SelectionRange): boolean {
-      // Renamed Range to SelectionRange
       return this.anchor === other.anchor && this.head === other.head;
     }
 
@@ -978,38 +946,33 @@ export class OTSelection {
           : this.transformIndex(this.head, operation);
       return new SelectionRange(newAnchor, newHead); // Renamed Range to SelectionRange
     }
-  }; // End of static SelectionRange class definition // Renamed Range to SelectionRange
+  }; // End of static SelectionRange class definition
 
-  ranges: InstanceType<typeof OTSelection.SelectionRange>[]; // Use InstanceType for the instance type
+  ranges: InstanceType<typeof OTSelection.SelectionRange>[];
 
   constructor(ranges?: InstanceType<typeof OTSelection.SelectionRange>[]) {
-    // Use InstanceType for the instance type
-    // Renamed Range to SelectionRange
-    // Ensure OTSelection.SelectionRange is used here if needed, check constructor logic // Renamed Range to SelectionRange
     this.ranges =
       ranges && ranges.length > 0
-        ? ranges.map((r) => new OTSelection.SelectionRange(r.anchor, r.head)) // Renamed Range to SelectionRange
-        : [new OTSelection.SelectionRange(0, 0)]; // Renamed Range to SelectionRange
+        ? ranges.map((r) => new OTSelection.SelectionRange(r.anchor, r.head))
+        : [new OTSelection.SelectionRange(0, 0)];
   }
 
   static createCursor(position: number): OTSelection {
-    // Use the static inner class SelectionRange directly // Renamed Range to SelectionRange
     return new OTSelection([
       new OTSelection.SelectionRange(position, position),
-    ]); // Renamed Range to SelectionRange
+    ]);
   }
 
   static fromJSON(
     obj: { ranges?: { anchor: number; head: number }[] } | null
   ): OTSelection {
     if (!obj || !obj.ranges || obj.ranges.length === 0) {
-      // Use the static inner class constructor
-      return new OTSelection([new OTSelection.SelectionRange(0, 0)]); // Renamed Range to SelectionRange
+      return new OTSelection([new OTSelection.SelectionRange(0, 0)]);
     }
-    // Use the static inner class constructor directly
+
     return new OTSelection(
       obj.ranges.map((r) => new OTSelection.SelectionRange(r.anchor, r.head))
-    ); // Renamed Range to SelectionRange
+    );
   }
 
   equals(other: OTSelection | null): boolean {
@@ -1022,7 +985,7 @@ export class OTSelection {
   }
 
   somethingSelected(): boolean {
-    return this.ranges.some((range) => !range.isEmpty()); // range is now SelectionRange
+    return this.ranges.some((range) => !range.isEmpty());
   }
 
   compose(other: OTSelection | null): OTSelection | null {
@@ -1030,8 +993,7 @@ export class OTSelection {
   }
 
   transform(operation: TextOperation): OTSelection {
-    const newRanges = this.ranges.map((range) => range.transform(operation)); // range is now SelectionRange
-    // Ensure the constructor uses the static inner class correctly
+    const newRanges = this.ranges.map((range) => range.transform(operation));
     return new OTSelection(newRanges);
   }
 
@@ -1063,13 +1025,11 @@ interface IClientState {
 }
 
 class Synchronized implements IClientState {
-  applyClient(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] Synchronized -> Sending Op (rev ${client.revision})`);
-    client.callbacks.sendOperation(client.revision, operation);
+  applyClient(_client: Client, operation: TextOperation): IClientState {
+    _client.callbacks.sendOperation(_client.revision, operation);
     return new AwaitingConfirm(operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] Synchronized -> Applying Server Op`);
     client.callbacks.applyOperation(operation);
     return this;
   }
@@ -1091,7 +1051,7 @@ class AwaitingConfirm implements IClientState {
     this.outstanding = outstanding;
   }
 
-  applyClient(client: Client, operation: TextOperation): IClientState {
+  applyClient(_client: Client, operation: TextOperation): IClientState {
     // console.log(`[${client.userId}] AwaitingConfirm -> Buffering Op`);
     return new AwaitingWithBuffer(this.outstanding, operation);
   }
@@ -1104,7 +1064,7 @@ class AwaitingConfirm implements IClientState {
     client.callbacks.applyOperation(transformedOperation);
     return new AwaitingConfirm(newOutstanding);
   }
-  serverAck(client: Client): IClientState {
+  serverAck(_client: Client): IClientState {
     // console.log(`[${client.userId}] AwaitingConfirm -> ACK received -> Synchronized`);
     return synchronized_;
   }
@@ -1125,7 +1085,7 @@ class AwaitingWithBuffer implements IClientState {
     this.buffer = buffer;
   }
 
-  applyClient(client: Client, operation: TextOperation): IClientState {
+  applyClient(_client: Client, operation: TextOperation): IClientState {
     // console.log(`[${client.userId}] AwaitingWithBuffer -> Composing Buffer`);
     console.log("[AWB ApplyClient] Before Compose:", {
       buffer_ops: this.buffer.toJSON(),
@@ -1147,22 +1107,21 @@ class AwaitingWithBuffer implements IClientState {
     }
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    // Detailed logging before the potentially failing transform calls
     console.log(`[AWB ApplyServer] State Before Transform:`, {
       outstanding_ops: this.outstanding.toJSON(),
       outstanding_base: this.outstanding.baseLength,
-      outstanding_target: this.outstanding.targetLength, // Added target
+      outstanding_target: this.outstanding.targetLength,
       buffer_ops: this.buffer.toJSON(),
       buffer_base: this.buffer.baseLength,
-      buffer_target: this.buffer.targetLength, // Added target
+      buffer_target: this.buffer.targetLength,
       server_op_ops: operation.toJSON(),
       server_op_base: operation.baseLength,
-      server_op_target: operation.targetLength, // Added target
+      server_op_target: operation.targetLength,
       // Log full objects for deeper inspection
       outstanding_obj: this.outstanding,
       buffer_obj: this.buffer,
       server_op_obj: operation,
-      client_revision: client.revision, // Added client revision
+      client_revision: client.revision,
     });
 
     // console.log(`[${client.userId}] AwaitingWithBuffer -> Applying Server Op & Transforming Outstanding/Buffer`);
@@ -1189,7 +1148,6 @@ class AwaitingWithBuffer implements IClientState {
     return new AwaitingWithBuffer(newOutstanding, newBuffer);
   }
   serverAck(client: Client): IClientState {
-    // console.log(`[${client.userId}] AwaitingWithBuffer -> ACK received -> Sending Buffer (rev ${client.revision})`);
     client.callbacks.sendOperation(client.revision, this.buffer);
     return new AwaitingConfirm(this.buffer);
   }
@@ -1247,8 +1205,6 @@ export class Client {
     if (operation.isNoop()) return;
     // console.log(`[${this.userId}] applyClient called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
     this.setState(this.state.applyClient(this, operation));
-    // Send selection immediately after local change (debouncing handled by caller if needed)
-    // this.sendSelection(this.callbacks.getSelection ? this.callbacks.getSelection() : null);
   }
 
   applyServer(operation: TextOperation): void {

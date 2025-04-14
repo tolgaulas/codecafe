@@ -1,4 +1,8 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
+import {
+  UseResizablePanelOptions,
+  UseResizablePanelReturn,
+} from "../types/props";
 
 interface UseResizablePanelOptions {
   initialSize: number | (() => number);
@@ -67,7 +71,6 @@ export function useResizablePanel({
   direction,
   containerRef,
   panelRef,
-  handleRef,
   onResizeStart,
   onResizeEnd,
   onToggle,

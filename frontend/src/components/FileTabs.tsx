@@ -18,50 +18,30 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 
-import { OpenFile } from "../types/editor"; // Adjust path if needed
-import { SortableTab } from "./SortableTab"; // Adjust path if needed
+import { SortableTab } from "./SortableTab"; 
 import {
   languageIconMap,
   languageColorMap,
   defaultIconColor,
-} from "../constants/mappings"; // Adjust path if needed
+} from "../constants/mappings"; 
 import { VscFile } from "react-icons/vsc";
-import { useFileStore } from "../store/useFileStore"; // <-- Import store
+import { useFileStore } from "../store/useFileStore"; 
 
 interface FileTabsProps {
   // Refs
   tabContainerRef: React.RefObject<HTMLDivElement>;
 
-  // Tab State & Handlers (Get state/setters from store instead of props)
-  // openFiles: OpenFile[];
-  // setOpenFiles: React.Dispatch<React.SetStateAction<OpenFile[]>>;
-  // activeFileId: string | null;
-  // setActiveFileId: (id: string | null) => void;
-  handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea
-  handleCloseTab: (fileIdToClose: string) => void; // <-- Update signature (no event)
+  handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea, TODO: inlude this in the store
+  handleCloseTab: (fileIdToClose: string) => void; 
 
-  // Drag & Drop State & Handlers (Get state/setters from store instead of props)
-  // draggingId: string | null;
-  // setDraggingId: (id: string | null) => void;
-  // dropIndicator: { tabId: string | null; side: "left" | "right" | null };
-  // setDropIndicator: (indicator: { tabId: string | null; side: "left" | "right" | null }) => void;
 }
 
 const FileTabs: React.FC<FileTabsProps> = ({
   tabContainerRef,
-  // Remove props from destructuring
-  // openFiles,
-  // setOpenFiles,
-  // activeFileId,
-  // setActiveFileId,
   handleSwitchTab,
   handleCloseTab,
-  // draggingId,
-  // setDraggingId,
-  // dropIndicator,
-  // setDropIndicator,
 }) => {
-  // --- Get state and setters from store ---
+  // State & Setters from Store
   const {
     openFiles,
     activeFileId,
@@ -72,9 +52,8 @@ const FileTabs: React.FC<FileTabsProps> = ({
     setDraggingId,
     setDropIndicator,
   } = useFileStore();
-  // --- End store hook ---
 
-  // dnd-kit Sensors (Moved from MainEditorArea)
+  // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { delay: 100, tolerance: 5 },
@@ -82,9 +61,9 @@ const FileTabs: React.FC<FileTabsProps> = ({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Drag Handlers (Moved from MainEditorArea)
+  // Drag Handlers 
   const handleDragStart = (event: DragStartEvent) => {
-    // console.log("Drag Start:", event); // Keep or remove logging as desired
+    // console.log("Drag Start:", event); 
     setDraggingId(event.active.id as string);
     setDropIndicator({ tabId: null, side: null });
   };
@@ -150,10 +129,9 @@ const FileTabs: React.FC<FileTabsProps> = ({
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    const finalDropIndicator = { ...dropIndicator }; // Grab the state before resetting
+    const finalDropIndicator = { ...dropIndicator };
     const activeId = active.id as string;
 
-    // Reset dragging state immediately
     setDraggingId(null);
     setDropIndicator({ tabId: null, side: null });
 
@@ -165,8 +143,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
 
     let newIndex = -1;
 
-    // --- Calculate target index ---
-    // Priority 1: Use drop indicator if it exists
     if (finalDropIndicator.tabId) {
       const indicatorTargetIndex = openFiles.findIndex(
         (f) => f.id === finalDropIndicator.tabId
@@ -181,33 +157,22 @@ const FileTabs: React.FC<FileTabsProps> = ({
       }
     }
 
-    // Priority 2: If no indicator, use the 'over' element if dropping directly on a different tab
     if (newIndex === -1 && over && over.id !== active.id) {
       const overIndex = openFiles.findIndex((file) => file.id === over.id);
       if (overIndex !== -1) {
-        // When dropping directly *on* an item without a side indicator,
-        // the most intuitive result is often to place it *before* that item.
         newIndex = overIndex;
         console.log(`Calculated newIndex=${newIndex} based on 'over' element`);
       }
     }
 
-    // --- Validate and execute move ---
-    // If no valid drop target index was determined, do nothing
     if (newIndex === -1) {
       console.log("DragEnd: No valid newIndex determined.");
       return;
     }
 
-    // Clamp the index to be within the valid bounds for arrayMove [0, length]
-    // arrayMove can handle inserting at index `length` (which appends)
     const clampedNewIndex = Math.max(0, Math.min(newIndex, openFiles.length));
 
-    // Only update state if the logical position actually changes
     if (oldIndex !== clampedNewIndex) {
-      // A special case: moving the last item just slightly to the right might result in
-      // clampedNewIndex being `openFiles.length`, which is effectively the same position.
-      // We only need to check this if oldIndex was the last item.
       if (
         oldIndex === openFiles.length - 1 &&
         clampedNewIndex === openFiles.length
@@ -220,19 +185,16 @@ const FileTabs: React.FC<FileTabsProps> = ({
         `Requesting move: ID ${activeId} from ${oldIndex} to ${clampedNewIndex}`
       );
       setOpenFiles((currentOpenFiles) => {
-        // Re-find old index within setter for safety
         const currentOldIndex = currentOpenFiles.findIndex(
           (f) => f.id === activeId
         );
-        if (currentOldIndex === -1) return currentOpenFiles; // Should not happen
+        if (currentOldIndex === -1) return currentOpenFiles; 
 
-        // Re-clamp new index based on current array length
         const currentClampedNewIndex = Math.max(
           0,
           Math.min(clampedNewIndex, currentOpenFiles.length)
         );
 
-        // Final check for no-op
         if (currentOldIndex === currentClampedNewIndex) return currentOpenFiles;
         if (
           currentOldIndex === currentOpenFiles.length - 1 &&
@@ -248,9 +210,7 @@ const FileTabs: React.FC<FileTabsProps> = ({
           currentOldIndex,
           currentClampedNewIndex
         );
-        // --- Activate the moved tab ---
         setActiveFileId(activeId);
-        // --- End activation ---
         return movedFiles;
       });
     } else {
@@ -327,7 +287,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
               })()
             : null}
         </DragOverlay>
-        {/* Border below tabs */}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
       </div>
     </DndContext>

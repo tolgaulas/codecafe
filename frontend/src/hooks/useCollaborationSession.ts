@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import SockJS from "sockjs-client";
 import Stomp from "stompjs";
-import { editor } from "monaco-editor";
 import {
   TextOperation,
   MonacoAdapter,
@@ -10,33 +9,11 @@ import {
   IClientCallbacks,
   offsetToPosition,
 } from "../ot/TextOperationSystem";
-import { UserInfo, RemoteUser } from "../types/props";
-import { v4 as uuidv4 } from "uuid"; // Needed for unique client ID if not passed
-
-interface UseCollaborationSessionProps {
-  sessionId: string | null;
-  userId: string;
-  userInfo: Pick<UserInfo, "name" | "color">; // Use Pick for specific properties
-  activeFileId: string | null;
-  editorInstance: editor.IStandaloneCodeEditor | null;
-  isSessionActive: boolean; // Control when the hook should attempt connection
-  onStateReceived: (
-    fileId: string,
-    content: string,
-    revision: number,
-    participants: RemoteUser[]
-  ) => void;
-  onOperationReceived: (fileId: string, operation: TextOperation) => void; // Pass OT op for App state
-  onRemoteUsersUpdate: (fileId: string, users: RemoteUser[]) => void;
-  onConnectionStatusChange?: (isConnected: boolean) => void; // Optional callback for connection status
-  onError?: (error: Error | string) => void; // Optional callback for errors
-  webViewFileIds?: string[]; // Optional webViewFileIds
-}
-
-interface UseCollaborationSessionReturn {
-  isConnected: boolean;
-  // Potentially add functions to manually connect/disconnect if needed later
-}
+import {
+  RemoteUser,
+  UseCollaborationSessionProps,
+  UseCollaborationSessionReturn,
+} from "../types/props";
 
 export const useCollaborationSession = ({
   sessionId,
@@ -57,8 +34,8 @@ export const useCollaborationSession = ({
   const adapterRef = useRef<MonacoAdapter | null>(null);
   const clientRef = useRef<Client | null>(null);
   const subscriptionsRef = useRef<Stomp.Subscription[]>([]);
-  const currentFileIdRef = useRef<string | null>(null); // Track the file the hook is currently handling
-  const subscribedWebViewOpsRef = useRef<Set<string>>(new Set()); // Track webview op subs
+  const currentFileIdRef = useRef<string | null>(null);
+  const subscribedWebViewOpsRef = useRef<Set<string>>(new Set());
 
   const handleConnectionStatusChange = useCallback(
     (connected: boolean) => {
@@ -72,19 +49,17 @@ export const useCollaborationSession = ({
     (error: Error | string) => {
       console.error("[useCollaborationSession] Error:", error);
       onError?.(error);
-      handleConnectionStatusChange(false); // Assume disconnection on error
+      handleConnectionStatusChange(false);
       // Reset OT state on error
       clientRef.current = null;
       adapterRef.current?.detach();
       adapterRef.current = null;
-      subscriptionsRef.current = []; // Clear subscriptions
+      subscriptionsRef.current = [];
     },
     [onError, handleConnectionStatusChange]
   );
 
-  // Effect to manage WebSocket connection and subscriptions based on session state and active file
   useEffect(() => {
-    // Conditions to establish connection: session active, file open, editor ready
     if (!isSessionActive || !sessionId || !activeFileId || !editorInstance) {
       // Cleanup existing connection if conditions are not met
       if (stompClientRef.current?.connected) {
@@ -96,18 +71,16 @@ export const useCollaborationSession = ({
             "[useCollaborationSession STOMP] Disconnected due to unmet conditions."
           );
           handleConnectionStatusChange(false);
-          // Reset OT state on disconnect
           clientRef.current = null;
           adapterRef.current?.detach();
           adapterRef.current = null;
           subscriptionsRef.current = []; // Clear subscriptions on disconnect
-        }, {}); // Added empty headers object
+        }, {});
       } else if (isConnected) {
-        // Ensure isConnected state is false if stomp client wasn't connected but state thought it was
         handleConnectionStatusChange(false);
       }
-      currentFileIdRef.current = null; // Reset current file tracking
-      return; // Exit effect if conditions not met
+      currentFileIdRef.current = null;
+      return;
     }
 
     // If already connected and handling the same file, do nothing
@@ -123,7 +96,6 @@ export const useCollaborationSession = ({
     );
     currentFileIdRef.current = activeFileId; // Track the file we are connecting for
 
-    // --- Cleanup existing connection/subscriptions before starting new ones ---
     // Unsubscribe from previous file topics if any
     subscriptionsRef.current.forEach((sub) => {
       try {
@@ -134,7 +106,6 @@ export const useCollaborationSession = ({
     });
     subscriptionsRef.current = [];
 
-    // Disconnect stomp client only if it exists and we are changing files or reconnecting
     // Do NOT disconnect if we're connecting for the *first* time in this hook instance
     if (stompClientRef.current?.connected) {
       console.warn(
@@ -144,7 +115,6 @@ export const useCollaborationSession = ({
         console.log(
           "[useCollaborationSession STOMP] Disconnected before reconnecting for new file/session."
         );
-        // Resetting OT state here ensures clean slate for the new file connection
         clientRef.current = null;
         adapterRef.current?.detach();
         adapterRef.current = null;
@@ -155,7 +125,6 @@ export const useCollaborationSession = ({
       adapterRef.current?.detach();
       adapterRef.current = null;
     }
-    // --- End Cleanup ---
 
     console.log("[useCollaborationSession Setup] Connecting via SockJS...");
     const socket = new SockJS("http://localhost:8080/ws");
@@ -163,31 +132,27 @@ export const useCollaborationSession = ({
     stompClient.debug = () => {}; // Suppress STOMP debug logs in console
     stompClientRef.current = stompClient;
 
-    // Ensure adapter is created or re-created if editor instance exists
     if (editorInstance && !adapterRef.current) {
       console.log(
         `[useCollaborationSession Setup] Initializing MonacoAdapter for ${activeFileId}`
       );
       adapterRef.current = new MonacoAdapter(editorInstance);
     } else if (editorInstance && adapterRef.current) {
-      // If adapter exists, ensure it's re-attached or re-registered later
-      // For now, we assume a new connection needs potentially new callbacks
-      adapterRef.current.detach(); // Detach previous callbacks if any
-      adapterRef.current = new MonacoAdapter(editorInstance); // Or re-initialize if safer
+      adapterRef.current.detach();
+      adapterRef.current = new MonacoAdapter(editorInstance);
       console.log(
         `[useCollaborationSession Setup] Re-initializing MonacoAdapter for ${activeFileId}`
       );
     }
 
     stompClient.connect(
-      {}, // Empty headers
+      {},
       (frame: any) => {
         console.log(
           `[useCollaborationSession STOMP Connected] Frame: ${frame}, Session: ${sessionId}, File: ${activeFileId}`
         );
         handleConnectionStatusChange(true);
 
-        // <<< Send explicit join message >>>
         const joinPayload = {
           sessionId: sessionId,
           documentId: activeFileId,
@@ -198,7 +163,6 @@ export const useCollaborationSession = ({
         console.log("Sending explicit /app/join message", joinPayload);
         stompClient.send("/app/join", {}, JSON.stringify(joinPayload));
 
-        // Define callbacks WITH documentId included
         const clientCallbacks: IClientCallbacks = {
           sendOperation: (revision: number, operation: TextOperation) => {
             if (
@@ -207,13 +171,12 @@ export const useCollaborationSession = ({
               currentFileIdRef.current
             ) {
               const payload = {
-                documentId: currentFileIdRef.current, // Use ref for current file
+                documentId: currentFileIdRef.current,
                 clientId: userId,
                 revision: revision,
                 operation: operation.toJSON(),
                 sessionId: sessionId,
               };
-              // console.log(`[Client -> Server Op] /app/operation`, payload); // Less verbose logging
               stompClientRef.current.send(
                 "/app/operation",
                 {},
@@ -259,7 +222,7 @@ export const useCollaborationSession = ({
                 }
               }
               const payload = {
-                documentId: currentFileIdRef.current, // Use ref for current file
+                documentId: currentFileIdRef.current,
                 sessionId: sessionId,
                 userInfo: {
                   id: userId,
@@ -269,7 +232,6 @@ export const useCollaborationSession = ({
                   selection: selection?.toJSON() ?? null,
                 },
               };
-              // console.log(`[OT Client -> Server Sel] /app/selection (via clientCallbacks)`, payload); // Less verbose
               stompClientRef.current.send(
                 "/app/selection",
                 {},
@@ -282,13 +244,11 @@ export const useCollaborationSession = ({
             }
           },
           applyOperation: (operation: TextOperation) => {
-            // console.log(`[Client -> Editor Apply] Op: ${operation.toString()}`); // Less verbose
-            adapterRef.current?.applyOperation(operation); // Apply op to the Monaco editor instance
-            // --- Notify App component about the applied operation ---
+            adapterRef.current?.applyOperation(operation);
+
             if (currentFileIdRef.current) {
               onOperationReceived(currentFileIdRef.current, operation);
             }
-            // --- End notification ---
           },
           getSelection: () => {
             return adapterRef.current?.getSelection() ?? null;
@@ -299,11 +259,11 @@ export const useCollaborationSession = ({
         };
 
         // Subscribe to topics for the *current* active file
-        const currentFileId = activeFileId; // Capture for subscriptions
+        const currentFileId = activeFileId;
         const newSubscriptions: Stomp.Subscription[] = [];
-        const currentWebViewSubscriptions = new Set<string>(); // Track for this connection attempt
+        const currentWebViewSubscriptions = new Set<string>();
 
-        // 1. Document State Handling (Only for Active File)
+        // Document State Handling (Only for Active File)
         const stateTopic = `/topic/sessions/${sessionId}/state/document/${currentFileId}`;
         console.log(
           `[useCollaborationSession STOMP Setup] Subscribing to Document State topic: ${stateTopic}`
@@ -350,7 +310,7 @@ export const useCollaborationSession = ({
                   `   Processed participants for ${state.documentId}. Count: ${processedParticipants.length}`
                 );
               } else {
-                onRemoteUsersUpdate(state.documentId, []); // Send empty list if none
+                onRemoteUsersUpdate(state.documentId, []);
                 console.log(
                   `   No participants found in state message for ${state.documentId}.`
                 );
@@ -367,20 +327,19 @@ export const useCollaborationSession = ({
                   clientCallbacks
                 );
 
-                // 1. Notify App component of initial state (updates Zustand store)
+                // Notify App component of initial state (updates Zustand store)
                 onStateReceived(
                   state.documentId,
-                  state.document, // Use state.document which should be the full content string
+                  state.document,
                   state.revision,
                   processedParticipants
                 );
 
-                // 2. Directly update the Monaco Editor via the Adapter IF it's the active document
-                // This is crucial for initial load when joining.
+                // Directly update the Monaco Editor via the Adapter IF it's the active document
                 if (
-                  state.documentId === currentFileIdRef.current && // Double check it's still active
+                  state.documentId === currentFileIdRef.current &&
                   adapterRef.current &&
-                  editorInstance // Ensure editor is mounted
+                  editorInstance
                 ) {
                   const currentEditorValue = editorInstance
                     .getModel()
@@ -391,17 +350,14 @@ export const useCollaborationSession = ({
                     );
                     adapterRef.current.ignoreNextChange = true; // Prevent loopback
                     try {
-                      // Use setValue for initial state setting
                       editorInstance.setValue(state.document);
-                      // TODO: Consider cursor preservation if needed
                     } catch (error) {
                       console.error(
                         "Error setting editor value from initial state:",
                         error
                       );
-                      adapterRef.current.ignoreNextChange = false; // Reset on error
+                      adapterRef.current.ignoreNextChange = false;
                     }
-                    // Flag should be reset automatically by adapter later
                   } else {
                     console.log(
                       `   Editor content for ${state.documentId} already matches initial state.`
@@ -409,32 +365,24 @@ export const useCollaborationSession = ({
                   }
                 }
 
-                // Register adapter callbacks AFTER client is initialized and initial state is handled
                 if (adapterRef.current) {
                   console.log(
                     `   Registering Adapter Callbacks for ${state.documentId}`
                   );
                   adapterRef.current.registerCallbacks({
-                    change: (op: TextOperation, inverse: TextOperation) => {
-                      // console.log(`[Adapter Callback] Change triggered for ${currentFileIdRef.current}. Op: ${op.toString()}`); // Less verbose
+                    change: (op: TextOperation) => {
                       if (!clientRef.current) {
                         console.error(
                           `[Adapter Callback] Error: clientRef is null when change occurred for ${currentFileIdRef.current}`
                         );
                         return;
                       }
-                      // console.log(`[Adapter Callback] Calling applyClient. Client State: ${clientRef.current.state.constructor.name}, Revision: ${clientRef.current.revision}`); // Less verbose
                       clientRef.current?.applyClient(op); // Send op to server state machine
-
-                      // *** NO LONGER NEEDED: App.tsx updates its state via onOperationReceived ***
-                      // setFileContents((prevContents) => { ... });
                     },
                     selectionChange: () => {
-                      // console.log(`[Editor -> Client SelChange] File: ${currentFileIdRef.current}`); // Less verbose
                       clientRef.current?.selectionChanged();
                     },
                     blur: () => {
-                      // console.log(`[Editor -> Client Blur] File: ${currentFileIdRef.current}`); // Less verbose
                       clientRef.current?.blur();
                     },
                   });
@@ -444,15 +392,10 @@ export const useCollaborationSession = ({
                   );
                 }
               } else {
-                // If client exists, might be a state update (e.g., participant join/leave without content change)
-                // Or a resync if revisions mismatch significantly (advanced)
                 console.warn(
                   `[Server -> Client State] Received state for ${state.documentId} after client init. Rev: ${state.revision}, ClientRev: ${clientRef.current.revision}`
                 );
-                // Potentially update participants even if client exists
                 onRemoteUsersUpdate(state.documentId, processedParticipants);
-                // Maybe force-set content if needed, though ideally ops handle this
-                // onStateReceived(state.documentId, state.document, state.revision, processedParticipants); // Be careful with this
               }
             } catch (error) {
               handleError(`Error processing document-state message: ${error}`);
@@ -460,7 +403,6 @@ export const useCollaborationSession = ({
           })
         );
 
-        // 2. Operations Handling (Active File + WebView Files)
         const handleIncomingOperation = (message: any) => {
           try {
             const payload = JSON.parse(message.body);
@@ -483,7 +425,6 @@ export const useCollaborationSession = ({
             const sessionOfOp = payload.sessionId;
             const sourceClientId = payload.clientId;
 
-            // Ignore if session doesn't match current hook session
             if (sessionOfOp !== sessionId) {
               console.warn(
                 `Ignoring op for session ${sessionOfOp} (current: ${sessionId})`
@@ -494,41 +435,24 @@ export const useCollaborationSession = ({
             try {
               const operationForClient = TextOperation.fromJSON(opData);
 
-              // --- Logic for Local vs Remote Ops ---
+              // Logic for Local vs Remote Ops
               if (sourceClientId === userId) {
-                // Operation originated from the local client (echoed back from server)
-
-                // Update WebView content state if applicable
                 if (webViewFileIds?.includes(docId)) {
-                  // console.log(`[Server -> Client Op Apply(Local Echo - WebView)] Op for ${docId} via direct callback`);
                   onOperationReceived(docId, operationForClient);
                 }
-                // Do NOT call applyServer for local ops, OT Client handles this via ACK
-                // The clientRef.current?.serverAck() handles the state transition implicitly
               } else {
-                // Operation originated from a remote client
-
-                // If it's for the currently active file, process through OT Client
                 if (docId === currentFileIdRef.current) {
                   if (clientRef.current) {
-                    // console.log(`[Server -> Client Op Apply(Remote - Active)] Op for ${docId} via OT Client`);
                     clientRef.current.applyServer(operationForClient);
-                    // Callback `applyOperation` inside clientCallbacks handles applying to editor AND notifying App
                   } else {
                     console.warn(
                       `[Server -> Client Op] Received op for active file ${docId} before client init.`
                     );
                   }
-                }
-                // If it's for a watched WebView file (and not the active file), directly notify App
-                else if (webViewFileIds?.includes(docId)) {
-                  // console.log(`[Server -> Client Op Apply(Remote - WebView)] Op for ${docId} via direct callback`);
+                } else if (webViewFileIds?.includes(docId)) {
                   onOperationReceived(docId, operationForClient);
                 }
-                // Else: Ignore remote op (not active, not webview)
-                // else { console.log(`[Server -> Client Op Ignore(Remote)] Op for ${docId}`); }
               }
-              // --- End Logic ---
             } catch (e) {
               handleError(
                 `Error processing/applying server op for ${docId}: ${e}`
@@ -547,9 +471,9 @@ export const useCollaborationSession = ({
         newSubscriptions.push(
           stompClient.subscribe(activeOpTopic, handleIncomingOperation)
         );
-        subscribedWebViewOpsRef.current.add(currentFileId); // Mark active file as handled
+        subscribedWebViewOpsRef.current.add(currentFileId);
 
-        // Subscribe to WebView File Operations (if not already the active file)
+        // Subscribe to WebView File Operations
         webViewFileIds?.forEach((webViewFileId) => {
           if (webViewFileId !== currentFileId) {
             const webViewOpTopic = `/topic/sessions/${sessionId}/operations/document/${webViewFileId}`;
@@ -559,12 +483,12 @@ export const useCollaborationSession = ({
             newSubscriptions.push(
               stompClient.subscribe(webViewOpTopic, handleIncomingOperation)
             );
-            currentWebViewSubscriptions.add(webViewFileId); // Add to current set
+            currentWebViewSubscriptions.add(webViewFileId);
           }
         });
-        subscribedWebViewOpsRef.current = currentWebViewSubscriptions; // Update ref
+        subscribedWebViewOpsRef.current = currentWebViewSubscriptions;
 
-        // 3. Selections Handling (Only for Active File)
+        // Selections Handling (Only for Active File)
         const selectionTopic = `/topic/sessions/${sessionId}/selections/document/${currentFileId}`;
         console.log(
           `[useCollaborationSession STOMP Setup] Subscribing to Selections topic: ${selectionTopic}`
@@ -586,45 +510,9 @@ export const useCollaborationSession = ({
                 return;
               }
               const { documentId, userInfo: remoteUserInfo } = payload;
-              // Ignore own messages based on userInfo.id
               if (remoteUserInfo.id === userId) return;
-              // Ignore selections for files other than the one this hook instance is handling
               if (documentId !== currentFileIdRef.current) return;
 
-              // console.log(`[DEBUG] Received selection for ${remoteUserInfo.id} in ${documentId}`); // Less verbose
-
-              // Update remote users via callback - App.tsx will manage the state logic
-              // We just need to format the incoming user info correctly
-              const formattedUser: RemoteUser = {
-                id: remoteUserInfo.id,
-                name:
-                  remoteUserInfo.name ||
-                  `User ${remoteUserInfo.id.substring(0, 4)}`,
-                color: remoteUserInfo.color || "#CCCCCC",
-                cursorPosition: remoteUserInfo.cursorPosition || null,
-                selection: remoteUserInfo.selection
-                  ? OTSelection.fromJSON(remoteUserInfo.selection)
-                  : null,
-              };
-              // The callback in App.tsx needs to handle merging this single user update
-              // into the list for the correct documentId.
-              // Maybe the hook *should* manage the remoteUsers state internally?
-              // For now, let App handle the merging logic via onRemoteUsersUpdate.
-              // It might be simpler to pass the single user update:
-              // onSingleRemoteUserUpdate(documentId, formattedUser);
-              // Let's stick to passing the full list for now, App needs to know how to merge.
-              // This requires App to fetch the current list, update/add, and set state.
-              // Re-evaluating: It's likely better for the *hook* to manage remoteUsers state internally
-              // and just provide the final list for the active file. Let's refactor later if needed.
-              // For now, App receives raw user info and needs to handle updates.
-              // --> Problem: onRemoteUsersUpdate expects the *full* list. How to provide it?
-              // The hook doesn't store the full list.
-              // Change plan: Hook needs to manage remoteUsers state internally.
-
-              // Let's stick to the original plan for now and let App manage it,
-              // but acknowledge this might be complex. We'll refine if it proves too difficult.
-              // We will pass the single user update through `onRemoteUsersUpdate` and require
-              // App.tsx to handle the merging logic. This is suboptimal but keeps the initial refactor focused.
               const formattedUserForApp: RemoteUser = {
                 id: remoteUserInfo.id,
                 name:
@@ -636,7 +524,6 @@ export const useCollaborationSession = ({
                   ? OTSelection.fromJSON(remoteUserInfo.selection)
                   : null,
               };
-              // Kludge: Pass single user in an array for now. App needs to know how to merge.
               onRemoteUsersUpdate(documentId, [formattedUserForApp]);
             } catch (error) {
               handleError(`Error processing selections message: ${error}`);
@@ -680,9 +567,8 @@ export const useCollaborationSession = ({
         handleError(
           `[STOMP Error] Connection Failed for ${sessionId}/${activeFileId}: ${error}`
         );
-        // Cleanup will run via effect dependency change or component unmount
-      } // End onError
-    ); // End stompClient.connect
+      }
+    );
 
     // Cleanup function for the effect
     return () => {
@@ -706,7 +592,7 @@ export const useCollaborationSession = ({
           console.log(
             "[useCollaborationSession STOMP] Disconnected via effect cleanup."
           );
-          handleConnectionStatusChange(false); // Ensure state reflects disconnection
+          handleConnectionStatusChange(false);
         }, {});
       }
       // Reset refs specific to this connection attempt
@@ -714,7 +600,6 @@ export const useCollaborationSession = ({
       adapterRef.current?.detach();
       adapterRef.current = null;
       currentFileIdRef.current = null; // Clear tracked file ID
-      // Do not nullify stompClientRef here, it's handled at the start of the effect if needed
       console.log(`[useCollaborationSession Cleanup] Finished effect cleanup.`);
     };
 
@@ -722,19 +607,16 @@ export const useCollaborationSession = ({
   }, [
     isSessionActive,
     sessionId,
-    activeFileId, // Rerun when file changes
-    editorInstance, // Rerun if editor mounts/unmounts
+    activeFileId,
+    editorInstance,
     userId,
-    userInfo.name, // Re-run if user info changes (for join message)
+    userInfo.name,
     userInfo.color,
-    // Callbacks should be stable via useCallback in parent, but include just in case
     onStateReceived,
     onOperationReceived,
     onRemoteUsersUpdate,
-    handleConnectionStatusChange, // Include internal callbacks derived from props
+    handleConnectionStatusChange,
     handleError,
-    // Include webViewFileIds - NOTE: If this list changes often, could cause churn. Assume stable.
-    // Convert array to string for stable dependency check if needed, but likely fine.
     JSON.stringify(webViewFileIds),
   ]);
 
@@ -747,12 +629,7 @@ export const useCollaborationSession = ({
       userInfo.name.trim() &&
       stompClientRef.current?.connected
     ) {
-      // console.log(`[useCollaborationSession Presence] Sending initial presence for ${userId} in ${activeFileId}`);
-      // Use clientCallbacks.sendSelection which is already set up
-      clientRef.current?.selectionChanged(); // Trigger a selection send (which includes user info)
-      // Or send explicitly if needed, but selectionChanged should cover it
-      // const initialPresencePayload = { ... };
-      // stompClientRef.current.send("/app/selection", {}, JSON.stringify(initialPresencePayload));
+      clientRef.current?.selectionChanged();
     }
   }, [
     isConnected,
@@ -761,7 +638,7 @@ export const useCollaborationSession = ({
     userId,
     userInfo.name,
     userInfo.color,
-  ]); // Depend on connection and user info
+  ]);
 
   return { isConnected };
 };

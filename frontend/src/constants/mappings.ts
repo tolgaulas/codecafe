@@ -2,7 +2,7 @@ import { EditorLanguageKey } from "../types/editor";
 import { DiJavascript1, DiCss3Full, DiHtml5 } from "react-icons/di";
 import React from "react";
 
-// Map Monaco language identifiers if they differ (optional, but good practice)
+// Map Monaco language identifiers if they differ
 export const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
   javascript: "javascript",
   typescript: "typescript",
@@ -16,9 +16,11 @@ export const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
   css: "css",
   html: "html",
   plaintext: "plaintext",
+  json: "json",
+  markdown: "markdown",
 };
 
-// --- Icon Mapping ---
+// Icon Mapping
 export const languageIconMap: {
   [key in EditorLanguageKey]?: React.ComponentType<{
     size?: number;
@@ -28,16 +30,15 @@ export const languageIconMap: {
   javascript: DiJavascript1,
   css: DiCss3Full,
   html: DiHtml5,
-  // Add more mappings as needed
   // json: VscJson,
 };
 
-// --- Language Color Mapping ---
+// Language Color Mapping
 export const languageColorMap: { [key in EditorLanguageKey]?: string } = {
-  javascript: "text-yellow-400", // Yellow for JS
-  css: "text-blue-500", // Blue for CSS
-  html: "text-orange-600", // Orange for HTML
-  // Add more colors as needed
+  javascript: "text-yellow-400",
+  css: "text-blue-500",
+  html: "text-orange-600",
+  // will add more colors as more more languages are added
 };
 
-export const defaultIconColor = "text-stone-400"; // Default color for other files/icons
+export const defaultIconColor = "text-stone-400"; // Default color

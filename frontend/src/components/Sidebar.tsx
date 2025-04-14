@@ -7,54 +7,49 @@ import {
   VscFile,
 } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
-import JoinSessionPanel from "./JoinSessionPanel"; // Assuming JoinSessionPanel is in the same dir
-import { OpenFile, JoinStateType, EditorLanguageKey } from "../types/editor"; // Adjust path as needed
-// import { RemoteUser } from '../types/props'; // Not needed directly in Sidebar
-import { MOCK_FILES } from "../constants/mockFiles"; // Adjust path as needed - or pass as prop
+import JoinSessionPanel from "./JoinSessionPanel";
+import { JoinStateType, EditorLanguageKey } from "../types/editor";
+import { MOCK_FILES } from "../constants/mockFiles";
 import {
   languageIconMap,
   languageColorMap,
   defaultIconColor,
-} from "../constants/mappings"; // Adjust path as needed
-import { ICON_BAR_WIDTH, EXPLORER_HANDLE_WIDTH } from "../constants/layout"; // Adjust path as needed
-import { COLORS } from "../constants/colors"; // Import COLORS here
+} from "../constants/mappings";
+import { ICON_BAR_WIDTH, EXPLORER_HANDLE_WIDTH } from "../constants/layout";
+import { COLORS } from "../constants/colors";
 
 interface SidebarProps {
-  // Refs for resizable panel hook (passed from App.tsx)
+  // Refs for resizable panel hook
   sidebarContainerRef: React.RefObject<HTMLDivElement>;
-  explorerPanelRef: React.RefObject<HTMLDivElement>; // Pass the ref for the panel itself
+  explorerPanelRef: React.RefObject<HTMLDivElement>;
 
-  // Resizable Panel State & Handlers (from useResizablePanel in App.tsx)
   isExplorerCollapsed: boolean;
-  explorerPanelSize: number; // The calculated width (size - ICON_BAR_WIDTH)
+  explorerPanelSize: number;
   handleExplorerPanelMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
-  toggleExplorerPanel: () => void; // Needed for file icon click
+  toggleExplorerPanel: () => void;
 
-  // Sidebar State & Handlers (managed in App.tsx)
   activeIcon: string | null;
   setActiveIcon: React.Dispatch<React.SetStateAction<string | null>>;
 
-  // Join State & Panel Props (managed in App.tsx)
   joinState: JoinStateType;
   userName: string;
   userColor: string;
   isColorPickerOpen: boolean;
-  // colors: string[]; // Defined locally now
   handleNameChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleColorSelect: (color: string) => void;
   handleToggleColorPicker: () => void;
   handleConfirmJoin: () => void;
 
-  // File Explorer Props (managed in App.tsx)
+  // File Explorer Props
   activeFileId: string | null;
   handleOpenFile: (fileId: string, isSessionActive: boolean) => void;
-  mockFiles: typeof MOCK_FILES; // Pass MOCK_FILES constant
-  isSessionActive: boolean; // <-- Add prop
+  mockFiles: typeof MOCK_FILES;
+  isSessionActive: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({
+const Sidebar = ({
   sidebarContainerRef,
-  explorerPanelRef, // Receive the ref
+  explorerPanelRef,
   isExplorerCollapsed,
   explorerPanelSize,
   handleExplorerPanelMouseDown,
@@ -65,7 +60,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   userName,
   userColor,
   isColorPickerOpen,
-  // colors, // Removed from props
   handleNameChange,
   handleColorSelect,
   handleToggleColorPicker,
@@ -73,31 +67,26 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeFileId,
   handleOpenFile,
   mockFiles,
-  isSessionActive, // <-- Destructure prop
-}) => {
-  // Moved from App.tsx
+  isSessionActive,
+}: SidebarProps) => {
   const handleIconClick = (iconName: string | null) => {
-    if (joinState === "prompting") return; // Prevent changing view during join prompt
+    if (joinState === "prompting") return;
     if (iconName === "files") {
-      toggleExplorerPanel(); // Use the passed toggle function
-      // setActiveIcon logic is handled by the onToggle callback in App.tsx's useResizablePanel
+      toggleExplorerPanel();
     } else {
-      // If clicking a different icon, collapse the explorer if it's open
       if (!isExplorerCollapsed) {
         toggleExplorerPanel();
       }
-      // Set the new icon as active
       setActiveIcon(iconName);
     }
   };
 
   return (
-    // Container Ref passed from App.tsx for useResizablePanel hook
     <div
       ref={sidebarContainerRef}
       className="flex flex-shrink-0 h-full relative"
     >
-      {/* Icon Bar JSX */}
+      {/* Icon Bar */}
       <div
         className="bg-stone-800 bg-opacity-60 flex flex-col justify-between py-2 border-r border-stone-600 flex-shrink-0 z-10"
         style={{ width: `${ICON_BAR_WIDTH}px` }}
@@ -171,49 +160,39 @@ const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* File Tree / Join Panel Area */}
-      {/* This div needs the explorerPanelRef from App.tsx */}
-      {/* We also need the calculated width `explorerPanelSize` */}
       <div
-        ref={explorerPanelRef} // <-- Attach the passed ref here
+        ref={explorerPanelRef}
         className={`bg-stone-800 bg-opacity-60 overflow-hidden flex flex-col h-full border-r border-stone-600 flex-shrink-0 ${
           !isExplorerCollapsed ? "visible" : "invisible w-0"
         }`}
         style={{ width: `${explorerPanelSize}px` }}
       >
-        {/* --- Add Log --- */}
-        {/* Removed log from here, can add back if needed */}
-        {/* --- End Log --- */}
-
         {joinState === "prompting" ? (
-          // Render Join Panel if prompting
           <JoinSessionPanel
             userName={userName}
             userColor={userColor}
             isColorPickerOpen={isColorPickerOpen}
-            colors={COLORS} // Use imported constant
-            onNameChange={handleNameChange} // Use passed prop
-            onColorSelect={handleColorSelect} // Use passed prop
-            onToggleColorPicker={handleToggleColorPicker} // Use passed prop
+            colors={COLORS}
+            onNameChange={handleNameChange}
+            onColorSelect={handleColorSelect}
+            onToggleColorPicker={handleToggleColorPicker}
             onConfirmJoin={() => {
-              handleConfirmJoin(); // Use passed prop
-              // Ensure explorer is open after confirming join
+              handleConfirmJoin();
               if (isExplorerCollapsed) {
-                toggleExplorerPanel(); // Use passed prop
+                toggleExplorerPanel();
               }
             }}
           />
         ) : (
-          // Otherwise, render the normal File Tree if not prompting
           <div className="flex-1 overflow-y-auto h-full">
             <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
               EXPLORER
             </div>
             <div className="w-full">
               {Object.entries(mockFiles).map(([id, file]) => {
-                // Use passed prop
                 const IconComponent =
                   languageIconMap[file.language as EditorLanguageKey] ||
-                  VscFile; // Cast needed?
+                  VscFile;
                 const iconColor =
                   languageColorMap[file.language as EditorLanguageKey] ||
                   defaultIconColor;
@@ -225,7 +204,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                         ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
                         : "hover:bg-stone-700"
                     }`}
-                    onClick={() => handleOpenFile(id, isSessionActive)} // <-- Call with isSessionActive
+                    onClick={() => handleOpenFile(id, isSessionActive)}
                   >
                     <IconComponent
                       size={18}
@@ -248,8 +227,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         )}
       </div>
 
-      {/* Explorer Resizer Handle */}
-      {/* Show only when panel is not collapsed */}
       {!isExplorerCollapsed && (
         <div
           className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
@@ -259,9 +236,9 @@ const Sidebar: React.FC<SidebarProps> = ({
             left: `${
               ICON_BAR_WIDTH + explorerPanelSize - EXPLORER_HANDLE_WIDTH / 2
             }px`,
-            pointerEvents: "auto", // Ensure it's interactive
+            pointerEvents: "auto", 
           }}
-          onMouseDown={handleExplorerPanelMouseDown} // Use passed prop
+          onMouseDown={handleExplorerPanelMouseDown} 
         />
       )}
     </div>

@@ -3,37 +3,25 @@ import {
   useRef,
   forwardRef,
   useImperativeHandle,
-  useState,
   memo,
 } from "react";
 import { Terminal } from "xterm";
 import "xterm/css/xterm.css";
-import { Card } from "@radix-ui/themes";
-import { ResizableBox, ResizeHandle } from "react-resizable";
 import "react-resizable/css/styles.css";
 import { FitAddon } from "xterm-addon-fit";
+import { TerminalComponentProps } from "../types/props";
+import { ANSI_COLORS } from "../constants/terminal";
+import { TerminalHandle } from "../types/editor";
 
-// Define ANSI color codes for styling terminal text
-const ANSI_COLORS = {
-  RESET: "\x1b[0m",
-  PROMPT_COLOR: "\x1b[38;5;246m", // Light gray for prompt ($)
-  INPUT_COLOR: "\x1b[38;5;246m", // Light gray for user input text (same as prompt)
-  OUTPUT_COLOR: "\x1b[38;5;252m", // Slightly whiter for command output
-};
-
-// Add props interface
-interface TerminalComponentProps {
-  height: number; // Expect height prop
-}
-
-const TerminalComponent = forwardRef<any, TerminalComponentProps>(
-  ({ height }, ref) => {
+const TerminalComponent = forwardRef<TerminalHandle, TerminalComponentProps>(
+  (_, ref) => {
+    // Refs
     const terminalRef = useRef<HTMLDivElement>(null);
     const terminalInstance = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const currentLineRef = useRef<string>("");
 
-    // Initial setup effect
+    // Effects
     useEffect(() => {
       const term = new Terminal({
         cursorBlink: true,
@@ -62,14 +50,12 @@ const TerminalComponent = forwardRef<any, TerminalComponentProps>(
 
         // Handle user input
         term.onData((data) => {
-          // Handle Enter key
           if (data === "\r") {
             const command = currentLineRef.current;
             currentLineRef.current = "";
 
             term.write("\r\n");
 
-            // Process command
             if (command === "clear") {
               term.clear();
             } else if (command === "help") {
@@ -112,9 +98,7 @@ const TerminalComponent = forwardRef<any, TerminalComponentProps>(
             }
 
             writePrompt(term);
-          }
-          // Handle backspace
-          else if (data === "\x7f") {
+          } else if (data === "\x7f") {
             if (currentLineRef.current.length > 0) {
               currentLineRef.current = currentLineRef.current.substring(
                 0,
@@ -122,11 +106,8 @@ const TerminalComponent = forwardRef<any, TerminalComponentProps>(
               );
               term.write("\b \b");
             }
-          }
-          // Handle normal input (printable characters)
-          else if (data >= " " && data <= "~") {
+          } else if (data >= " " && data <= "~") {
             currentLineRef.current += data;
-            // Use the input color for typed text
             term.write(`${ANSI_COLORS.INPUT_COLOR}${data}${ANSI_COLORS.RESET}`);
           }
         });

@@ -1,7 +1,7 @@
 import React from "react";
 import { editor } from "monaco-editor";
 
-import { TerminalRef, JoinStateType } from "../types/editor";
+import { JoinStateType } from "../types/editor";
 import { RemoteUser } from "../types/props";
 import CodeEditor from "./CodeEditor";
 import TerminalComponent from "./TerminalComponent";
@@ -18,7 +18,7 @@ interface MainEditorAreaProps {
   // Refs
   editorTerminalAreaRef: React.RefObject<HTMLDivElement>;
   tabContainerRef: React.RefObject<HTMLDivElement>;
-  terminalRef: React.MutableRefObject<TerminalRef | undefined>;
+  terminalRef: any;
   editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>;
 
   // Tab Management

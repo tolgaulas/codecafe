@@ -1,18 +1,7 @@
-import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { JoinSessionPanelProps } from "../types/props";
 
-interface JoinSessionPanelProps {
-  userName: string;
-  userColor: string;
-  isColorPickerOpen: boolean;
-  colors: string[];
-  onNameChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onColorSelect: (color: string) => void;
-  onToggleColorPicker: () => void; // New prop to handle toggling the picker
-  onConfirmJoin: () => void;
-}
-
-const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
+const JoinSessionPanel = ({
   userName,
   userColor,
   isColorPickerOpen,
@@ -21,31 +10,27 @@ const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
   onColorSelect,
   onToggleColorPicker,
   onConfirmJoin,
-}) => {
+}: JoinSessionPanelProps) => {
   return (
     <div className="flex flex-col h-full bg-stone-800 bg-opacity-60">
-      {/* Title - Styled like EXPLORER */}
       <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10 flex-shrink-0">
         JOIN SESSION
       </div>
 
-      {/* Content Area - Added padding */}
       <div className="flex-1 flex flex-col p-4 overflow-y-auto">
-        {/* Avatar/Name Row - Copied from Share Menu */}
         <div className="flex items-end gap-3 mb-4">
-          {/* Avatar and Color Picker Container */}
           <div className="relative flex-shrink-0">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium cursor-pointer shadow-md ring-1 ring-stone-500/50"
               style={{ backgroundColor: userColor }}
-              onClick={onToggleColorPicker} // Use the passed toggle function
+              onClick={onToggleColorPicker}
             >
               <span className="text-white/90">
                 {userName ? userName[0].toUpperCase() : ""}
               </span>
             </div>
 
-            {/* Color Picker Popover - Copied from Share Menu */}
+            {/* Color Picker Popover*/}
             <AnimatePresence>
               {isColorPickerOpen && (
                 <motion.div
@@ -53,7 +38,6 @@ const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: -5 }}
                   transition={{ duration: 0.1 }}
-                  // Positioned relative to the parent div, below the avatar
                   className="absolute left-0 top-full mt-2 bg-neutral-900/90 backdrop-blur-sm p-2.5 border border-stone-700 shadow-lg z-10 w-[120px]"
                 >
                   <div className="flex flex-wrap gap-1.5">
@@ -64,7 +48,7 @@ const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
                           userColor === color ? "ring-2 ring-white/60" : ""
                         }`}
                         style={{ backgroundColor: color }}
-                        onClick={() => onColorSelect(color)} // Use passed handler
+                        onClick={() => onColorSelect(color)}
                       />
                     ))}
                   </div>
@@ -73,7 +57,7 @@ const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
             </AnimatePresence>
           </div>
 
-          {/* Name Input Container - Copied from Share Menu */}
+          {/* Name Input Container */}
           <div className="flex-1">
             <label className="block text-xs text-stone-400 mb-1">
               Your Display Name
@@ -81,7 +65,7 @@ const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
             <input
               type="text"
               value={userName}
-              onChange={onNameChange} // Use passed handler
+              onChange={onNameChange}
               placeholder="Enter your name"
               className="w-full bg-neutral-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-2 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors"
             />
@@ -90,7 +74,7 @@ const JoinSessionPanel: React.FC<JoinSessionPanelProps> = ({
 
         {/* Join Session Button */}
         <button
-          onClick={onConfirmJoin} // Use passed handler
+          onClick={onConfirmJoin}
           disabled={!userName.trim()}
           className="w-full mt-auto px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0" // Added flex-shrink-0
         >

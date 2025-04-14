@@ -1,7 +1,7 @@
-import React, { useRef, useEffect } from "react";
+import { useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiCopy } from "react-icons/fi";
-import { RemoteUser, HeaderProps } from "../types/props";
+import { HeaderProps } from "../types/props";
 import { COLORS } from "../constants/colors";
 
 const Header = ({

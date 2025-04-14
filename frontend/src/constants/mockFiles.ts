@@ -1,13 +1,11 @@
 import { EditorLanguageKey } from "../types/editor";
 
-// Interface for the structure of each mock file
 interface MockFile {
   name: string;
   language: EditorLanguageKey;
   content: string;
 }
 
-// Define the mock files object with explicit typing
 export const MOCK_FILES: { [key: string]: MockFile } = {
   "index.html": {
     name: "index.html",
