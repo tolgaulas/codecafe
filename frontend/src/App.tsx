@@ -806,13 +806,7 @@ const App = () => {
       </div>
       {/* Status Bar */}
       <StatusBar
-        connectionStatus={
-          isSessionActive
-            ? isConnected
-              ? "connected"
-              : "disconnected"
-            : undefined
-        }
+        connectionStatus={isSessionActive ? "connected" : undefined}
         language={activeLanguage}
         line={cursorLine}
         column={cursorColumn}
