@@ -53,10 +53,13 @@ export interface CodeEditorProps {
   code?: string; // Current code content
   language?: string; // Language for syntax highlighting
   theme?: string; // Editor theme name (e.g., 'vs-dark', 'codeCafeTheme')
-  fontSize?: string; // Font size (e.g., '14px')
+  fontSize?: number; // Font size (changed to number)
   wordWrap?: boolean; // Enable/disable word wrapping
   showLineNumbers?: boolean; // Show/hide line numbers
-  onCodeChange: (newCode: string) => void; // Callback when code changes
+  onCodeChange: (
+    value: string,
+    changes: monaco.editor.IModelContentChange[]
+  ) => void; // Adjusted signature based on later component usage
   onCursorPositionChange?: (lineNumber: number) => void; // Optional: Callback for cursor position change
   sendSelectionData?: (data: {
     cursorPosition: { lineNumber: number; column: number } | null;
