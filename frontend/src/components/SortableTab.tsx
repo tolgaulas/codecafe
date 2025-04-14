@@ -1,79 +1,94 @@
 import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { SortableTabProps } from "../types/editor"; // Assuming SortableTabProps is in types/editor
+import clsx from "clsx"; // <-- Import clsx
+
+// Extend props for indicator
+interface SortableTabPropsWithIndicator extends SortableTabProps {
+  dropIndicatorSide: "left" | "right" | null;
+  draggingId: string | null; // Ensure draggingId is defined here
+}
 
 // --- Sortable Tab Component ---
 export function SortableTab({
   file,
   activeFileId,
-  // draggingId, // This prop might not be needed if visibility is handled by dnd-kit state directly
+  draggingId, // <-- Ensure prop is destructured
   IconComponent,
   iconColor,
   onSwitchTab,
   onCloseTab,
-}: SortableTabProps) {
+  dropIndicatorSide, // <-- Add new prop
+}: SortableTabPropsWithIndicator) {
+  // <-- Use extended props type
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
-    isDragging,
+    // transform, // Stays commented out
+    transition: _transition, // Get transition but ignore it by renaming
+    isDragging, // Still useful for potentially other styling
   } = useSortable({ id: file.id });
 
+  // Update style object to include CSS variables for indicator opacity
   const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 20 : activeFileId === file.id ? 10 : "auto",
-    visibility: isDragging ? "hidden" : "visible",
+    zIndex: activeFileId === file.id ? 10 : "auto",
+    // @ts-ignore // Ignore TS error for CSS custom properties
+    "--before-opacity": dropIndicatorSide === "left" ? 1 : 0,
+    // @ts-ignore // Ignore TS error for CSS custom properties
+    "--after-opacity": dropIndicatorSide === "right" ? 1 : 0,
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      onPointerDown={(e) => {
-        // Only trigger switch tab on the main div click, not the close button
-        if (
-          e.target === e.currentTarget ||
-          !(e.target instanceof HTMLElement) ||
-          !e.currentTarget.querySelector("button")?.contains(e.target)
-        ) {
-          onSwitchTab(file.id);
+      onClick={() => onSwitchTab(file.id)}
+      {...listeners}
+      className={clsx(
+        // Base classes (including base indicator styles)
+        "pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 cursor-grab relative",
+        'before:content-[""] before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-white before:transition-opacity before:duration-150 before:z-10 before:opacity-[var(--before-opacity,0)]',
+        'after:content-[""] after:absolute after:inset-y-0 after:right-0 after:w-[2px] after:bg-white after:transition-opacity after:duration-150 after:z-10 after:opacity-[var(--after-opacity,0)]',
+        // Conditional background color
+        {
+          "bg-neutral-900": activeFileId === file.id,
+          "bg-stone-700 hover:bg-stone-600": activeFileId !== file.id,
+        },
+        // Conditional opacity for dragging
+        {
+          "opacity-50": isDragging,
+          "opacity-100": !isDragging,
         }
-      }}
-      className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative cursor-pointer ${
-        // Added cursor-pointer
-        activeFileId === file.id
-          ? "bg-neutral-900"
-          : "bg-stone-700 hover:bg-stone-600"
-      }`}
+        // Indicator visibility handled separately below
+      )}
     >
+      {/* Drop Indicator Lines - Removed explicit divs */}
+      {/* {dropIndicatorSide === "left" && (
+        <div className="absolute inset-y-0 left-0 w-1 bg-sky-400 z-10 pointer-events-none"></div> // Use inset-y-0 and w-1
+      )}
+      {dropIndicatorSide === "right" && (
+        <div className="absolute inset-y-0 right-0 w-1 bg-sky-400 z-10 pointer-events-none"></div> // Use inset-y-0 and w-1
+      )} */}
+
       <IconComponent
         size={16}
         className={`mr-1.5 flex-shrink-0 ${iconColor}`}
       />
-      {/* Apply drag listeners only to the text span for better control */}
       <span
         {...attributes}
-        {...listeners}
-        className={`text-sm -mt-0.5 select-none cursor-grab ${
-          // Changed cursor to grab
+        className={`text-sm -mt-0.5 select-none ${
           activeFileId === file.id ? "text-stone-200" : "text-stone-400"
         }`}
-        // Prevent span click from triggering onSwitchTab if drag starts
-        onPointerDown={(e) => e.stopPropagation()}
       >
         {file.name}
       </span>
       <button
         className={`ml-2 text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-0.5 z-20`}
         onClick={(e) => {
-          e.stopPropagation(); // Prevent triggering onSwitchTab
+          e.stopPropagation();
           onCloseTab(file.id, e);
         }}
-        // Stop propagation for pointer down as well
         onPointerDown={(e) => {
           e.stopPropagation();
         }}

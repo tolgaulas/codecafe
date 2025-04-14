@@ -30,7 +30,9 @@ export type EditorLanguageKey =
   | ExecutableLanguageKey
   | "css"
   | "html"
-  | "plaintext"; // Languages the editor supports
+  | "plaintext"
+  | "json"
+  | "markdown"; // Languages the editor supports
 
 // Add new state type for join process
 export type JoinStateType = "idle" | "prompting" | "joined";

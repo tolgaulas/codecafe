@@ -1,0 +1,15 @@
+
+
+  VITE v6.0.11  ready in 252 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  press h + enter to show help
+(node:62022) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/mar
+(node:62022) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/markotsymbaluk/Desktop/codecafe/frontend/postcss.config.js?t=1744606352795 is not specif
+(node:62022) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/markotsymbaluk/Desktop/codecafe/frontend/postcss.config.js?t=1744606352795 is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance 
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to /Users/markotsymbaluk/Desktop/code
+To eliminate this warning, add "type": "module" to /Users/markotsymbaluk/Desktop/codecafe/frontend/package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)

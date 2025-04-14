@@ -20,8 +20,10 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragMoveEvent,
   DragOverlay,
   DragStartEvent,
+  pointerWithin,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -101,6 +103,7 @@ const App = () => {
   const headerRef = useRef<HTMLDivElement>(null); // Added ref for header
   const shareButtonRef = useRef<HTMLButtonElement>(null); // <-- Ref for Share button
   const shareMenuRef = useRef<HTMLDivElement>(null); // <-- Ref for Share menu
+  const tabContainerRef = useRef<HTMLDivElement>(null); // <-- Add Ref for tab container
 
   // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
@@ -129,6 +132,12 @@ const App = () => {
     }
   );
   const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Add state for drop indicator
+  const [dropIndicator, setDropIndicator] = useState<{
+    tabId: string | null;
+    side: "left" | "right" | null;
+  }>({ tabId: null, side: null });
 
   // View Menu State
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
@@ -271,7 +280,13 @@ const App = () => {
 
   // dnd-kit Sensors
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      // Add activation constraints for quicker drag start
+      activationConstraint: {
+        delay: 100, // milliseconds (default is 250)
+        tolerance: 5, // pixels (default is 5)
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -279,20 +294,161 @@ const App = () => {
 
   // Drag Handlers
   const handleDragStart = (event: DragStartEvent) => {
-    const draggedId = event.active.id as string;
-    setDraggingId(draggedId);
+    console.log("Drag Start:", event);
+    setDraggingId(event.active.id as string);
+    setDropIndicator({ tabId: null, side: null }); // Clear indicator on start
+  };
+
+  const handleDragMove = (event: DragMoveEvent) => {
+    const { active, over, delta } = event;
+    const activeId = active.id as string;
+
+    // --- Check if hovering over a valid open file tab --- START ---
+    const overId = over?.id as string | undefined;
+    const isValidTabTarget = overId && openFiles.some((f) => f.id === overId);
+    // --- Check if hovering over a valid open file tab --- END ---
+
+    // Type guard for pointer event is crucial
+    if (!("clientX" in event.activatorEvent)) {
+      setDropIndicator({ tabId: null, side: null });
+      return; // Cannot determine position
+    }
+    const pointerX = (event.activatorEvent as PointerEvent).clientX;
+
+    // --- Handle Edge Cases (Hovering near first/last tab) --- START ---
+    const firstTabEl = tabContainerRef.current?.querySelector(
+      "[data-sortable-id]"
+    ) as HTMLElement | null;
+    const lastTabEl = tabContainerRef.current?.querySelector(
+      "[data-sortable-id]:last-child"
+    ) as HTMLElement | null;
+    let edgeIndicatorSet = false;
+
+    if (firstTabEl && lastTabEl && openFiles.length > 0) {
+      const firstTabRect = firstTabEl.getBoundingClientRect();
+      const lastTabRect = lastTabEl.getBoundingClientRect();
+      const firstTabId = openFiles[0].id;
+      const lastTabId = openFiles[openFiles.length - 1].id;
+
+      // Check slightly *before* the first tab's midpoint
+      if (pointerX < firstTabRect.left + firstTabRect.width * 0.5) {
+        setDropIndicator({ tabId: firstTabId, side: "left" });
+        edgeIndicatorSet = true;
+      }
+      // Check slightly *after* the last tab's midpoint
+      else if (pointerX > lastTabRect.right - lastTabRect.width * 0.5) {
+        setDropIndicator({ tabId: lastTabId, side: "right" });
+        edgeIndicatorSet = true;
+      }
+    }
+    // --- Handle Edge Cases (Hovering near first/last tab) --- END ---
+
+    // --- Handle Hovering Over a Specific Tab --- START ---
+    if (!edgeIndicatorSet) {
+      // If NOT an edge case, proceed ONLY if hovering over a *valid* tab
+      if (isValidTabTarget && overId) {
+        // Don't update if dragging over itself
+        if (activeId === overId) {
+          setDropIndicator({ tabId: null, side: null }); // Clear if over self
+          return;
+        }
+
+        // CHANGE: Try getting the node directly from the event object
+        const overNode = over?.node?.current;
+
+        // Find the actual DOM node for the valid tab target
+        // // CHANGE: Query within tabContainerRef (Previous attempt, now commented out)
+        // const overNode = tabContainerRef.current?.querySelector(
+        //   `[data-sortable-id="${overId}"]`
+        // );
+        if (!overNode) {
+          // This should ideally not happen if isValidTabTarget is true, but guard anyway
+          console.warn(
+            "Could not find overNode using event.over.node.current for id:", // Updated warning message
+            overId
+          );
+          setDropIndicator({ tabId: null, side: null });
+          return;
+        }
+
+        const overRect = overNode.getBoundingClientRect();
+        const overMiddleX = overRect.left + overRect.width / 2;
+
+        // Determine side based on pointer position relative to the middle of the 'over' tab
+        const side = pointerX < overMiddleX ? "left" : "right";
+        setDropIndicator({ tabId: overId, side });
+      } else {
+        // If not an edge case AND not over a valid tab, clear the indicator
+        setDropIndicator({ tabId: null, side: null });
+      }
+    }
+    // --- Handle Hovering Over a Specific Tab --- END ---
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setOpenFiles((items) => {
-        const oldIndex = items.findIndex((item) => item.id === active.id);
-        const newIndex = items.findIndex((item) => item.id === over.id);
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
+    console.log("Drag End:", event);
+    // Capture the final state BEFORE resetting
+    const finalDropIndicator = { ...dropIndicator };
+    const activeId = active.id as string;
+
+    // Reset states immediately
     setDraggingId(null);
+    setDropIndicator({ tabId: null, side: null });
+
+    const oldIndex = openFiles.findIndex((file) => file.id === activeId);
+    if (oldIndex === -1) {
+      console.warn("Dragged item not found in openFiles");
+      return; // Should not happen
+    }
+
+    let newIndex = -1;
+    const firstFileId = openFiles[0]?.id;
+    const lastFileId = openFiles[openFiles.length - 1]?.id;
+
+    // --- Priority 1: Handle Edge Drop Cases based on Indicator ---
+    if (
+      finalDropIndicator.side === "left" &&
+      finalDropIndicator.tabId === firstFileId
+    ) {
+      console.log("Edge Drop: Before first tab");
+      newIndex = 0;
+    } else if (
+      finalDropIndicator.side === "right" &&
+      finalDropIndicator.tabId === lastFileId
+    ) {
+      console.log("Edge Drop: After last tab");
+      newIndex = openFiles.length - 1; // Target index for the last position
+    } else if (over && over.id !== active.id) {
+      // --- Priority 2: Handle Drop Between Tabs (standard dnd-kit logic) ---
+      const overId = over.id as string;
+      const overIndex = openFiles.findIndex((file) => file.id === overId);
+      if (overIndex !== -1) {
+        console.log(`Standard Drop: Moving ${activeId} relative to ${overId}`);
+        // Use the overIndex directly for arrayMove's target
+        newIndex = overIndex;
+      } else {
+        console.warn(`Standard Drop: Could not find over target ${overId}`);
+      }
+    } else {
+      // No move needed (dropped on self, or outside valid area without edge indicator)
+      console.log(
+        "DragEnd: No move needed (dropped on self or invalid location)."
+      );
+      return;
+    }
+
+    // --- Perform the move if a valid newIndex was determined and it's different ---
+    if (newIndex !== -1 && oldIndex !== newIndex) {
+      console.log(
+        `Performing move: oldIndex=${oldIndex}, newIndex=${newIndex}`
+      );
+      setOpenFiles((prevFiles) => {
+        return arrayMove(prevFiles, oldIndex, newIndex);
+      });
+    } else {
+      console.log(`Move skipped: oldIndex=${oldIndex}, newIndex=${newIndex}`);
+    }
   };
 
   // Code Execution Handler
@@ -2037,86 +2193,113 @@ const App = () => {
         <div className="flex flex-1 min-w-0 relative">
           {/* Code and Terminal Area */}
           <div
-            ref={editorTerminalAreaRef} // This ref is used by the Terminal hook
+            ref={editorTerminalAreaRef}
             className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
           >
-            {/* Tabs */}
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-              onDragStart={handleDragStart}
-              modifiers={[restrictToHorizontalAxis]}
-            >
-              <div className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative">
-                <SortableContext
-                  items={openFiles.map((f) => f.id)}
-                  strategy={horizontalListSortingStrategy}
-                >
-                  {openFiles.map((file) => {
-                    const IconComponent =
-                      languageIconMap[file.language] || VscFile;
-                    const iconColor =
-                      languageColorMap[file.language] || defaultIconColor;
-                    return (
-                      <SortableTab
-                        key={file.id}
-                        file={file}
-                        activeFileId={activeFileId}
-                        draggingId={draggingId}
-                        IconComponent={IconComponent}
-                        iconColor={iconColor}
-                        onSwitchTab={handleSwitchTab}
-                        onCloseTab={handleCloseTab}
-                      />
-                    );
-                  })}
-                </SortableContext>
-                <DragOverlay modifiers={[restrictToParentElement]}>
-                  {draggingId
-                    ? (() => {
-                        const draggedFile = openFiles.find(
-                          (f) => f.id === draggingId
-                        );
-                        if (!draggedFile) return null;
-                        const IconComponent =
-                          languageIconMap[draggedFile.language] || VscFile;
-                        const iconColor =
-                          languageColorMap[draggedFile.language] ||
-                          defaultIconColor;
-                        return (
-                          <div
-                            className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative shadow-lg ${
-                              activeFileId === draggedFile.id
-                                ? "bg-neutral-900 z-10"
-                                : "bg-stone-700 z-10"
-                            }`}
-                          >
-                            <IconComponent
-                              size={16}
-                              className={`mr-1.5 flex-shrink-0 ${iconColor}`}
-                            />
-                            <span
-                              className={`text-sm -mt-0.5 select-none cursor-default ${
-                                activeFileId === draggedFile.id
-                                  ? "text-stone-200"
-                                  : "text-stone-400"
-                              }`}
-                            >
-                              {draggedFile.name}
-                            </span>
-                            <span className="ml-2 text-stone-500 p-0.5 -mt-0.5 opacity-50">
-                              ×
-                            </span>
-                          </div>
-                        );
-                      })()
-                    : null}
-                </DragOverlay>
-                <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
-              </div>
-            </DndContext>
+            {/* Define Placeholder Component */}
+            {(() => {
+              // IIFE to define Placeholder locally if needed, or define outside component
+              const Placeholder = () => (
+                <div
+                  className="flex-shrink-0 h-[33px] w-24 border border-dashed border-stone-500 bg-stone-700/50 mx-px"
+                  aria-hidden="true"
+                />
+              );
 
+              return (
+                <>
+                  {/* Tabs */}
+                  <DndContext
+                    sensors={sensors}
+                    // CHANGE BACK: Use pointerWithin collision detection
+                    collisionDetection={pointerWithin}
+                    onDragStart={handleDragStart}
+                    onDragMove={handleDragMove} // Keep handleDragMove for visual indicator
+                    onDragEnd={handleDragEnd}
+                  >
+                    <div
+                      ref={tabContainerRef}
+                      className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative"
+                    >
+                      {" "}
+                      {/* <-- Add ref here */}
+                      <SortableContext
+                        items={openFiles.map((f) => f.id)}
+                        strategy={horizontalListSortingStrategy}
+                      >
+                        {/* Map SortableTab and pass indicator state */}
+                        {openFiles.map((file) => {
+                          const IconComponent =
+                            languageIconMap[file.language] || VscFile;
+                          const iconColor =
+                            languageColorMap[file.language] || defaultIconColor;
+                          // Determine side indicator for this specific tab
+                          const indicatorSide =
+                            dropIndicator.tabId === file.id
+                              ? dropIndicator.side
+                              : null;
+                          return (
+                            <SortableTab
+                              key={file.id}
+                              file={file}
+                              activeFileId={activeFileId}
+                              // Pass draggingId if you need styling on the original tab during drag
+                              draggingId={draggingId} // <-- Pass draggingId prop
+                              IconComponent={IconComponent}
+                              iconColor={iconColor}
+                              onSwitchTab={handleSwitchTab}
+                              onCloseTab={handleCloseTab}
+                              dropIndicatorSide={indicatorSide} // <-- Pass calculated side
+                            />
+                          );
+                        })}
+                      </SortableContext>
+                      {/* DragOverlay */}
+                      <DragOverlay>
+                        {draggingId
+                          ? (() => {
+                              const draggedFile = openFiles.find(
+                                (f) => f.id === draggingId
+                              );
+                              if (!draggedFile) return null;
+                              const IconComponent =
+                                languageIconMap[draggedFile.language] ||
+                                VscFile;
+                              const iconColor =
+                                languageColorMap[draggedFile.language] ||
+                                defaultIconColor;
+                              return (
+                                <div
+                                  // --- Use active tab background color ---
+                                  className={`pl-2 pr-4 py-1 border border-stone-500 flex items-center flex-shrink-0 relative shadow-lg bg-neutral-900`} // Use bg-neutral-900 (active tab color)
+                                  // --- END CHANGE ---
+                                >
+                                  <IconComponent
+                                    size={16}
+                                    className={`mr-1.5 flex-shrink-0 ${iconColor}`}
+                                  />
+                                  <span
+                                    // --- Use active tab text color ---
+                                    className={`text-sm -mt-0.5 select-none cursor-default text-stone-200`} // Use text-stone-200 (active tab text color)
+                                    // --- END CHANGE ---
+                                  >
+                                    {draggedFile.name}
+                                  </span>
+                                  <span className="ml-2 text-stone-400 p-0.5 -mt-0.5 opacity-50">
+                                    ×
+                                  </span>
+                                </div>
+                              );
+                            })()
+                          : null}
+                      </DragOverlay>
+                      <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
+                    </div>
+                  </DndContext>
+                </>
+              );
+            })()}{" "}
+            {/* End of IIFE */}
             {/* Code Editor */}
             <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
               {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
@@ -2144,7 +2327,6 @@ const App = () => {
                 </div>
               )}
             </div>
-
             {/* --- Update Terminal Resizer --- START --- */}
             <div
               className={`w-full bg-stone-700 flex-shrink-0 ${
@@ -2157,7 +2339,6 @@ const App = () => {
               onMouseDown={handleTerminalPanelMouseDown} // Use hook mouse down handler
             />
             {/* --- Update Terminal Resizer --- END --- */}
-
             {/* --- Update Terminal Panel --- START --- */}
             <div
               className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
