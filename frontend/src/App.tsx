@@ -802,6 +802,7 @@ const App = () => {
           cssFileContent={cssFileContent}
           jsFileContent={jsFileContent}
           toggleWebView={toggleWebView}
+          joinState={joinState} // <-- Pass joinState
         />
       </div>
       {/* Status Bar */}

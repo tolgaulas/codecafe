@@ -1,7 +1,12 @@
 import React from "react";
 import { editor } from "monaco-editor";
 
-import { OpenFile, EditorLanguageKey, TerminalRef } from "../types/editor";
+import {
+  OpenFile,
+  EditorLanguageKey,
+  TerminalRef,
+  JoinStateType,
+} from "../types/editor";
 import { RemoteUser } from "../types/props";
 import CodeEditor from "./CodeEditor";
 import TerminalComponent from "./TerminalComponent";
@@ -60,6 +65,7 @@ interface MainEditorAreaProps {
   jsFileContent: string;
   toggleWebView: () => void; // Pass toggle function for WebViewPanel close button
   isSessionActive: boolean; // <-- Add prop
+  joinState: JoinStateType; // <-- Add joinState prop
 }
 
 const MainEditorArea: React.FC<MainEditorAreaProps> = ({
@@ -85,6 +91,7 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
   jsFileContent,
   toggleWebView,
   isSessionActive, // <-- Destructure prop
+  joinState, // <-- Destructure joinState
 }) => {
   // --- Get state from Zustand Store ---
   const {
@@ -108,9 +115,13 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
           handleCloseTab={handleCloseTab}
         />
 
-        {/* Code Editor */}
+        {/* Code Editor Area - Conditional Rendering */}
         <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
-          {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
+          {joinState === "prompting" ? (
+            <div className="flex items-center justify-center h-full text-stone-500">
+              Enter your details in the sidebar to join the session...
+            </div>
+          ) : activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
             <CodeEditor
               theme="codeCafeTheme"
               language={
@@ -125,7 +136,7 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
               onEditorDidMount={handleEditorDidMount}
               users={currentRemoteUsers}
               localUserId={localUserId}
-              isSessionActive={isSessionActive} // <-- Pass down
+              isSessionActive={isSessionActive}
             />
           ) : (
             <div className="flex items-center justify-center h-full text-stone-500">
