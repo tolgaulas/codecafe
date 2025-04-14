@@ -58,7 +58,6 @@ interface MainEditorAreaProps {
 
   // WebView Resizing & Content
   webViewPanelWidth: number;
-  isWebViewVisible: boolean; // To conditionally render WebViewPanel & Resizer
   handleWebViewPanelMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   htmlFileContent: string;
   cssFileContent: string;
@@ -84,7 +83,6 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
   isTerminalCollapsed,
   handleTerminalPanelMouseDown,
   webViewPanelWidth,
-  isWebViewVisible,
   handleWebViewPanelMouseDown,
   htmlFileContent,
   cssFileContent,
@@ -173,7 +171,7 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
       </div>
 
       {/* Invisible WebView Resizer Handle */}
-      {isWebViewVisible && webViewPanelWidth > 0 && (
+      {webViewPanelWidth > 0 && (
         <div
           className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
           style={{
@@ -187,7 +185,7 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
       )}
 
       {/* WebView Panel */}
-      {isWebViewVisible && webViewPanelWidth > 0 && (
+      {webViewPanelWidth > 0 && (
         <div
           className="flex-shrink-0 border-l border-stone-600 overflow-hidden"
           style={{ width: `${webViewPanelWidth}px` }}

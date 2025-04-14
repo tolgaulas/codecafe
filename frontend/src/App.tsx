@@ -89,7 +89,6 @@ const App = () => {
 
   // View Menu State
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
-  const [isWebViewVisible, setIsWebViewVisible] = useState(false);
 
   // Share Menu State
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
@@ -438,7 +437,6 @@ const App = () => {
   const toggleWebView = () => {
     toggleWebViewPanel();
     setIsViewMenuOpen(false);
-    setIsWebViewVisible(isWebViewCollapsed);
   };
   const toggleTerminalVisibility = () => {
     toggleTerminalPanel();
@@ -731,7 +729,7 @@ const App = () => {
         setIsViewMenuOpen={setIsViewMenuOpen}
         toggleWebView={toggleWebView}
         toggleTerminalVisibility={toggleTerminalVisibility}
-        isWebViewVisible={isWebViewVisible}
+        isWebViewVisible={!isWebViewCollapsed}
         isTerminalCollapsed={isTerminalCollapsed}
         handleRunCode={handleRunCode}
         isShareMenuOpen={isShareMenuOpen}
@@ -748,7 +746,7 @@ const App = () => {
         handleCopyShareLink={handleCopyShareLink}
         isSessionActive={isSessionActive}
         uniqueRemoteParticipants={uniqueRemoteParticipants}
-        setIsColorPickerOpen={setIsColorPickerOpen} // Pass the setter
+        setIsColorPickerOpen={setIsColorPickerOpen}
       />
       {/* Main Content */}
       <div ref={mainContentRef} className="flex flex-1 min-h-0">
@@ -796,7 +794,6 @@ const App = () => {
           isTerminalCollapsed={isTerminalCollapsed}
           handleTerminalPanelMouseDown={handleTerminalPanelMouseDown}
           webViewPanelWidth={webViewPanelWidth}
-          isWebViewVisible={isWebViewVisible}
           handleWebViewPanelMouseDown={handleWebViewPanelMouseDown}
           htmlFileContent={htmlFileContent}
           cssFileContent={cssFileContent}
