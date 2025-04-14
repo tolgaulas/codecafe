@@ -47,7 +47,7 @@ export function SortableTab({
       {...listeners}
       className={clsx(
         // Base classes (including base indicator styles)
-        "pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 cursor-grab relative",
+        "pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative",
         'before:content-[""] before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:bg-white before:transition-opacity before:duration-150 before:z-10 before:opacity-[var(--before-opacity,0)]',
         'after:content-[""] after:absolute after:inset-y-0 after:right-0 after:w-[2px] after:bg-white after:transition-opacity after:duration-150 after:z-10 after:opacity-[var(--after-opacity,0)]',
         // Conditional background color
@@ -76,7 +76,6 @@ export function SortableTab({
         className={`mr-1.5 flex-shrink-0 ${iconColor}`}
       />
       <span
-        {...attributes}
         className={`text-sm -mt-0.5 select-none ${
           activeFileId === file.id ? "text-stone-200" : "text-stone-400"
         }`}
