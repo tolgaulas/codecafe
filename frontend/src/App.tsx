@@ -35,6 +35,9 @@ import Sidebar from "./components/Sidebar"; // <-- Add import for Sidebar
 import MainEditorArea from "./components/MainEditorArea"; // <-- Add import for MainEditorArea
 import { useFileStore } from "./store/useFileStore"; // <-- Import Zustand store
 
+// Define editor type for clarity
+type MonacoEditorInstance = editor.IStandaloneCodeEditor;
+
 const App = () => {
   // 1. REFS FIRST
   const terminalRef = useRef<TerminalRef>();
@@ -99,6 +102,10 @@ const App = () => {
   const [generatedShareLink, setGeneratedShareLink] = useState<string | null>(
     null
   );
+
+  // Editor Status State
+  const [cursorLine, setCursorLine] = useState(1);
+  const [cursorColumn, setCursorColumn] = useState(1);
 
   // Session State
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -612,6 +619,13 @@ const App = () => {
     return activeFileId ? remoteUsers[activeFileId] || [] : [];
   }, [remoteUsers, activeFileId]);
 
+  // Derive active file language
+  const activeLanguage = useMemo(() => {
+    if (!activeFileId) return "plaintext";
+    const activeFile = openFiles.find((f) => f.id === activeFileId);
+    return activeFile?.language || "plaintext";
+  }, [activeFileId, openFiles]);
+
   // Derive unique participants (Updated to use remoteUsers state)
   const uniqueRemoteParticipants = useMemo(() => {
     const allUsers = Object.values(remoteUsers).flat();
@@ -673,6 +687,40 @@ const App = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSessionActive, joinState, setExplorerPanelSize]); // Add setExplorerPanelSize to dependencies
+
+  // Effect to track cursor position
+  useEffect(() => {
+    let positionListener: IDisposable | null = null;
+    const editor = editorInstanceRef.current;
+
+    if (editor) {
+      // Update position immediately on mount/editor change
+      const currentPosition = editor.getPosition();
+      if (currentPosition) {
+        setCursorLine(currentPosition.lineNumber);
+        setCursorColumn(currentPosition.column);
+      }
+
+      // Listen for future changes
+      positionListener = editor.onDidChangeCursorPosition((e) => {
+        setCursorLine(e.position.lineNumber);
+        setCursorColumn(e.position.column);
+      });
+    } else {
+      // Reset if editor is not available (e.g., no active file)
+      setCursorLine(1);
+      setCursorColumn(1);
+    }
+
+    // Cleanup listener on unmount or editor change
+    return () => {
+      positionListener?.dispose();
+    };
+    // Depend on the editor instance existence derived from activeFileId
+    // Having editorInstanceRef.current directly can cause issues if the ref
+    // object itself doesn't change but its .current property does.
+    // activeFileId changing implies the editor instance might have changed or become null.
+  }, [activeFileId]);
 
   // 5. RETURN JSX LAST
   return (
@@ -765,6 +813,9 @@ const App = () => {
               : "disconnected"
             : undefined
         }
+        language={activeLanguage}
+        line={cursorLine}
+        column={cursorColumn}
       />{" "}
       {/* Pass connection status only if session is active */}
       {/* --- Update Resizing Overlay Check --- START --- */}
@@ -790,3 +841,6 @@ const App = () => {
 };
 
 export default App;
+
+// Helper type for Monaco Editor Disposable
+import { IDisposable } from "monaco-editor";

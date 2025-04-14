@@ -4,11 +4,18 @@ import React from "react";
 type ConnectionStatus = "connected" | "disconnected" | "connecting";
 
 interface StatusBarProps {
-  // Props will be added later, e.g., language, line/col, encoding etc.
-  connectionStatus?: ConnectionStatus; // Make it optional for now
+  connectionStatus?: ConnectionStatus;
+  language?: string; // Add language prop
+  line?: number; // Add line number prop
+  column?: number; // Add column number prop
 }
 
-const StatusBar: React.FC<StatusBarProps> = ({ connectionStatus }) => {
+const StatusBar: React.FC<StatusBarProps> = ({
+  connectionStatus,
+  language = "plaintext", // Default language
+  line = 1, // Default line
+  column = 1, // Default column
+}) => {
   // Helper function to determine status indicator style
   const getStatusIndicator = (status: ConnectionStatus) => {
     switch (status) {
@@ -49,19 +56,16 @@ const StatusBar: React.FC<StatusBarProps> = ({ connectionStatus }) => {
               connectionStatus.slice(1)}
           </span>
         )}
-        {/* TODO: Replace with dynamic data */}
-        <span>
-          {/* {activeFileId && openFiles.find((f) => f.id === activeFileId)
-            ? openFiles.find((f) => f.id === activeFileId)?.language
-            : "plaintext"} */}
-          plaintext
-        </span>
+        {/* Display dynamic language */}
+        <span>{language}</span>
         <span>UTF-8</span>
       </div>
       <div className="flex items-center space-x-4">
-        {/* TODO: Replace with dynamic data */}
-        <span>Ln 1, Col 1</span>
-        <span>Spaces: 2</span>
+        {/* Display dynamic line and column */}
+        <span>
+          Ln {line}, Col {column}
+        </span>
+        <span>Spaces: 2</span> {/* TODO: Make spaces dynamic? */}
       </div>
     </div>
   );
