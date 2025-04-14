@@ -84,6 +84,8 @@ import { SortableTab } from "./components/SortableTab"; // Import the moved comp
 import { useResizablePanel } from "./hooks/useResizablePanel"; // Import the hook
 import { useCollaborationSession } from "./hooks/useCollaborationSession"; // <-- Import the new hook
 import Header from "./components/Header"; // <-- Add import for Header
+import Sidebar from "./components/Sidebar"; // <-- Add import for Sidebar
+import MainEditorArea from "./components/MainEditorArea"; // <-- Add import for MainEditorArea
 
 const App = () => {
   // 1. REFS FIRST
@@ -379,124 +381,6 @@ const App = () => {
     // setIsEditorReadyForOT(true); // Removed - hook uses editorInstance directly
   };
 
-  // dnd-kit Sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 100, tolerance: 5 },
-    }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  // Drag Handlers
-  const handleDragStart = (event: DragStartEvent) => {
-    console.log("Drag Start:", event);
-    setDraggingId(event.active.id as string);
-    setDropIndicator({ tabId: null, side: null }); // Clear indicator on start
-  };
-
-  const handleDragMove = (event: DragMoveEvent) => {
-    const { active, over } = event;
-    const activeId = active.id as string;
-    const overId = over?.id as string | undefined;
-    const isValidTabTarget = overId && openFiles.some((f) => f.id === overId);
-
-    if (!("clientX" in event.activatorEvent)) {
-      setDropIndicator({ tabId: null, side: null });
-      return;
-    }
-    const pointerX = (event.activatorEvent as PointerEvent).clientX;
-
-    const firstTabEl = tabContainerRef.current?.querySelector(
-      "[data-sortable-id]"
-    ) as HTMLElement | null;
-    const lastTabEl = tabContainerRef.current?.querySelector(
-      "[data-sortable-id]:last-child"
-    ) as HTMLElement | null;
-    let edgeIndicatorSet = false;
-
-    if (firstTabEl && lastTabEl && openFiles.length > 0) {
-      const firstTabRect = firstTabEl.getBoundingClientRect();
-      const lastTabRect = lastTabEl.getBoundingClientRect();
-      const firstTabId = openFiles[0].id;
-      const lastTabId = openFiles[openFiles.length - 1].id;
-
-      if (pointerX < firstTabRect.left + firstTabRect.width * 0.5) {
-        setDropIndicator({ tabId: firstTabId, side: "left" });
-        edgeIndicatorSet = true;
-      } else if (pointerX > lastTabRect.right - lastTabRect.width * 0.5) {
-        setDropIndicator({ tabId: lastTabId, side: "right" });
-        edgeIndicatorSet = true;
-      }
-    }
-
-    if (!edgeIndicatorSet) {
-      if (isValidTabTarget && overId) {
-        if (activeId === overId) {
-          setDropIndicator({ tabId: null, side: null });
-          return;
-        }
-
-        // Linter Error Fix: Access DOM element via data attribute query
-        const overNode = tabContainerRef.current?.querySelector(
-          `[data-sortable-id="${overId}"]`
-        );
-        // const overNode = over?.node?.current; // Original line causing error
-
-        if (!overNode) {
-          console.warn(
-            "Could not find overNode using querySelector for id:",
-            overId
-          );
-          setDropIndicator({ tabId: null, side: null });
-          return;
-        }
-        const overRect = overNode.getBoundingClientRect();
-        const overMiddleX = overRect.left + overRect.width / 2;
-        const side = pointerX < overMiddleX ? "left" : "right";
-        setDropIndicator({ tabId: overId, side });
-      } else {
-        setDropIndicator({ tabId: null, side: null });
-      }
-    }
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    const finalDropIndicator = { ...dropIndicator };
-    const activeId = active.id as string;
-    setDraggingId(null);
-    setDropIndicator({ tabId: null, side: null });
-
-    const oldIndex = openFiles.findIndex((file) => file.id === activeId);
-    if (oldIndex === -1) return;
-
-    let newIndex = -1;
-    const firstFileId = openFiles[0]?.id;
-    const lastFileId = openFiles[openFiles.length - 1]?.id;
-
-    if (
-      finalDropIndicator.side === "left" &&
-      finalDropIndicator.tabId === firstFileId
-    ) {
-      newIndex = 0;
-    } else if (
-      finalDropIndicator.side === "right" &&
-      finalDropIndicator.tabId === lastFileId
-    ) {
-      newIndex = openFiles.length - 1;
-    } else if (over && over.id !== active.id) {
-      const overId = over.id as string;
-      const overIndex = openFiles.findIndex((file) => file.id === overId);
-      if (overIndex !== -1) newIndex = overIndex;
-    } else {
-      return; // No move needed
-    }
-
-    if (newIndex !== -1 && oldIndex !== newIndex) {
-      setOpenFiles((prevFiles) => arrayMove(prevFiles, oldIndex, newIndex));
-    }
-  };
-
   // Code Execution Handler
   const handleRunCode = async () => {
     try {
@@ -566,15 +450,16 @@ const App = () => {
   ); // Added explorer hook state
 
   // UI Interaction Handlers
-  const handleIconClick = (iconName: string | null) => {
-    if (joinState === "prompting") return;
-    if (iconName === "files") {
-      toggleExplorerPanel();
-    } else {
-      if (!isExplorerCollapsed) toggleExplorerPanel();
-      setActiveIcon(iconName);
-    }
-  };
+  // REMOVED handleIconClick - Moved to Sidebar component
+  // const handleIconClick = (iconName: string | null) => {
+  //   if (joinState === "prompting") return;
+  //   if (iconName === "files") {
+  //     toggleExplorerPanel();
+  //   } else {
+  //     if (!isExplorerCollapsed) toggleExplorerPanel();
+  //     setActiveIcon(iconName);
+  //   }
+  // };
 
   // File Handling
   const handleOpenFile = (fileId: string) => {
@@ -939,379 +824,60 @@ const App = () => {
       />
       {/* Main Content */}
       <div ref={mainContentRef} className="flex flex-1 min-h-0">
-        {/* Combined Sidebar Area */}
-        <div
-          ref={sidebarContainerRef} // This ref is now used by the hook
-          className="flex flex-shrink-0 h-full relative"
-        >
-          {/* Icon Bar */}
-          <div
-            className="bg-stone-800 bg-opacity-60 flex flex-col justify-between py-2 border-r border-stone-600 flex-shrink-0 z-10"
-            style={{ width: `${ICON_BAR_WIDTH}px` }}
-          >
-            <div className="flex flex-col items-center space-y-3">
-              <button
-                className={`w-full flex justify-center py-1 ${
-                  activeIcon === "files"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("files")}
-              >
-                <VscFiles size={24} />
-              </button>
-              <button
-                className={`w-full flex justify-center py-1 ${
-                  activeIcon === "search"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("search")}
-              >
-                <VscSearch size={24} />
-              </button>
-              <button
-                className={`w-full flex justify-center py-1 ${
-                  activeIcon === "share"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("share")}
-              >
-                <GrShareOption size={26} />
-              </button>
-              <button
-                className={`w-full flex justify-center py-1 ${
-                  activeIcon === "chat"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("chat")}
-              >
-                <GrChatOption size={24} />
-              </button>
-            </div>
-            <div className="flex flex-col items-center space-y-3">
-              <button
-                className={`w-full flex justify-center py-1 ${
-                  activeIcon === "account"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("account")}
-              >
-                <VscAccount size={24} />
-              </button>
-              <button
-                className={`w-full flex justify-center py-1 ${
-                  activeIcon === "settings"
-                    ? "text-stone-100"
-                    : "text-stone-500 hover:text-stone-200"
-                }`}
-                onClick={() => handleIconClick("settings")}
-              >
-                <VscSettingsGear size={24} />
-              </button>
-            </div>
-          </div>
-
-          {/* File Tree / Join Panel Area */}
-          <div
-            className={`bg-stone-800 bg-opacity-60 overflow-hidden flex flex-col h-full border-r border-stone-600 flex-shrink-0 ${
-              // Use hook state for visibility
-              !isExplorerCollapsed ? "visible" : "invisible w-0"
-            }`}
-            style={{ width: `${explorerPanelSize}px` }} // Use hook size
-          >
-            {/* --- Add Log --- */}
-            {(() => {
-              console.log(
-                `[Sidebar Render] joinState: ${joinState}, explorerWidth: ${explorerPanelSize}, activeIcon: ${activeIcon}` // Use hook size in log
-              );
-              return null; // Return null to satisfy React
-            })()}
-            {/* --- End Log --- */}
-            {joinState === "prompting" ? (
-              // Render Join Panel if prompting
-              <JoinSessionPanel
-                userName={userName}
-                userColor={userColor}
-                isColorPickerOpen={isColorPickerOpen}
-                colors={COLORS}
-                onNameChange={handleNameChange}
-                onColorSelect={handleColorSelect}
-                onToggleColorPicker={handleToggleColorPicker} // Pass the toggle handler
-                onConfirmJoin={() => {
-                  handleConfirmJoin(); // Existing handler
-                  // Ensure explorer is open after confirming join
-                  if (isExplorerCollapsed) {
-                    toggleExplorerPanel();
-                  }
-                }}
-              />
-            ) : (
-              // Otherwise, render the normal File Tree (only if files icon active)
-              activeIcon === "files" && (
-                <div className="flex-1 overflow-y-auto h-full">
-                  <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
-                    EXPLORER
-                  </div>
-                  <div className="w-full">
-                    {Object.entries(MOCK_FILES).map(([id, file]) => {
-                      const IconComponent =
-                        languageIconMap[file.language] || VscFile;
-                      const iconColor =
-                        languageColorMap[file.language] || defaultIconColor;
-                      return (
-                        <div
-                          key={id}
-                          className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
-                            activeFileId === id
-                              ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
-                              : "hover:bg-stone-700"
-                          }`}
-                          onClick={() => handleOpenFile(id)}
-                        >
-                          <IconComponent
-                            size={18}
-                            className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
-                          />
-                          <span
-                            className={`w-full pl-1 truncate ${
-                              activeFileId === id
-                                ? "text-stone-100"
-                                : "text-stone-300"
-                            }`}
-                          >
-                            {file.name}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )
-              // TODO: Add rendering for other activeIcon states (Search, Share, Chat) here if needed
-            )}
-          </div>
-
-          {/* Explorer Resizer Handle */}
-          {activeIcon === "files" && !isExplorerCollapsed && (
-            <div
-              className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
-              style={{
-                width: `${EXPLORER_HANDLE_WIDTH}px`,
-                // Adjust position based on hook size and ICON_BAR_WIDTH
-                left: `${
-                  ICON_BAR_WIDTH + explorerPanelSize - EXPLORER_HANDLE_WIDTH / 2
-                }px`,
-                pointerEvents: "auto",
-              }}
-              onMouseDown={handleExplorerPanelMouseDown} // Use hook mouse down handler
-            />
-          )}
-        </div>
-
-        {/* Code and Terminal Area + Optional WebView */}
-        <div className="flex flex-1 min-w-0 relative">
-          {/* Code and Terminal Area */}
-          <div
-            ref={editorTerminalAreaRef}
-            className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
-          >
-            {/* Define Placeholder Component */}
-            {(() => {
-              // IIFE to define Placeholder locally if needed, or define outside component
-              const Placeholder = () => (
-                <div
-                  className="flex-shrink-0 h-[33px] w-24 border border-dashed border-stone-500 bg-stone-700/50 mx-px"
-                  aria-hidden="true"
-                />
-              );
-
-              return (
-                <>
-                  {/* Tabs */}
-                  <DndContext
-                    sensors={sensors}
-                    // CHANGE BACK: Use pointerWithin collision detection
-                    collisionDetection={pointerWithin}
-                    onDragStart={handleDragStart}
-                    onDragMove={handleDragMove} // Keep handleDragMove for visual indicator
-                    onDragEnd={handleDragEnd}
-                  >
-                    <div
-                      ref={tabContainerRef}
-                      className="flex bg-stone-800 flex-shrink-0 overflow-x-auto relative"
-                    >
-                      {" "}
-                      {/* <-- Add ref here */}
-                      <SortableContext
-                        items={openFiles.map((f) => f.id)}
-                        strategy={horizontalListSortingStrategy}
-                      >
-                        {/* Map SortableTab and pass indicator state */}
-                        {openFiles.map((file) => {
-                          const IconComponent =
-                            languageIconMap[file.language] || VscFile;
-                          const iconColor =
-                            languageColorMap[file.language] || defaultIconColor;
-                          // Determine side indicator for this specific tab
-                          const indicatorSide =
-                            dropIndicator.tabId === file.id
-                              ? dropIndicator.side
-                              : null;
-                          return (
-                            <SortableTab
-                              key={file.id}
-                              file={file}
-                              activeFileId={activeFileId}
-                              // Pass draggingId if you need styling on the original tab during drag
-                              draggingId={draggingId} // <-- Pass draggingId prop
-                              IconComponent={IconComponent}
-                              iconColor={iconColor}
-                              onSwitchTab={handleSwitchTab}
-                              onCloseTab={handleCloseTab}
-                              dropIndicatorSide={indicatorSide} // <-- Pass calculated side
-                            />
-                          );
-                        })}
-                      </SortableContext>
-                      {/* DragOverlay */}
-                      <DragOverlay>
-                        {draggingId
-                          ? (() => {
-                              const draggedFile = openFiles.find(
-                                (f) => f.id === draggingId
-                              );
-                              if (!draggedFile) return null;
-                              const IconComponent =
-                                languageIconMap[draggedFile.language] ||
-                                VscFile;
-                              const iconColor =
-                                languageColorMap[draggedFile.language] ||
-                                defaultIconColor;
-                              return (
-                                <div
-                                  // --- Use active tab background color ---
-                                  className={`pl-2 pr-4 py-1 border border-stone-500 flex items-center flex-shrink-0 relative shadow-lg bg-neutral-900`} // Use bg-neutral-900 (active tab color)
-                                  // --- END CHANGE ---
-                                >
-                                  <IconComponent
-                                    size={16}
-                                    className={`mr-1.5 flex-shrink-0 ${iconColor}`}
-                                  />
-                                  <span
-                                    // --- Use active tab text color ---
-                                    className={`text-sm -mt-0.5 select-none cursor-default text-stone-200`} // Use text-stone-200 (active tab text color)
-                                    // --- END CHANGE ---
-                                  >
-                                    {draggedFile.name}
-                                  </span>
-                                  <span className="ml-2 text-stone-400 p-0.5 -mt-0.5 opacity-50">
-                                    ×
-                                  </span>
-                                </div>
-                              );
-                            })()
-                          : null}
-                      </DragOverlay>
-                      <div className="absolute bottom-0 left-0 right-0 h-px bg-stone-600 z-0"></div>
-                    </div>
-                  </DndContext>
-                </>
-              );
-            })()}{" "}
-            {/* End of IIFE */}
-            {/* Code Editor */}
-            <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
-              {activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
-                <CodeEditor
-                  theme="codeCafeTheme"
-                  language={
-                    editorLanguageMap[
-                      openFiles.find((f) => f.id === activeFileId)?.language ||
-                        "plaintext"
-                    ]
-                  }
-                  showLineNumbers={true}
-                  code={fileContents[activeFileId] ?? "// Loading..."}
-                  onCodeChange={handleCodeChange} // <<< USE handleCodeChange HERE
-                  onEditorDidMount={handleEditorDidMount}
-                  users={currentRemoteUsers} // Pass remote user data
-                  // *** Add the missing prop here ***
-                  localUserId={userId} // Pass the local userId
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full text-stone-500">
-                  Select a file to start editing.
-                </div>
-              )}
-            </div>
-            {/* --- Update Terminal Resizer --- START --- */}
-            <div
-              className={`w-full bg-stone-700 flex-shrink-0 ${
-                // Use hook state for cursor style
-                isTerminalCollapsed
-                  ? "cursor-pointer hover:bg-stone-500"
-                  : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500"
-              }`}
-              style={{ height: `${TERMINAL_HANDLE_HEIGHT}px` }}
-              onMouseDown={handleTerminalPanelMouseDown} // Use hook mouse down handler
-            />
-            {/* --- Update Terminal Resizer --- END --- */}
-            {/* --- Update Terminal Panel --- START --- */}
-            <div
-              className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
-                // Use hook state for visibility
-                isTerminalCollapsed ? "hidden" : "flex"
-              }`}
-              style={{ height: `${terminalPanelHeight}px` }} // Use hook height
-            >
-              <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
-                <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
-              </div>
-              <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
-                {/* Pass hook height to TerminalComponent */}
-                <TerminalComponent
-                  ref={terminalRef}
-                  height={terminalPanelHeight}
-                />
-              </div>
-            </div>
-            {/* --- Update Terminal Panel --- END --- */}
-          </div>
-
-          {/* Invisible WebView Resizer Handle (Positioned Absolutely) */}
-          {isWebViewVisible && webViewPanelWidth > 0 && (
-            <div
-              className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
-              style={{
-                width: `${WEBVIEW_HANDLE_GRAB_WIDTH}px`,
-                // Position it centered over the boundary
-                left: `calc(100% - ${webViewPanelWidth}px - ${
-                  WEBVIEW_HANDLE_GRAB_WIDTH / 2
-                }px)`,
-              }}
-              onMouseDown={handleWebViewPanelMouseDown} // Use hook handler
-            />
-          )}
-
-          {/* WebView Panel (border provides the 1px visual line) */}
-          {isWebViewVisible && webViewPanelWidth > 0 && (
-            <div
-              className="flex-shrink-0 border-l border-stone-600 overflow-hidden" // Keep the border-l for visual
-              style={{ width: `${webViewPanelWidth}px` }}
-            >
-              <WebViewPanel
-                htmlContent={htmlFileContent}
-                cssContent={cssFileContent}
-                jsContent={jsFileContent}
-                onClose={toggleWebView} // Pass the updated toggle function
-              />
-            </div>
-          )}
-        </div>
+        {/* Sidebar - Use the extracted component */}
+        <Sidebar
+          sidebarContainerRef={sidebarContainerRef} // Pass ref
+          explorerPanelRef={explorerPanelRef} // Pass ref
+          isExplorerCollapsed={isExplorerCollapsed}
+          explorerPanelSize={explorerPanelSize}
+          handleExplorerPanelMouseDown={handleExplorerPanelMouseDown}
+          toggleExplorerPanel={toggleExplorerPanel}
+          activeIcon={activeIcon}
+          setActiveIcon={setActiveIcon}
+          joinState={joinState}
+          userName={userName}
+          userColor={userColor}
+          isColorPickerOpen={isColorPickerOpen}
+          handleNameChange={handleNameChange}
+          handleColorSelect={handleColorSelect}
+          handleToggleColorPicker={handleToggleColorPicker}
+          handleConfirmJoin={handleConfirmJoin}
+          activeFileId={activeFileId}
+          handleOpenFile={handleOpenFile}
+          mockFiles={MOCK_FILES} // Pass imported constant
+        />
+        {/* Code and Terminal Area + Optional WebView - Use new component */}
+        <MainEditorArea
+          editorTerminalAreaRef={editorTerminalAreaRef}
+          tabContainerRef={tabContainerRef}
+          terminalRef={terminalRef}
+          editorInstanceRef={editorInstanceRef}
+          openFiles={openFiles}
+          setOpenFiles={setOpenFiles}
+          activeFileId={activeFileId}
+          setActiveFileId={setActiveFileId}
+          handleSwitchTab={handleSwitchTab}
+          handleCloseTab={handleCloseTab}
+          draggingId={draggingId}
+          setDraggingId={setDraggingId}
+          dropIndicator={dropIndicator}
+          setDropIndicator={setDropIndicator}
+          fileContents={fileContents}
+          handleCodeChange={handleCodeChange}
+          handleEditorDidMount={handleEditorDidMount}
+          currentRemoteUsers={currentRemoteUsers}
+          localUserId={userId}
+          terminalPanelHeight={terminalPanelHeight}
+          isTerminalCollapsed={isTerminalCollapsed}
+          handleTerminalPanelMouseDown={handleTerminalPanelMouseDown}
+          webViewPanelWidth={webViewPanelWidth}
+          isWebViewVisible={isWebViewVisible}
+          handleWebViewPanelMouseDown={handleWebViewPanelMouseDown}
+          htmlFileContent={htmlFileContent}
+          cssFileContent={cssFileContent}
+          jsFileContent={jsFileContent}
+          toggleWebView={toggleWebView}
+        />
       </div>
       {/* Status Bar */}
       <StatusBar
