@@ -59,16 +59,16 @@ export const createCursorDecoration = (
   }
 
   if (!position) {
-    console.log(
-      `[createCursorDecoration] User ${user.id} - No cursor position found or inferrable.`
-    );
+    // console.log(
+    // `[createCursorDecoration] User ${user.id} - No cursor position found or inferrable.`
+    // );
     return null;
   }
 
-  console.log(
-    `[createCursorDecoration] User ${user.id} - Rendering cursor decoration for position:`,
-    position
-  );
+  // console.log(
+  // `[createCursorDecoration] User ${user.id} - Rendering cursor decoration for position:`,
+  // position
+  // );
 
   const cursorPosRange = new monaco.Range(
     position.lineNumber,
@@ -107,10 +107,10 @@ export const createSelectionDecoration = (
     return null;
   }
 
-  console.log(
-    `[createSelectionDecoration] User ${user.id} - Checking selection:`,
-    primaryRange
-  );
+  // console.log(
+  // `[createSelectionDecoration] User ${user.id} - Checking selection:`,
+  // primaryRange
+  // );
 
   try {
     const anchorPos = offsetToPosition(model, primaryRange.anchor);
@@ -124,9 +124,9 @@ export const createSelectionDecoration = (
       return null;
     }
 
-    console.log(
-      `[createSelectionDecoration] User ${user.id} - Creating selection decoration for non-empty range`
-    );
+    // console.log(
+    // `[createSelectionDecoration] User ${user.id} - Creating selection decoration for non-empty range`
+    // );
 
     const monacoRange = new monaco.Range(
       anchorPos.lineNumber,

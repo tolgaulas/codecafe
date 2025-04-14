@@ -167,8 +167,8 @@ const App = () => {
     isSessionActive,
     webViewFileIds: ["index.html", "style.css", "script.js"],
     onStateReceived: useCallback(
-      (fileId, content, revision, participants) => {
-        console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
+      (fileId, content, _revision, participants) => {
+        // console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
         setFileContent(fileId, content);
         const filteredParticipants = participants.filter(
           (p) => p.id !== userId
@@ -186,13 +186,13 @@ const App = () => {
           const currentContent =
             useFileStore.getState().fileContents[fileId] ?? "";
           const newContent = operation.apply(currentContent);
-          console.log(
-            `[App onOperationReceived] Applied Op for ${fileId}. Prev Length: ${
-              currentContent.length
-            }, New Length: ${newContent.length}, Content Changed: ${
-              currentContent !== newContent
-            }`
-          );
+          // console.log(
+          // `[App onOperationReceived] Applied Op for ${fileId}. Prev Length: ${
+          // currentContent.length
+          // }, New Length: ${newContent.length}, Content Changed: ${
+          // currentContent !== newContent
+          // }`
+          // );
           if (newContent !== currentContent) {
             setFileContent(fileId, newContent);
           }
@@ -211,10 +211,10 @@ const App = () => {
     ),
     onRemoteUsersUpdate: useCallback(
       (fileId, updatedUsersInfo) => {
-        console.log(
-          `[App onRemoteUsersUpdate] Received for ${fileId}:`,
-          updatedUsersInfo
-        );
+        // console.log(
+        // `[App onRemoteUsersUpdate] Received for ${fileId}:`,
+        // updatedUsersInfo
+        // );
         setRemoteUsers((prevRemoteUsers) => {
           const nextRemoteUsers = JSON.parse(
             JSON.stringify(prevRemoteUsers)
@@ -244,8 +244,8 @@ const App = () => {
       },
       [userId]
     ),
-    onConnectionStatusChange: useCallback((connected: boolean) => {
-      console.log(`[App onConnectionStatusChange] Connected: ${connected}`);
+    onConnectionStatusChange: useCallback((_connected: boolean) => {
+      // console.log(`[App onConnectionStatusChange] Connected: ${connected}`);
     }, []),
     onError: useCallback((error: Error | string) => {
       console.error("[App onError] Collaboration Hook Error:", error);
@@ -261,7 +261,7 @@ const App = () => {
   const handleEditorDidMount = (
     editorInstance: editor.IStandaloneCodeEditor
   ) => {
-    console.log("Monaco Editor Instance Mounted:", editorInstance);
+    // console.log("Monaco Editor Instance Mounted:", editorInstance);
     editorInstanceRef.current = editorInstance;
   };
 
@@ -311,7 +311,7 @@ const App = () => {
         : response.data.run.stdout;
       // Write directly to terminal
       if (executionOutput !== "") {
-        console.log(executionOutput);
+        // console.log(executionOutput);
         terminalRef.current?.writeToTerminal(executionOutput);
       }
     } catch (error) {
@@ -329,12 +329,12 @@ const App = () => {
 
   const handleCodeChange = (newCode: string) => {
     if (!isSessionActive && activeFileId) {
-      console.log("[handleCodeChange] Updating local state (not in session)");
+      // console.log("[handleCodeChange] Updating local state (not in session)");
       setFileContent(activeFileId, newCode);
     } else if (isSessionActive && activeFileId) {
-      console.log(
-        "[handleCodeChange] Change detected in session, OT hook will handle state update."
-      );
+      // console.log(
+      // "[handleCodeChange] Change detected in session, OT hook will handle state update."
+      // );
     }
   };
 
@@ -424,20 +424,20 @@ const App = () => {
               return null;
             });
         } else {
-          console.warn(
-            `[handleStartSession] No local content found for key file ${fileId}, skipping initial set.`
-          );
+          // console.warn(
+          // `[handleStartSession] No local content found for key file ${fileId}, skipping initial set.`
+          // );
           return Promise.resolve(null);
         }
       });
 
       await Promise.all(initialContentPromises);
-      console.log(
-        "[handleStartSession] Finished attempting to set initial document content."
-      );
+      // console.log(
+      // "[handleStartSession] Finished attempting to set initial document content."
+      // );
 
       const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
-      console.log("[handleStartSession] Share link:", shareLink);
+      // console.log("[handleStartSession] Share link:", shareLink);
 
       setSessionId(newSessionId);
       setGeneratedShareLink(shareLink);
@@ -460,7 +460,7 @@ const App = () => {
       navigator.clipboard
         .writeText(generatedShareLink)
         .then(() => {
-          console.log("Link copied to clipboard!");
+          // console.log("Link copied to clipboard!");
         })
         .catch((err) => {
           console.error("Failed to copy link: ", err);
@@ -473,7 +473,7 @@ const App = () => {
       alert("Please enter a display name to join.");
       return;
     }
-    console.log(`User ${userName} confirmed join for session ${sessionId}`);
+    // console.log(`User ${userName} confirmed join for session ${sessionId}`);
     setJoinState("joined"); // Mark as joined
     setActiveIcon("files");
 
@@ -536,9 +536,9 @@ const App = () => {
     const sessionIdFromUrl = url.searchParams.get("session");
 
     if (sessionIdFromUrl && !isSessionActive && joinState === "idle") {
-      console.log(
-        `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerPanelSize}`
-      );
+      // console.log(
+      // `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerPanelSize}`
+      // );
       setSessionId(sessionIdFromUrl);
       setJoinState("prompting");
 

@@ -323,16 +323,16 @@ export class TextOperation {
     operation2: TextOperation
   ): [TextOperation, TextOperation] {
     // Add detailed logging before the check
-    console.log(
-      `[Transform Check] Op1 Base: ${operation1.baseLength}, Op2 Base: ${operation2.baseLength}`,
-      {
-        op1_ops: operation1.toJSON(),
-        op2_ops: operation2.toJSON(),
-        // Log the full objects for inspection in console
-        op1_object: operation1,
-        op2_object: operation2,
-      }
-    );
+    // console.log(
+    // `[Transform Check] Op1 Base: ${operation1.baseLength}, Op2 Base: ${operation2.baseLength}`,
+    // {
+    // op1_ops: operation1.toJSON(),
+    // op2_ops: operation2.toJSON(),
+    // // Log the full objects for inspection in console
+    // op1_object: operation1,
+    // op2_object: operation2,
+    // }
+    // );
 
     let operation1prime = new TextOperation();
     let operation2prime = new TextOperation();
@@ -559,7 +559,7 @@ export class MonacoAdapter {
     this.cursorChangeListener?.dispose();
     this.focusListener?.dispose();
     this.blurListener?.dispose();
-    console.log("MonacoAdapter detached listeners.");
+    // console.log("MonacoAdapter detached listeners.");
   }
 
   // Convert Monaco change events to a TextOperation
@@ -716,27 +716,27 @@ export class MonacoAdapter {
     const currentValue = this.model.getValue(); // Get value AFTER the change
 
     if (this.ignoreNextChange) {
-      console.log("Adapter: Ignoring change caused by applyOperation.");
+      // console.log("Adapter: Ignoring change caused by applyOperation.");
       this.ignoreNextChange = false;
       // Update lastValue to reflect the state AFTER the ignored server change
       this.lastValue = currentValue;
       if (this.selectionChanged) {
-        console.log(
-          "Adapter: Triggering deferred selectionChange after ignored content change."
-        );
+        // console.log(
+        // "Adapter: Triggering deferred selectionChange after ignored content change."
+        // );
         this.trigger("selectionChange");
         this.selectionChanged = false;
       }
       return;
     }
 
-    console.log("Adapter: Processing user change event.");
+    // console.log("Adapter: Processing user change event.");
 
     const valueBeforeChange = this.lastValue;
-    console.log(
-      "Calling operationFromMonacoChanges with previousDocValue:",
-      JSON.stringify(valueBeforeChange)
-    );
+    // console.log(
+    // "Calling operationFromMonacoChanges with previousDocValue:",
+    // JSON.stringify(valueBeforeChange)
+    // );
 
     try {
       // Use the reliable previous value
@@ -749,12 +749,12 @@ export class MonacoAdapter {
       // Update lastValue for the *next* change event AFTER successfully processing this one
       this.lastValue = currentValue;
 
-      console.log(
-        "Local change -> Op:",
-        operation.toString(),
-        "Inverse:",
-        inverse.toString()
-      );
+      // console.log(
+      // "Local change -> Op:",
+      // operation.toString(),
+      // "Inverse:",
+      // inverse.toString()
+      // );
       if (!operation.isNoop()) {
         this.trigger("change", operation, inverse);
       }
@@ -767,9 +767,9 @@ export class MonacoAdapter {
     }
 
     if (this.selectionChanged) {
-      console.log(
-        "Adapter: Triggering deferred selectionChange after user content change."
-      );
+      // console.log(
+      // "Adapter: Triggering deferred selectionChange after user content change."
+      // );
       this.trigger("selectionChange");
       this.selectionChanged = false;
     }
@@ -793,12 +793,12 @@ export class MonacoAdapter {
   }
 
   private onDidFocusEditorText(): void {
-    console.log("Adapter: Editor focused.");
+    // console.log("Adapter: Editor focused.");
     this.onDidCursorPositionChange();
   }
 
   private onDidBlurEditorText(): void {
-    console.log("Adapter: Editor blurred.");
+    // console.log("Adapter: Editor blurred.");
     const selection = this.editor.getSelection();
     if (!selection || selection.isEmpty()) {
       this.trigger("blur");
@@ -876,7 +876,7 @@ export class MonacoAdapter {
 
   setOtherSelection(): { clear: () => void } {
     // ... (implementation requires CSS and decoration management) ...
-    console.warn("setOtherSelection not fully implemented for Monaco");
+    // console.warn("setOtherSelection not fully implemented for Monaco");
     return { clear: () => {} }; // Placeholder
   }
 }
@@ -1033,10 +1033,7 @@ class Synchronized implements IClientState {
     client.callbacks.applyOperation(operation);
     return this;
   }
-  serverAck(client: Client): IClientState {
-    console.error(
-      `[${client.userId}] Received unexpected ACK in Synchronized state.`
-    );
+  serverAck(_client: Client): IClientState {
     return this;
   }
   transformSelection(selection: OTSelection): OTSelection {
@@ -1087,14 +1084,14 @@ class AwaitingWithBuffer implements IClientState {
 
   applyClient(_client: Client, operation: TextOperation): IClientState {
     // console.log(`[${client.userId}] AwaitingWithBuffer -> Composing Buffer`);
-    console.log("[AWB ApplyClient] Before Compose:", {
-      buffer_ops: this.buffer.toJSON(),
-      buffer_base: this.buffer.baseLength,
-      buffer_target: this.buffer.targetLength,
-      operation_ops: operation.toJSON(),
-      operation_base: operation.baseLength,
-      operation_target: operation.targetLength,
-    });
+    // console.log("[AWB ApplyClient] Before Compose:", {
+    // buffer_ops: this.buffer.toJSON(),
+    // buffer_base: this.buffer.baseLength,
+    // buffer_target: this.buffer.targetLength,
+    // operation_ops: operation.toJSON(),
+    // operation_base: operation.baseLength,
+    // operation_target: operation.targetLength,
+    // });
     try {
       const newBuffer = this.buffer.compose(operation);
       return new AwaitingWithBuffer(this.outstanding, newBuffer);
@@ -1107,25 +1104,24 @@ class AwaitingWithBuffer implements IClientState {
     }
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    console.log(`[AWB ApplyServer] State Before Transform:`, {
-      outstanding_ops: this.outstanding.toJSON(),
-      outstanding_base: this.outstanding.baseLength,
-      outstanding_target: this.outstanding.targetLength,
-      buffer_ops: this.buffer.toJSON(),
-      buffer_base: this.buffer.baseLength,
-      buffer_target: this.buffer.targetLength,
-      server_op_ops: operation.toJSON(),
-      server_op_base: operation.baseLength,
-      server_op_target: operation.targetLength,
-      // Log full objects for deeper inspection
-      outstanding_obj: this.outstanding,
-      buffer_obj: this.buffer,
-      server_op_obj: operation,
-      client_revision: client.revision,
-    });
+    // console.log(`[AWB ApplyServer] State Before Transform:`, {
+    // outstanding_ops: this.outstanding.toJSON(),
+    // outstanding_base: this.outstanding.baseLength,
+    // outstanding_target: this.outstanding.targetLength,
+    // buffer_ops: this.buffer.toJSON(),
+    // buffer_base: this.buffer.baseLength,
+    // buffer_target: this.buffer.targetLength,
+    // server_op_ops: operation.toJSON(),
+    // server_op_base: operation.baseLength,
+    // server_op_target: operation.targetLength,
+    // // Log full objects for deeper inspection
+    // outstanding_obj: this.outstanding,
+    // buffer_obj: this.buffer,
+    // server_op_obj: operation,
+    // client_revision: client.revision,
+    // });
 
     // console.log(`[${client.userId}] AwaitingWithBuffer -> Applying Server Op & Transforming Outstanding/Buffer`);
-    // The error occurs in this first transform call
     const [newOutstanding, transformedOperation1] = TextOperation.transform(
       this.outstanding,
       operation
@@ -1134,16 +1130,16 @@ class AwaitingWithBuffer implements IClientState {
       this.buffer,
       transformedOperation1
     );
-    console.log(`[AWB ApplyServer] State After Transforms:`, {
-      newOutstanding_ops: newOutstanding.toJSON(),
-      newOutstanding_base: newOutstanding.baseLength,
-      transformedOp1_ops: transformedOperation1.toJSON(),
-      transformedOp1_base: transformedOperation1.baseLength,
-      newBuffer_ops: newBuffer.toJSON(),
-      newBuffer_base: newBuffer.baseLength,
-      transformedOp2_ops: transformedOperation2.toJSON(),
-      transformedOp2_base: transformedOperation2.baseLength,
-    });
+    // console.log(`[AWB ApplyServer] State After Transforms:`, {
+    // newOutstanding_ops: newOutstanding.toJSON(),
+    // newOutstanding_base: newOutstanding.baseLength,
+    // transformedOp1_ops: transformedOperation1.toJSON(),
+    // transformedOp1_base: transformedOperation1.baseLength,
+    // newBuffer_ops: newBuffer.toJSON(),
+    // newBuffer_base: newBuffer.baseLength,
+    // transformedOp2_ops: transformedOperation2.toJSON(),
+    // transformedOp2_base: transformedOperation2.baseLength,
+    // });
     client.callbacks.applyOperation(transformedOperation2);
     return new AwaitingWithBuffer(newOutstanding, newBuffer);
   }
@@ -1171,9 +1167,9 @@ export class Client {
     this.userId = userId;
     this.callbacks = callbacks;
     this.state = synchronized_;
-    console.log(
-      `[${this.userId}] Client initialized with revision ${revision}`
-    );
+    // console.log(
+    // `[${this.userId}] Client initialized with revision ${revision}`
+    // );
   }
 
   setState(newState: IClientState): void {
@@ -1186,18 +1182,18 @@ export class Client {
       newStateName === "AwaitingWithBuffer"
     ) {
       // Type assertion needed to access state-specific properties
-      const oldOutstandingBase = (this.state as AwaitingWithBuffer).outstanding
-        ?.baseLength;
-      const newOutstandingBase = (newState as AwaitingWithBuffer).outstanding
-        ?.baseLength;
-      console.log(
-        `[AWB->AWB setState] Updating outstanding. Base length: ${oldOutstandingBase} -> ${newOutstandingBase}`
-      );
+      // const oldOutstandingBase = (this.state as AwaitingWithBuffer).outstanding
+      // ?.baseLength;
+      // const newOutstandingBase = (newState as AwaitingWithBuffer).outstanding
+      //   ?.baseLength;
+      // console.log(
+      // `[AWB->AWB setState] Updating outstanding. Base length: ${oldOutstandingBase} -> ${newOutstandingBase}`
+      // );
     }
 
-    console.log(
-      `[${this.userId}] State transition: ${oldStateName} -> ${newStateName}`
-    );
+    // console.log(
+    // `[${this.userId}] State transition: ${oldStateName} -> ${newStateName}`
+    // );
     this.state = newState;
   }
 
@@ -1229,9 +1225,9 @@ export class Client {
   }
 
   serverReconnect(): void {
-    console.log(
-      `[${this.userId}] serverReconnect called (State: ${this.state.constructor.name}, rev: ${this.revision})`
-    );
+    // console.log(
+    // `[${this.userId}] serverReconnect called (State: ${this.state.constructor.name}, rev: ${this.revision})`
+    // );
     if (typeof this.state.resend === "function") {
       this.state.resend(this);
     }
@@ -1260,7 +1256,7 @@ export class Client {
         // console.log(`[${this.userId}] Sending selection (State: ${this.state.constructor.name}):`, selection?.toJSON());
         this.callbacks.sendSelection(selection);
       } else {
-        console.warn(`[${this.userId}] sendSelection callback not provided.`);
+        // console.warn(`[${this.userId}] sendSelection callback not provided.`);
       }
     } else {
       // console.log(`[${this.userId}] Selection change suppressed in AwaitingWithBuffer state.`);

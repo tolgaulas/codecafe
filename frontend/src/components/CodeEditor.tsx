@@ -26,7 +26,7 @@ const CodeEditor = ({
   const styleSheetRef = useRef<HTMLStyleElement | null>(null);
 
   useEffect(() => {
-    console.log("[CodeEditor] Received users prop:", users);
+    // console.log("[CodeEditor] Received users prop:", users);
   }, [users]);
 
   // Initialize Monaco theme
@@ -124,35 +124,35 @@ const CodeEditor = ({
 
     const model = editorRef.current.getModel();
     if (!model) {
-      console.warn(
-        "[CodeEditor updateDecorations] Cannot get model from editor."
-      );
+      // console.warn(
+      // "[CodeEditor updateDecorations] Cannot get model from editor."
+      // );
       return;
     }
 
-    const modelUri = model.uri.toString();
-    console.log(
-      `[CodeEditor updateDecorations] Applying decorations for model URI: ${modelUri}, Raw Users Prop:`,
-      JSON.stringify(users)
-    );
-    console.log(`[CodeEditor updateDecorations] Local User ID: ${localUserId}`);
+    // const modelUri = model.uri.toString();
+    // console.log(
+    // `[CodeEditor updateDecorations] Applying decorations for model URI: ${modelUri}, Raw Users Prop:`,
+    // JSON.stringify(users)
+    // );
+    // console.log(`[CodeEditor updateDecorations] Local User ID: ${localUserId}`);
 
     const remoteUsersToDecorate = users.filter(
       (user) => user.id !== localUserId
     );
-    console.log(
-      `[CodeEditor updateDecorations] Filtered Remote Users to Decorate (${remoteUsersToDecorate.length}):`,
-      JSON.stringify(remoteUsersToDecorate)
-    );
+    // console.log(
+    // `[CodeEditor updateDecorations] Filtered Remote Users to Decorate (${remoteUsersToDecorate.length}):`,
+    // JSON.stringify(remoteUsersToDecorate)
+    // );
 
     const decorations: monaco.editor.IModelDeltaDecoration[] = [];
 
     remoteUsersToDecorate.forEach((user) => {
-      console.log(
-        `[CodeEditor updateDecorations] Processing User: ${user.id} (${user.name})`,
-        `CursorPos: ${JSON.stringify(user.cursorPosition)}`,
-        `Selection: ${JSON.stringify(user.selection)}`
-      );
+      // console.log(
+      // `[CodeEditor updateDecorations] Processing User: ${user.id} (${user.name})`,
+      // `CursorPos: ${JSON.stringify(user.cursorPosition)}`,
+      // `Selection: ${JSON.stringify(user.selection)}`
+      // );
 
       const cursorDecoration = createCursorDecoration(user, model);
       const selectionDecoration = createSelectionDecoration(user, model);
@@ -165,10 +165,10 @@ const CodeEditor = ({
       }
     });
 
-    console.log(
-      `[CodeEditor updateDecorations] Generated Decorations array before applying (${decorations.length}):`,
-      JSON.stringify(decorations)
-    );
+    // console.log(
+    // `[CodeEditor updateDecorations] Generated Decorations array before applying (${decorations.length}):`,
+    // JSON.stringify(decorations)
+    // );
 
     // Apply the decorations
     try {
@@ -177,10 +177,10 @@ const CodeEditor = ({
         decorations
       );
       decorationsRef.current = decorationIds;
-      console.log(
-        `[CodeEditor updateDecorations] Applied Decorations to ${modelUri}, IDs:`,
-        decorationIds
-      );
+      // console.log(
+      // `[CodeEditor updateDecorations] Applied Decorations to ${modelUri}, IDs:`,
+      // decorationIds
+      // );
     } catch (error) {
       console.error(
         "[CodeEditor updateDecorations] Error applying decorations:",
@@ -201,8 +201,8 @@ const CodeEditor = ({
     // Cursor/Selection Changes
     let cursorListener: IDisposable | null = null;
     let selectionListener: IDisposable | null = null;
-    cursorListener = editor.onDidChangeCursorPosition((e) => {});
-    selectionListener = editor.onDidChangeCursorSelection((e) => {});
+    cursorListener = editor.onDidChangeCursorPosition((_) => {});
+    selectionListener = editor.onDidChangeCursorSelection((_) => {});
 
     updateDecorations();
 
