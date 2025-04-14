@@ -83,6 +83,7 @@ import { isExecutableLanguage } from "./utils/languageUtils";
 import { SortableTab } from "./components/SortableTab"; // Import the moved component
 import { useResizablePanel } from "./hooks/useResizablePanel"; // Import the hook
 import { useCollaborationSession } from "./hooks/useCollaborationSession"; // <-- Import the new hook
+import Header from "./components/Header"; // <-- Add import for Header
 
 const App = () => {
   // 1. REFS FIRST
@@ -90,11 +91,6 @@ const App = () => {
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const editorTerminalAreaRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
-  const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
-  const viewMenuRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLDivElement>(null); // Added ref for header
-  const shareButtonRef = useRef<HTMLButtonElement>(null); // <-- Ref for Share button
-  const shareMenuRef = useRef<HTMLDivElement>(null); // <-- Ref for Share menu
   const tabContainerRef = useRef<HTMLDivElement>(null); // <-- Add Ref for tab container
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null); // Keep ref for editor instance
 
@@ -270,23 +266,6 @@ const App = () => {
           ...prev,
           [fileId]: filteredParticipants,
         }));
-
-        // Apply initial content to the editor if it's the active file
-        if (fileId === activeFileId && editorInstanceRef.current) {
-          const model = editorInstanceRef.current.getModel();
-          if (model && model.getValue() !== content) {
-            console.log(
-              `   Setting editor content for ${fileId} from onStateReceived.`
-            );
-            // Consider using pushEditOperations for better undo stack management
-            model.pushEditOperations(
-              [],
-              [{ range: model.getFullModelRange(), text: content }],
-              () => null
-            );
-            // model.setValue(content); // Simpler alternative
-          }
-        }
       },
       [activeFileId, userId]
     ), // Add userId dependency
@@ -893,46 +872,6 @@ const App = () => {
     };
   }, [handleGlobalPointerUp]);
 
-  // Close View Menu on Outside Click Effect
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isViewMenuOpen &&
-        viewMenuRef.current &&
-        !viewMenuRef.current.contains(event.target as Node) &&
-        viewMenuButtonRef.current &&
-        !viewMenuButtonRef.current.contains(event.target as Node)
-      ) {
-        setIsViewMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isViewMenuOpen]); // Keep minimal dependency
-
-  // Close Share Menu on Outside Click Effect <-- Add effect for Share Menu
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isShareMenuOpen &&
-        shareMenuRef.current &&
-        !shareMenuRef.current.contains(event.target as Node) &&
-        shareButtonRef.current &&
-        !shareButtonRef.current.contains(event.target as Node)
-      ) {
-        // Only close the menu and color picker, don't reset the view state
-        setIsShareMenuOpen(false);
-        setIsColorPickerOpen(false); // Also close color picker
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isShareMenuOpen]);
-
   // Effect to handle joining via URL parameter
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -973,246 +912,31 @@ const App = () => {
   // 5. RETURN JSX LAST
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
-      {/* Header - Removed p-2, added items-stretch */}
-      <div
-        ref={headerRef}
-        className="flex items-stretch justify-between bg-stone-800 bg-opacity-80 border-b border-stone-600 flex-shrink-0 relative h-11"
-      >
-        {" "}
-        {/* Added fixed height h-10 */}
-        {/* Left Buttons Container - Ensure it stretches height */}
-        <div className="flex items-stretch">
-          {/* Removed space-x-2, buttons will manage their padding */}
-          <div className="flex h-full">
-            {/* File Button - Updated classes */}
-            <button className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600">
-              File
-            </button>
-            {/* Edit Button - Updated classes */}
-            <button className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600">
-              Edit
-            </button>
-            {/* View Button - Updated classes */}
-            <button
-              className={`h-full flex items-center px-3 text-sm ${
-                isViewMenuOpen
-                  ? "bg-stone-600 text-stone-200"
-                  : "text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
-              } relative`} // Added conditional background and text color
-              onClick={() => setIsViewMenuOpen((prev) => !prev)}
-              ref={viewMenuButtonRef}
-            >
-              View
-            </button>
-            {/* Run Button - Updated classes */}
-            <button
-              className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
-              onClick={handleRunCode}
-            >
-              Run
-            </button>
-          </div>
-          {/* View Dropdown Menu - Positioning might need slight adjustment if header height changed */}
-          {isViewMenuOpen && (
-            <div
-              ref={viewMenuRef}
-              className="absolute bg-stone-700 border border-stone-600 shadow-lg z-50 whitespace-nowrap" // Removed rounded
-              style={{
-                left: `${viewMenuButtonRef.current?.offsetLeft ?? 0}px`,
-                top: `${headerRef.current?.offsetHeight ?? 0}px`, // Position based on header height
-              }}
-            >
-              {/* ... dropdown buttons ... */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleWebView();
-                }}
-                className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
-              >
-                {isWebViewVisible ? "Close Web View" : "Open Web View"}
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleTerminalVisibility(); // Uses updated handler
-                }}
-                className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
-              >
-                {!isTerminalCollapsed ? "Close Terminal" : "Open Terminal"}
-              </button>
-            </div>
-          )}
-        </div>
-        {/* Right side - Change px-2 to p-2 for all-around padding */}
-        <div className="flex items-stretch mr-2">
-          {" "}
-          {/* Use items-stretch, added mr-2 for spacing */}
-          {/* Participant Circles - NEW */}
-          {isSessionActive && uniqueRemoteParticipants.length > 0 && (
-            <div className="flex items-center px-2 -space-x-2">
-              {uniqueRemoteParticipants.map((user) => (
-                <div
-                  key={user.id}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ring-1 ring-stone-900/50 cursor-default shadow-sm"
-                  style={{ backgroundColor: user.color }}
-                  title={user.name} // Tooltip with full name
-                >
-                  <span className="text-white/90 select-none">
-                    {user.name ? user.name[0].toUpperCase() : "?"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {/* Share Button */}
-          <div className="relative flex h-full">
-            {" "}
-            {/* Wrap button to allow relative dropdown positioning */}
-            <button
-              ref={shareButtonRef}
-              onClick={toggleShareMenu}
-              className={`h-full flex items-center px-4 text-sm ${
-                isShareMenuOpen
-                  ? "bg-stone-600 text-stone-200"
-                  : "text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
-              }`}
-            >
-              {/* <HiOutlineShare className="mr-1.5 -ml-0.5" size={16} /> */}
-              Share
-            </button>
-            {/* Share Dropdown Menu */}
-            <AnimatePresence>
-              {isShareMenuOpen && (
-                <motion.div
-                  ref={shareMenuRef}
-                  className="absolute right-0 w-64 bg-stone-800 border border-stone-700 shadow-xl z-50 p-4" // Removed mt-1
-                  style={{
-                    top: `${headerRef.current?.offsetHeight ?? 0}px`, // Position based on header height
-                  }}
-                  onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
-                >
-                  {/* Conditional Rendering based on view state */}
-                  {shareMenuView === "initial" && (
-                    <>
-                      {/* Avatar/Name Row */}
-                      <div className="flex items-end gap-3 mb-4">
-                        {/* Avatar and Color Picker Container */}
-                        <div className="relative flex-shrink-0">
-                          <div
-                            className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium cursor-pointer shadow-md ring-1 ring-stone-500/50"
-                            style={{ backgroundColor: userColor }}
-                            onClick={() =>
-                              setIsColorPickerOpen(!isColorPickerOpen)
-                            }
-                          >
-                            <span className="text-white/90">
-                              {userName ? userName[0].toUpperCase() : ""}
-                            </span>
-                          </div>
-
-                          {/* Color Picker Popover */}
-                          <AnimatePresence>
-                            {isColorPickerOpen && (
-                              <motion.div
-                                initial={{ opacity: 0, scale: 0.9, y: -5 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: -5 }}
-                                transition={{ duration: 0.1 }}
-                                // Positioned relative to the parent div, below the avatar
-                                className="absolute left-0 top-full mt-2 bg-neutral-900/90 backdrop-blur-sm p-2.5 border border-stone-700 shadow-lg z-10 w-[120px]"
-                              >
-                                <div className="flex flex-wrap gap-1.5">
-                                  {COLORS.map((color) => (
-                                    <div
-                                      key={color}
-                                      className={`w-5 h-5 rounded-full cursor-pointer ${
-                                        userColor === color
-                                          ? "ring-2 ring-white/60"
-                                          : ""
-                                      }`}
-                                      style={{ backgroundColor: color }}
-                                      onClick={() => handleColorSelect(color)}
-                                    />
-                                  ))}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-
-                        {/* Name Input Container */}
-                        <div className="flex-1">
-                          <label className="block text-xs text-stone-400 mb-1">
-                            Display Name
-                          </label>
-                          <input
-                            type="text"
-                            value={userName}
-                            onChange={handleNameChange}
-                            placeholder="Enter your name"
-                            className="w-full bg-neutral-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-2 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Start Session Button */}
-                      <button
-                        onClick={handleStartSession}
-                        disabled={!userName.trim()}
-                        className="w-full px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" // Removed rounded-md
-                      >
-                        Start Session
-                      </button>
-                    </>
-                  )}
-
-                  {shareMenuView === "link" && generatedShareLink && (
-                    <div className="flex flex-col">
-                      {/* <h2 className="text-lg font-medium text-center">Share Your Session</h2> */}
-                      <p className="text-sm text-stone-400 text-left mb-1">
-                        Share this link:
-                      </p>
-                      <div className="flex items-stretch gap-2 bg-neutral-900 border border-stone-700">
-                        <input
-                          type="text"
-                          readOnly
-                          value={generatedShareLink}
-                          className="flex-1 bg-transparent text-stone-300 text-sm outline-none select-all px-2 py-1.5"
-                          onFocus={(e) => e.target.select()}
-                        />
-                        <button
-                          onClick={handleCopyShareLink}
-                          className="px-2 flex items-center justify-center text-stone-400 hover:text-stone-100 bg-stone-700 hover:bg-stone-600 transition-colors flex-shrink-0"
-                          aria-label="Copy link"
-                        >
-                          <FiCopy size={16} />
-                        </button>
-                      </div>
-                      <button
-                        onClick={toggleShareMenu}
-                        className="mt-4 w-full px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-          {/* Original User Avatar - REMOVED */}
-          {/* <div className="w-8 h-8 bg-red-400 rounded-full flex items-center justify-center">
-            <span className="text-stone-200">M</span>
-          </div> */}
-          {/* Help Button */}
-          <button className="h-full flex items-center justify-center w-10 rounded-none hover:bg-neutral-900 active:bg-stone-950 text-stone-500 hover:text-stone-400">
-            {" "}
-            {/* Adjusted padding/width */}
-            <span className="text-sm">?</span>
-          </button>
-        </div>
-      </div>
+      {/* Header - Use the extracted component */}
+      <Header
+        isViewMenuOpen={isViewMenuOpen}
+        setIsViewMenuOpen={setIsViewMenuOpen}
+        toggleWebView={toggleWebView}
+        toggleTerminalVisibility={toggleTerminalVisibility}
+        isWebViewVisible={isWebViewVisible}
+        isTerminalCollapsed={isTerminalCollapsed}
+        handleRunCode={handleRunCode}
+        isShareMenuOpen={isShareMenuOpen}
+        toggleShareMenu={toggleShareMenu}
+        shareMenuView={shareMenuView}
+        userName={userName}
+        userColor={userColor}
+        handleNameChange={handleNameChange}
+        handleColorSelect={handleColorSelect}
+        isColorPickerOpen={isColorPickerOpen}
+        handleToggleColorPicker={handleToggleColorPicker}
+        handleStartSession={handleStartSession}
+        generatedShareLink={generatedShareLink}
+        handleCopyShareLink={handleCopyShareLink}
+        isSessionActive={isSessionActive}
+        uniqueRemoteParticipants={uniqueRemoteParticipants}
+        setIsColorPickerOpen={setIsColorPickerOpen} // Pass the setter
+      />
       {/* Main Content */}
       <div ref={mainContentRef} className="flex flex-1 min-h-0">
         {/* Combined Sidebar Area */}
