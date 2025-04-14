@@ -38,18 +38,9 @@ import {
 } from "@dnd-kit/modifiers";
 import WebViewPanel from "./components/WebViewPanel";
 import { motion, AnimatePresence } from "framer-motion";
-import SockJS from "sockjs-client";
-import Stomp from "stompjs";
 import { v4 as uuidv4 } from "uuid";
 import { editor } from "monaco-editor";
-import {
-  TextOperation,
-  MonacoAdapter,
-  OTSelection,
-  Client,
-  IClientCallbacks,
-  offsetToPosition,
-} from "./TextOperationSystem";
+import { TextOperation, OTSelection } from "./TextOperationSystem";
 import JoinSessionPanel from "./components/JoinSessionPanel"; // Import the new component
 import { UserInfo, RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
 import StatusBar from "./components/StatusBar"; // Add this import
@@ -91,6 +82,7 @@ import { MOCK_FILES } from "./constants/mockFiles";
 import { isExecutableLanguage } from "./utils/languageUtils";
 import { SortableTab } from "./components/SortableTab"; // Import the moved component
 import { useResizablePanel } from "./hooks/useResizablePanel"; // Import the hook
+import { useCollaborationSession } from "./hooks/useCollaborationSession"; // <-- Import the new hook
 
 const App = () => {
   // 1. REFS FIRST
@@ -104,29 +96,36 @@ const App = () => {
   const shareButtonRef = useRef<HTMLButtonElement>(null); // <-- Ref for Share button
   const shareMenuRef = useRef<HTMLDivElement>(null); // <-- Ref for Share menu
   const tabContainerRef = useRef<HTMLDivElement>(null); // <-- Add Ref for tab container
+  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null); // Keep ref for editor instance
 
   // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
 
   // Tab / File Management State
-  // Set initial open files based on MOCK_FILES keys
-  const initialOpenFileIds = Object.keys(MOCK_FILES);
-  const initialOpenFilesData = initialOpenFileIds.map((id) => ({
-    id: id,
-    name: MOCK_FILES[id].name,
-    language: MOCK_FILES[id].language,
-  }));
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>(initialOpenFilesData); // Start with mock files open
-  const [activeFileId, setActiveFileId] = useState<string | null>(
-    initialOpenFileIds.length > 0 ? initialOpenFileIds[0] : null
-  ); // Start with the first mock file active
+  const initialOpenFileIds = ["index.html", "style.css", "script.js"];
+  const initialOpenFilesData = initialOpenFileIds.map((id) => {
+    if (!MOCK_FILES[id]) {
+      console.error(`Initial file ${id} not found in MOCK_FILES!`);
+      return { id, name: "Error", language: "plaintext" as EditorLanguageKey };
+    }
+    return {
+      id: id,
+      name: MOCK_FILES[id].name,
+      language: MOCK_FILES[id].language as EditorLanguageKey,
+    };
+  });
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>(initialOpenFilesData);
+  const [activeFileId, setActiveFileId] = useState<string | null>("index.html");
 
   const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
     () => {
-      // Initialize with all mock file contents
       const initialContents: { [id: string]: string } = {};
-      Object.keys(MOCK_FILES).forEach((id) => {
-        initialContents[id] = MOCK_FILES[id].content;
+      initialOpenFileIds.forEach((id) => {
+        if (MOCK_FILES[id]) {
+          initialContents[id] = MOCK_FILES[id].content;
+        } else {
+          initialContents[id] = `// Error: Content for ${id} not found`;
+        }
       });
       return initialContents;
     }
@@ -143,13 +142,11 @@ const App = () => {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isWebViewVisible, setIsWebViewVisible] = useState(false);
 
-  // Share Menu State <-- Add Share Menu State
+  // Share Menu State
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
-  const [userName, setUserName] = useState(""); // Store user's name
-  const [userColor, setUserColor] = useState(COLORS[0]); // Default color
+  const [userName, setUserName] = useState("");
+  const [userColor, setUserColor] = useState(COLORS[0]);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-
-  // Share Menu View State
   const [shareMenuView, setShareMenuView] = useState<"initial" | "link">(
     "initial"
   );
@@ -161,59 +158,43 @@ const App = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
   const [isSessionCreator, setIsSessionCreator] = useState<boolean>(false);
-
-  // OT State
-  const [userId] = useState<string>(() => "user-" + uuidv4());
-  const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
-  const adapterRef = useRef<MonacoAdapter | null>(null);
-  const clientRef = useRef<Client | null>(null);
-  const stompClientRef = useRef<Stomp.Client | null>(null);
-
-  // Flag to control editor readiness for OT
-  const [isEditorReadyForOT, setIsEditorReadyForOT] = useState(false);
-
-  // Add state for WebSocket connection status
-  const [isConnected, setIsConnected] = useState(false);
-
-  // Add new state for join process
   const [joinState, setJoinState] = useState<JoinStateType>("idle");
 
-  // Remote Users State
+  // OT State / Collaboration State
+  const [userId] = useState<string>(() => "user-" + uuidv4());
+
+  // Remote Users State (Now managed per-file, updated by hook)
   const [remoteUsers, setRemoteUsers] = useState<{
-    [docId: string]: RemoteUser[]; // Use imported RemoteUser type
+    [docId: string]: RemoteUser[];
   }>({});
 
-  // --- Instantiate useResizablePanel for Explorer --- START ---
-  const explorerPanelRef = useRef<HTMLDivElement>(null); // Add ref for the panel itself
+  // --- Instantiate Resizable Panels ---
+  const explorerPanelRef = useRef<HTMLDivElement>(null);
   const {
-    size: rawExplorerPanelSize, // Get the raw size from hook
+    size: rawExplorerPanelSize,
     isResizing: isExplorerPanelResizing,
     handleMouseDown: handleExplorerPanelMouseDown,
     togglePanel: toggleExplorerPanel,
     isCollapsed: isExplorerCollapsed,
-    setSize: setRawExplorerPanelSize, // Setter for raw size
+    setSize: setRawExplorerPanelSize,
   } = useResizablePanel({
     initialSize: DEFAULT_EXPLORER_WIDTH,
     minSize: MIN_EXPLORER_WIDTH,
     maxSize: MAX_EXPLORER_WIDTH,
-    direction: "horizontal-left", // Use specific direction
+    direction: "horizontal-left",
     containerRef: sidebarContainerRef,
-    panelRef: explorerPanelRef, // Pass the panel ref
+    panelRef: explorerPanelRef,
     storageKey: "explorerWidth",
     onToggle: (isOpen) => {
       setActiveIcon(isOpen ? "files" : null);
     },
-    defaultOpenSize: DEFAULT_EXPLORER_WIDTH, // Add default open size
+    defaultOpenSize: DEFAULT_EXPLORER_WIDTH,
   });
-  // Adjust size for ICON_BAR_WIDTH offset
   const explorerPanelSize = Math.max(0, rawExplorerPanelSize - ICON_BAR_WIDTH);
-  // Setter function that accounts for the offset
   const setExplorerPanelSize = (newSize: number) => {
     setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
   };
-  // --- Instantiate useResizablePanel for Explorer --- END ---
 
-  // --- Instantiate useResizablePanel for Terminal --- START ---
   const initialMaxTerminalHeight = window.innerHeight * 0.8;
   const {
     size: terminalPanelHeight,
@@ -231,7 +212,7 @@ const App = () => {
     storageKey: "terminalHeight",
     collapseThreshold: TERMINAL_COLLAPSE_THRESHOLD_PX,
     defaultOpenSize: () =>
-      window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION, // Correctly placed prop
+      window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION,
     onResizeEnd: () => {
       terminalRef.current?.fit();
     },
@@ -239,12 +220,9 @@ const App = () => {
       requestAnimationFrame(() => terminalRef.current?.fit());
     },
   });
-  // --- Instantiate useResizablePanel for Terminal --- END ---
 
-  // --- Instantiate useResizablePanel for WebView --- START ---
-  // Calculate initial max width outside hook call
   const initialMaxWebViewWidth = window.innerWidth * 0.8;
-  const webViewPanelRef = useRef<HTMLDivElement>(null); // Add ref for webview panel
+  const webViewPanelRef = useRef<HTMLDivElement>(null);
   const {
     size: webViewPanelWidth,
     isResizing: isWebViewPanelResizing,
@@ -256,16 +234,160 @@ const App = () => {
     initialSize: 0,
     minSize: MIN_WEBVIEW_WIDTH,
     maxSize: initialMaxWebViewWidth,
-    direction: "horizontal-right", // Use specific direction
+    direction: "horizontal-right",
     containerRef: mainContentRef,
-    panelRef: webViewPanelRef, // Pass ref
+    panelRef: webViewPanelRef,
     storageKey: "webViewWidth",
-    // Provide a default size for when toggled open from collapsed state
     defaultOpenSize: () =>
       (mainContentRef.current?.offsetWidth ?? window.innerWidth * 0.85) *
       DEFAULT_WEBVIEW_WIDTH_FRACTION,
   });
-  // --- Instantiate useResizablePanel for WebView --- END ---
+
+  // --- Instantiate Collaboration Hook ---
+  const { isConnected } = useCollaborationSession({
+    sessionId,
+    userId,
+    userInfo: { name: userName, color: userColor }, // Pass relevant user info
+    activeFileId,
+    editorInstance: editorInstanceRef.current, // Pass the current editor instance
+    isSessionActive, // Control connection attempt
+    webViewFileIds: ["index.html", "style.css", "script.js"], // <-- Pass webview files
+    onStateReceived: useCallback(
+      (fileId, content, revision, participants) => {
+        console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
+        // Update local content ONLY if it differs significantly (avoid minor formatting changes)
+        // Or simply trust the server state entirely on initial load for the file.
+        setFileContents((prev) => ({
+          ...prev,
+          [fileId]: content, // Overwrite with server state
+        }));
+        // Update remote users for this specific file
+        // Ensure we filter out the current user if the server sends them back
+        const filteredParticipants = participants.filter(
+          (p) => p.id !== userId
+        );
+        setRemoteUsers((prev) => ({
+          ...prev,
+          [fileId]: filteredParticipants,
+        }));
+
+        // Apply initial content to the editor if it's the active file
+        if (fileId === activeFileId && editorInstanceRef.current) {
+          const model = editorInstanceRef.current.getModel();
+          if (model && model.getValue() !== content) {
+            console.log(
+              `   Setting editor content for ${fileId} from onStateReceived.`
+            );
+            // Consider using pushEditOperations for better undo stack management
+            model.pushEditOperations(
+              [],
+              [{ range: model.getFullModelRange(), text: content }],
+              () => null
+            );
+            // model.setValue(content); // Simpler alternative
+          }
+        }
+      },
+      [activeFileId, userId]
+    ), // Add userId dependency
+    onOperationReceived: useCallback((fileId, operation) => {
+      // Apply the operation received from the server (via the hook) to the local fileContents state
+      // This keeps fileContents in sync for things like the WebView
+      // console.log(`[App onOperationReceived] Op for ${fileId}: ${operation.toString()}`);
+      setFileContents((prev) => {
+        const currentContent = prev[fileId] ?? "";
+        try {
+          const newContent = operation.apply(currentContent);
+          console.log(
+            `[App onOperationReceived] Applied Op for ${fileId}. Prev Length: ${
+              currentContent.length
+            }, New Length: ${newContent.length}, Content Changed: ${
+              currentContent !== newContent
+            }`
+          );
+          if (newContent === currentContent) return prev; // No change
+          return { ...prev, [fileId]: newContent };
+        } catch (applyError) {
+          console.error(
+            `[App onOperationReceived] Error applying server op to fileContents for ${fileId}:`,
+            applyError,
+            "Op:",
+            operation.toString(),
+            "Content:",
+            currentContent
+          );
+          return prev; // Return previous state on error
+        }
+      });
+    }, []), // No dependencies needed for setFileContents based on prev state
+    onRemoteUsersUpdate: useCallback(
+      (fileId, updatedUsersInfo) => {
+        // This callback now receives potentially partial updates (single user) from the hook.
+        // The hook needs to be updated to manage the full list internally for consistency.
+        // For now, implement the merging logic here as planned (suboptimally).
+        console.log(
+          `[App onRemoteUsersUpdate] Received for ${fileId}:`,
+          updatedUsersInfo
+        );
+        setRemoteUsers((prevRemoteUsers) => {
+          const nextRemoteUsers = JSON.parse(
+            JSON.stringify(prevRemoteUsers)
+          ) as typeof prevRemoteUsers;
+          if (!nextRemoteUsers[fileId]) {
+            nextRemoteUsers[fileId] = [];
+          }
+          const usersForDoc = nextRemoteUsers[fileId];
+
+          // Assuming updatedUsersInfo is an array, potentially with one user from selection update
+          updatedUsersInfo.forEach((updatedUser) => {
+            // Skip self
+            if (updatedUser.id === userId) return;
+
+            const existingUserIndex = usersForDoc.findIndex(
+              (u) => u.id === updatedUser.id
+            );
+            if (existingUserIndex > -1) {
+              // Update existing user
+              usersForDoc[existingUserIndex] = updatedUser;
+            } else {
+              // Add new user
+              usersForDoc.push(updatedUser);
+            }
+          });
+
+          // **Important**: Clear selection/cursor for users in OTHER documents
+          // This logic should ideally live where the single user update originates (the hook)
+          // or be handled more robustly. Doing it here based on partial updates is tricky.
+          // Let's assume for now the hook sends updates only for the *active* file
+          // and the CodeEditor component only renders users passed for its *current* file.
+          // We won't clear selections in other files here for now.
+
+          // Avoid re-render if no actual change occurred (shallow compare might suffice if careful)
+          if (
+            JSON.stringify(prevRemoteUsers) === JSON.stringify(nextRemoteUsers)
+          ) {
+            return prevRemoteUsers;
+          }
+          return nextRemoteUsers;
+        });
+      },
+      [userId]
+    ), // Add userId dependency
+    onConnectionStatusChange: useCallback((connected: boolean) => {
+      console.log(`[App onConnectionStatusChange] Connected: ${connected}`);
+      // Can update UI based on connection status if needed
+    }, []),
+    onError: useCallback((error: Error | string) => {
+      console.error("[App onError] Collaboration Hook Error:", error);
+      // Show error to user? Reset session state?
+      alert(
+        `Collaboration Error: ${error instanceof Error ? error.message : error}`
+      );
+      // Maybe reset session state partially
+      setIsSessionActive(false);
+      // setSessionId(null); // Keep session ID for potential reconnect?
+    }, []),
+  });
 
   // 3. HANDLERS / FUNCTIONS THIRD
 
@@ -275,21 +397,15 @@ const App = () => {
   ) => {
     console.log("Monaco Editor Instance Mounted:", editorInstance);
     editorInstanceRef.current = editorInstance;
-    setIsEditorReadyForOT(true); // Mark editor as ready
+    // setIsEditorReadyForOT(true); // Removed - hook uses editorInstance directly
   };
 
   // dnd-kit Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      // Add activation constraints for quicker drag start
-      activationConstraint: {
-        delay: 100, // milliseconds (default is 250)
-        tolerance: 5, // pixels (default is 5)
-      },
+      activationConstraint: { delay: 100, tolerance: 5 },
     }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   // Drag Handlers
@@ -300,22 +416,17 @@ const App = () => {
   };
 
   const handleDragMove = (event: DragMoveEvent) => {
-    const { active, over, delta } = event;
+    const { active, over } = event;
     const activeId = active.id as string;
-
-    // --- Check if hovering over a valid open file tab --- START ---
     const overId = over?.id as string | undefined;
     const isValidTabTarget = overId && openFiles.some((f) => f.id === overId);
-    // --- Check if hovering over a valid open file tab --- END ---
 
-    // Type guard for pointer event is crucial
     if (!("clientX" in event.activatorEvent)) {
       setDropIndicator({ tabId: null, side: null });
-      return; // Cannot determine position
+      return;
     }
     const pointerX = (event.activatorEvent as PointerEvent).clientX;
 
-    // --- Handle Edge Cases (Hovering near first/last tab) --- START ---
     const firstTabEl = tabContainerRef.current?.querySelector(
       "[data-sortable-id]"
     ) as HTMLElement | null;
@@ -330,124 +441,80 @@ const App = () => {
       const firstTabId = openFiles[0].id;
       const lastTabId = openFiles[openFiles.length - 1].id;
 
-      // Check slightly *before* the first tab's midpoint
       if (pointerX < firstTabRect.left + firstTabRect.width * 0.5) {
         setDropIndicator({ tabId: firstTabId, side: "left" });
         edgeIndicatorSet = true;
-      }
-      // Check slightly *after* the last tab's midpoint
-      else if (pointerX > lastTabRect.right - lastTabRect.width * 0.5) {
+      } else if (pointerX > lastTabRect.right - lastTabRect.width * 0.5) {
         setDropIndicator({ tabId: lastTabId, side: "right" });
         edgeIndicatorSet = true;
       }
     }
-    // --- Handle Edge Cases (Hovering near first/last tab) --- END ---
 
-    // --- Handle Hovering Over a Specific Tab --- START ---
     if (!edgeIndicatorSet) {
-      // If NOT an edge case, proceed ONLY if hovering over a *valid* tab
       if (isValidTabTarget && overId) {
-        // Don't update if dragging over itself
         if (activeId === overId) {
-          setDropIndicator({ tabId: null, side: null }); // Clear if over self
+          setDropIndicator({ tabId: null, side: null });
           return;
         }
 
-        // CHANGE: Try getting the node directly from the event object
-        const overNode = over?.node?.current;
+        // Linter Error Fix: Access DOM element via data attribute query
+        const overNode = tabContainerRef.current?.querySelector(
+          `[data-sortable-id="${overId}"]`
+        );
+        // const overNode = over?.node?.current; // Original line causing error
 
-        // Find the actual DOM node for the valid tab target
-        // // CHANGE: Query within tabContainerRef (Previous attempt, now commented out)
-        // const overNode = tabContainerRef.current?.querySelector(
-        //   `[data-sortable-id="${overId}"]`
-        // );
         if (!overNode) {
-          // This should ideally not happen if isValidTabTarget is true, but guard anyway
           console.warn(
-            "Could not find overNode using event.over.node.current for id:", // Updated warning message
+            "Could not find overNode using querySelector for id:",
             overId
           );
           setDropIndicator({ tabId: null, side: null });
           return;
         }
-
         const overRect = overNode.getBoundingClientRect();
         const overMiddleX = overRect.left + overRect.width / 2;
-
-        // Determine side based on pointer position relative to the middle of the 'over' tab
         const side = pointerX < overMiddleX ? "left" : "right";
         setDropIndicator({ tabId: overId, side });
       } else {
-        // If not an edge case AND not over a valid tab, clear the indicator
         setDropIndicator({ tabId: null, side: null });
       }
     }
-    // --- Handle Hovering Over a Specific Tab --- END ---
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    console.log("Drag End:", event);
-    // Capture the final state BEFORE resetting
     const finalDropIndicator = { ...dropIndicator };
     const activeId = active.id as string;
-
-    // Reset states immediately
     setDraggingId(null);
     setDropIndicator({ tabId: null, side: null });
 
     const oldIndex = openFiles.findIndex((file) => file.id === activeId);
-    if (oldIndex === -1) {
-      console.warn("Dragged item not found in openFiles");
-      return; // Should not happen
-    }
+    if (oldIndex === -1) return;
 
     let newIndex = -1;
     const firstFileId = openFiles[0]?.id;
     const lastFileId = openFiles[openFiles.length - 1]?.id;
 
-    // --- Priority 1: Handle Edge Drop Cases based on Indicator ---
     if (
       finalDropIndicator.side === "left" &&
       finalDropIndicator.tabId === firstFileId
     ) {
-      console.log("Edge Drop: Before first tab");
       newIndex = 0;
     } else if (
       finalDropIndicator.side === "right" &&
       finalDropIndicator.tabId === lastFileId
     ) {
-      console.log("Edge Drop: After last tab");
-      newIndex = openFiles.length - 1; // Target index for the last position
+      newIndex = openFiles.length - 1;
     } else if (over && over.id !== active.id) {
-      // --- Priority 2: Handle Drop Between Tabs (standard dnd-kit logic) ---
       const overId = over.id as string;
       const overIndex = openFiles.findIndex((file) => file.id === overId);
-      if (overIndex !== -1) {
-        console.log(`Standard Drop: Moving ${activeId} relative to ${overId}`);
-        // Use the overIndex directly for arrayMove's target
-        newIndex = overIndex;
-      } else {
-        console.warn(`Standard Drop: Could not find over target ${overId}`);
-      }
+      if (overIndex !== -1) newIndex = overIndex;
     } else {
-      // No move needed (dropped on self, or outside valid area without edge indicator)
-      console.log(
-        "DragEnd: No move needed (dropped on self or invalid location)."
-      );
-      return;
+      return; // No move needed
     }
 
-    // --- Perform the move if a valid newIndex was determined and it's different ---
     if (newIndex !== -1 && oldIndex !== newIndex) {
-      console.log(
-        `Performing move: oldIndex=${oldIndex}, newIndex=${newIndex}`
-      );
-      setOpenFiles((prevFiles) => {
-        return arrayMove(prevFiles, oldIndex, newIndex);
-      });
-    } else {
-      console.log(`Move skipped: oldIndex=${oldIndex}, newIndex=${newIndex}`);
+      setOpenFiles((prevFiles) => arrayMove(prevFiles, oldIndex, newIndex));
     }
   };
 
@@ -479,8 +546,8 @@ const App = () => {
 
       const requestBody: CodeExecutionRequest = {
         language: activeFile.language,
-        version: LANGUAGE_VERSIONS[activeFile.language].version, // Safe access
-        files: [{ content: contentToRun }], // Send content of the active file
+        version: LANGUAGE_VERSIONS[activeFile.language].version,
+        files: [{ content: contentToRun }],
       };
 
       const response = await axios.post<CodeExecutionResponse>(
@@ -511,40 +578,21 @@ const App = () => {
     }
   };
 
-  // Global Pointer Up Handler (Update)
+  // Global Pointer Up Handler (No changes needed)
   const handleGlobalPointerUp = useCallback(
     (e: PointerEvent) => {
-      // Check WebView hook state
-      if (isWebViewPanelResizing) {
-        // Hook's effect handles mouseup
-      }
-      if (isTerminalPanelResizing) {
-        // Hook's effect handles mouseup
-      }
+      // Existing logic using isResizing from hooks
     },
-    [
-      isTerminalPanelResizing,
-      isWebViewPanelResizing, // Add webview hook state
-      // REMOVE handleWebViewResizeMouseUp,
-    ]
-  );
+    [isWebViewPanelResizing, isTerminalPanelResizing, isExplorerPanelResizing]
+  ); // Added explorer hook state
 
   // UI Interaction Handlers
   const handleIconClick = (iconName: string | null) => {
-    if (joinState === "prompting") {
-      console.log("Ignoring icon click while prompting for join details.");
-      return;
-    }
-
+    if (joinState === "prompting") return;
     if (iconName === "files") {
-      // Use the hook's toggle function
       toggleExplorerPanel();
     } else {
-      // If switching to another icon, ensure explorer is closed
-      if (!isExplorerCollapsed) {
-        toggleExplorerPanel(); // Close it if open
-      }
-      // Set the new active icon
+      if (!isExplorerCollapsed) toggleExplorerPanel();
       setActiveIcon(iconName);
     }
   };
@@ -554,7 +602,6 @@ const App = () => {
     if (!MOCK_FILES[fileId]) return;
     const fileData = MOCK_FILES[fileId];
 
-    // If the file isn't already open, add it to the list and potentially set initial content.
     if (!openFiles.some((f) => f.id === fileId)) {
       const newOpenFile: OpenFile = {
         id: fileId,
@@ -563,29 +610,29 @@ const App = () => {
       };
       setOpenFiles((prev) => [...prev, newOpenFile]);
 
-      // Set initial content ONLY if NOT in an active session.
-      // If in a session, let the WebSocket fetch the current state.
+      // If NOT in a session, set initial content.
+      // If in a session, the collaboration hook's onStateReceived will handle content.
       if (!isSessionActive) {
         setFileContents((prev) => ({
           ...prev,
-          // Only add content if it doesn't already exist (e.g., from a previous non-session state)
           [fileId]: prev[fileId] ?? fileData.content,
         }));
       } else {
-        // Optional: You could set it to undefined or keep the existing value if any.
-        // Setting it ensures the key exists, but content will come from WS.
+        // If in a session, ensure the file key exists but content will come from WS.
+        // Avoid setting mock content which might overwrite the real state briefly.
         setFileContents((prev) => ({
           ...prev,
-          [fileId]: prev[fileId], // Keep existing content or undefined
+          [fileId]: prev[fileId], // Keep existing (potentially undefined), wait for WS
         }));
+        // The collaboration hook will request the state for this file when it becomes active.
       }
     }
-    // If the file is already open, just switch to it.
+    // Switch to the tab (triggers collaboration hook to connect if needed)
     setActiveFileId(fileId);
   };
 
   const handleSwitchTab = (fileId: string) => {
-    setActiveFileId(fileId);
+    setActiveFileId(fileId); // This will trigger the collaboration hook effect
   };
 
   const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => {
@@ -603,73 +650,77 @@ const App = () => {
     } else {
       nextActiveId = activeFileId;
     }
-    setActiveFileId(nextActiveId);
+
+    // Update open files FIRST
     setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
+    // THEN set the next active ID
+    setActiveFileId(nextActiveId);
+    // Remove associated remote users for the closed file
+    setRemoteUsers((prev) => {
+      const newState = { ...prev };
+      delete newState[fileIdToClose];
+      return newState;
+    });
+    // Note: fileContents state can keep the content even if tab is closed
   };
 
+  // Modified Code Change Handler
   const handleCodeChange = (newCode: string) => {
-    if (activeFileId) {
+    // If NOT in an active session, update local state directly.
+    // If in a session, the MonacoAdapter within the collaboration hook
+    // will detect the change and trigger the OT client (`applyClient`).
+    // The server will broadcast the operation, and the hook's `onOperationReceived`
+    // callback will update the `fileContents` state.
+    // So, we only update `fileContents` here if NOT in a session.
+    if (!isSessionActive && activeFileId) {
+      console.log("[handleCodeChange] Updating local state (not in session)");
       setFileContents((prev) => ({ ...prev, [activeFileId]: newCode }));
+    } else if (isSessionActive && activeFileId) {
+      console.log(
+        "[handleCodeChange] Change detected in session, OT hook will handle state update."
+      );
+      // No direct state update here needed.
     }
   };
 
   // View Menu / WebView Handlers
   const toggleWebView = () => {
-    // Option 1: Keep separate visibility state (current implementation)
-    // setIsWebViewVisible(prev => !prev);
-    // toggleWebViewPanel();
-    // setIsViewMenuOpen(false);
-
-    // Option 2: Rely solely on hook's collapsed state
-    toggleWebViewPanel(); // Hook now handles opening to default size
+    toggleWebViewPanel();
     setIsViewMenuOpen(false);
-    // Also toggle the separate visibility state if we keep it
-    setIsWebViewVisible(isWebViewCollapsed); // Becomes visible if currently collapsed
+    setIsWebViewVisible(isWebViewCollapsed);
   };
-
-  // --- Update toggleTerminalVisibility --- START ---
   const toggleTerminalVisibility = () => {
-    toggleTerminalPanel(); // Use the hook's toggle function
-    setIsViewMenuOpen(false); // Close menu remains
+    toggleTerminalPanel();
+    setIsViewMenuOpen(false);
   };
-  // --- Update toggleTerminalVisibility --- END ---
 
-  // Share Menu Handlers <-- Add Share Menu Handlers
+  // Share Menu Handlers
   const toggleShareMenu = () => {
     setIsShareMenuOpen((prev) => {
       const nextOpen = !prev;
       if (nextOpen) {
-        // If opening, decide view based on session state
-        if (isSessionActive && generatedShareLink) {
-          setShareMenuView("link");
-        } else {
-          setShareMenuView("initial");
-        }
-        setIsColorPickerOpen(false); // Always close picker when opening menu
+        if (isSessionActive && generatedShareLink) setShareMenuView("link");
+        else setShareMenuView("initial");
+        setIsColorPickerOpen(false);
       } else {
-        // If closing, just close the color picker
         setIsColorPickerOpen(false);
       }
-      // Removed logic that reset shareMenuView and generatedShareLink on close
       return nextOpen;
     });
   };
-
   const handleNameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setUserName(event.target.value);
-    setIsColorPickerOpen(false); // Close picker on name change in either context
+    setIsColorPickerOpen(false);
   };
-
   const handleColorSelect = (color: string) => {
     setUserColor(color);
-    setIsColorPickerOpen(false); // Close picker on color select in either context
+    setIsColorPickerOpen(false);
   };
-
-  // Add handler to specifically toggle the color picker state
   const handleToggleColorPicker = () => {
     setIsColorPickerOpen((prev) => !prev);
   };
 
+  // Start Session Handler (Modified to set isSessionActive AFTER backend confirms)
   const handleStartSession = async () => {
     if (!userName.trim()) return; // Prevent starting with empty name
 
@@ -732,52 +783,31 @@ const App = () => {
         "[handleStartSession] Finished attempting to set initial document content."
       );
 
-      // Ensure local state reflects the content just sent (for creator)
-      setFileContents((prevContents) => {
-        const newContents = { ...prevContents };
-        keyFiles.forEach((fileId) => {
-          // CORRECTED: Read from prevContents
-          const contentThatWasSent = prevContents[fileId];
-          if (contentThatWasSent !== undefined) {
-            // CORRECTED: Assign the value read from prevContents
-            newContents[fileId] = contentThatWasSent;
-          } else {
-            // Optional: Handle case where key file content wasn't in prevContents?
-            console.warn(
-              `[handleStartSession] Content for key file ${fileId} missing in previous state during update.`
-            );
-          }
-        });
-        console.log(
-          "[handleStartSession] Correctly updating local fileContents state post-init:",
-          newContents
-        );
-        return newContents;
-      });
-      console.log(
-        "[handleStartSession] Updated local fileContents state post-init."
-      );
-
-      // 3. Update frontend state and URL
+      // 3. Update frontend state and URL *after* backend setup
       const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
       console.log("[handleStartSession] Share link:", shareLink);
 
       setSessionId(newSessionId);
       setIsSessionCreator(true);
-      setIsSessionActive(true); // Mark session as active locally
+      // setIsSessionActive(true); // Mark session as active locally - MOVED
       setGeneratedShareLink(shareLink);
       setShareMenuView("link"); // Switch to link view
 
-      // Update URL without reloading
-      // const url = new URL(window.location.href); // <-- Removed
-      // url.searchParams.set("session", newSessionId); // <-- Removed
-      // window.history.pushState({}, "", url.toString()); // <-- Removed
+      // CRITICAL: Activate session state AFTER setting session ID
+      // This triggers the collaboration hook to connect
+      setIsSessionActive(true);
+
+      // Update URL without reloading (Optional - maybe keep it for bookmarking/sharing)
+      // const url = new URL(window.location.href);
+      // url.searchParams.set("session", newSessionId);
+      // window.history.pushState({}, "", url.toString());
     } catch (error) {
       console.error(
         "[handleStartSession] Error creating session or setting initial content:",
         error
       );
       alert("Failed to create session. Please try again.");
+      setIsSessionActive(false); // Ensure session is not active on error
     }
   };
 
@@ -797,795 +827,22 @@ const App = () => {
     }
   };
 
-  // NEW Handler for confirming join from the Join Panel
+  // Join Panel Confirm Handler (Modified to set isSessionActive AFTER setting state)
   const handleConfirmJoin = () => {
     if (!userName.trim()) {
       alert("Please enter a display name to join."); // Simple validation
       return;
     }
     console.log(`User ${userName} confirmed join for session ${sessionId}`);
+    // Set state first
     setJoinState("joined"); // Mark as joined
-    setIsSessionActive(true); // Activate the session (triggers WS connection)
+    // setIsSessionActive(true); // Activate the session (triggers WS connection) - MOVED
     setActiveIcon("files"); // Switch back to file explorer view
     // Sidebar width should already be open from the prompt state
+
+    // THEN activate the session to trigger hook connection
+    setIsSessionActive(true);
   };
-
-  // WebSocket Connection Effect
-  useEffect(() => {
-    // Conditions to establish connection: session active, file open, editor ready
-    if (
-      !isSessionActive ||
-      !activeFileId ||
-      !editorInstanceRef.current ||
-      !isEditorReadyForOT
-    ) {
-      // Cleanup existing connection if conditions are not met
-      if (stompClientRef.current?.connected) {
-        console.log(
-          `[WS Cleanup] Disconnecting STOMP (Reason: sessionActive=${isSessionActive}, activeFileId=${activeFileId}, editorReady=${isEditorReadyForOT})`
-        );
-        stompClientRef.current.disconnect(() =>
-          console.log("[STOMP] Disconnected due to unmet conditions.")
-        );
-        stompClientRef.current = null;
-        clientRef.current = null; // Reset client
-        adapterRef.current?.detach(); // Detach adapter
-        adapterRef.current = null; // Reset adapter
-        setIsConnected(false); // Set connected state to false
-      }
-      return; // Exit effect if conditions not met
-    }
-
-    console.log(
-      `[WS Setup] Conditions met for file ${activeFileId}. Setting up STOMP...`
-    );
-
-    // Ensure previous connection is cleaned up before starting new one
-    if (stompClientRef.current?.connected) {
-      console.warn(
-        "[WS Setup] Stomp client already connected during setup? Disconnecting first."
-      );
-      stompClientRef.current.disconnect(() => {}); // Provide empty callback
-      stompClientRef.current = null;
-    }
-    // Reset OT state before connecting for the new file
-    clientRef.current = null;
-    adapterRef.current?.detach();
-    adapterRef.current = null;
-
-    const currentEditorInstance = editorInstanceRef.current;
-    const currentActiveFileId = activeFileId; // Capture activeFileId for this effect closure
-
-    // Set initial code state for the new file (e.g., loading indicator)
-    // The actual content will be set by the document-state message
-    const model = currentEditorInstance.getModel();
-    if (model && model.getValue() !== "// Loading document...") {
-      // model.setValue("// Loading document...");
-      // Temporarily disable setting loading text to avoid flashing
-      // Maybe set a loading state elsewhere in the UI
-    }
-
-    console.log("[WS Setup] Connecting via SockJS...");
-    const socket = new SockJS("http://localhost:8080/ws"); // Use localhost
-    const stompClient = Stomp.over(socket);
-    stompClientRef.current = stompClient;
-
-    if (!adapterRef.current && currentEditorInstance) {
-      console.log(
-        `[WS Setup] Initializing MonacoAdapter for ${currentActiveFileId}`
-      );
-      adapterRef.current = new MonacoAdapter(currentEditorInstance);
-    }
-
-    let subscriptions: Stomp.Subscription[] = [];
-
-    stompClient.connect(
-      {},
-      (frame: any) => {
-        console.log(
-          `[STOMP Connected] Frame: ${frame}, File: ${currentActiveFileId}`
-        );
-        setIsConnected(true); // Set connected state to true
-
-        // <<< Send explicit join message >>>
-        const joinPayload = {
-          sessionId: sessionId, // Assuming sessionId is available here
-          documentId: currentActiveFileId, // Send initial document focus
-          userId: userId,
-          userName: userName.trim(),
-          userColor: userColor,
-        };
-        console.log("Sending explicit /app/join message", joinPayload); // Use console.log
-        stompClient.send("/app/join", {}, JSON.stringify(joinPayload));
-        // <<< End send join message >>>
-
-        // Define callbacks WITH documentId included
-        const clientCallbacks: IClientCallbacks = {
-          sendOperation: (revision: number, operation: TextOperation) => {
-            if (
-              stompClientRef.current?.connected &&
-              currentActiveFileId &&
-              sessionId
-            ) {
-              // Check sessionId existence
-              console.log(
-                `[sendOperation Callback] Preparing to send Op for ${currentActiveFileId} (Session: ${sessionId}) @ rev ${revision}` // Include sessionId in log
-              );
-              const payload = {
-                documentId: currentActiveFileId,
-                clientId: userId,
-                revision: revision,
-                operation: operation.toJSON(),
-                sessionId: sessionId, // Add sessionId to payload
-              };
-              console.log(`[Client -> Server Op] /app/operation`, payload);
-              stompClientRef.current.send(
-                "/app/operation",
-                {},
-                JSON.stringify(payload)
-              );
-            } else {
-              console.error(
-                "Cannot send operation - STOMP not connected, no active file, or no session ID"
-              );
-            }
-          },
-          sendSelection: (selection: OTSelection | null) => {
-            // Ensure user info (name, color) is included here too
-            if (
-              stompClientRef.current?.connected &&
-              currentActiveFileId &&
-              sessionId &&
-              userName.trim()
-            ) {
-              // --- Add Log ---
-              console.log(
-                "[DEBUG] Attempting to send selection via clientCallbacks.sendSelection"
-              );
-
-              // Extract cursor position from selection if available
-              let cursorPosition = null;
-              if (
-                selection &&
-                selection.ranges &&
-                selection.ranges.length > 0
-              ) {
-                const primaryRange = selection.ranges[0];
-                // Get the editor model to convert selection offset to position
-                if (currentEditorInstance) {
-                  const model = currentEditorInstance.getModel();
-                  if (model) {
-                    try {
-                      // Use the head position of the selection as the cursor position
-                      // (where the cursor would be visually located in a selection)
-                      const headPos = offsetToPosition(
-                        model,
-                        primaryRange.head
-                      );
-                      cursorPosition = {
-                        lineNumber: headPos.lineNumber,
-                        column: headPos.column,
-                      };
-                      console.log(
-                        "[DEBUG] Inferred cursor position from selection:",
-                        cursorPosition
-                      );
-                    } catch (error) {
-                      console.error(
-                        "[DEBUG] Failed to infer cursor position from selection:",
-                        error
-                      );
-                    }
-                  }
-                }
-              }
-
-              const payload = {
-                documentId: currentActiveFileId,
-                sessionId: sessionId, // Include sessionId
-                userInfo: {
-                  id: userId,
-                  name: userName.trim(), // <<< Include name >>>
-                  color: userColor, // <<< Include color >>>
-                  cursorPosition: cursorPosition, // Use inferred cursor position instead of null
-                  selection: selection?.toJSON() ?? null,
-                },
-              };
-              console.log(
-                `[OT Client -> Server Sel] /app/selection (via clientCallbacks)`,
-                payload
-              );
-              stompClientRef.current.send(
-                "/app/selection",
-                {},
-                JSON.stringify(payload)
-              );
-            } else {
-              console.warn(
-                "Cannot send selection via OT Client - STOMP not connected, no active file, no session ID, or no user name"
-              );
-            }
-          },
-          applyOperation: (operation: TextOperation) => {
-            console.log(`[Client -> Editor Apply] Op: ${operation.toString()}`);
-            adapterRef.current?.applyOperation(operation); // Apply op to the Monaco editor instance
-          },
-          getSelection: () => {
-            return adapterRef.current?.getSelection() ?? null;
-          },
-          setSelection: (selection: OTSelection | null) => {
-            adapterRef.current?.setSelection(selection);
-          },
-        };
-
-        // Subscribe to topics (handle documentId filtering)
-
-        // Document State Handling
-        const stateTopic = `/topic/sessions/${sessionId}/state/document/${currentActiveFileId}`;
-        console.log(
-          `[STOMP Setup] Subscribing to Document State topic: ${stateTopic}`
-        );
-        subscriptions.push(
-          stompClient.subscribe(stateTopic, (message: any) => {
-            // Use the dynamic topic
-            try {
-              const state = JSON.parse(message.body);
-              console.log(`[Server -> Client State] Received:`, state);
-
-              // *** Check if state is for the currently active file ***
-              if (state.documentId !== currentActiveFileId) {
-                console.log(
-                  `   Ignoring state for inactive file: ${state.documentId} (current: ${currentActiveFileId})`
-                );
-                return;
-              }
-
-              // <<< Process participants every time state is received for the active file >>>
-              if (state.participants && Array.isArray(state.participants)) {
-                const initialRemoteUsers = state.participants
-                  .map((p: any) => {
-                    // Sanity check participant structure
-                    if (!p || typeof p.id !== "string") {
-                      console.warn(
-                        "Received invalid participant structure in state message:",
-                        p
-                      );
-                      return null; // Skip invalid participant
-                    }
-                    const frontendSelection = p.selection
-                      ? OTSelection.fromJSON(p.selection)
-                      : null;
-                    return {
-                      id: p.id,
-                      name: p.name || `User ${p.id.substring(0, 4)}`,
-                      color: p.color || "#CCCCCC",
-                      cursorPosition: p.cursorPosition || null,
-                      selection: frontendSelection,
-                    };
-                  })
-                  .filter(
-                    (user: RemoteUser | null): user is RemoteUser =>
-                      user !== null
-                  );
-
-                setRemoteUsers((prev) => ({
-                  ...prev,
-                  [state.documentId]: initialRemoteUsers, // Update state for the specific document ID from the message
-                }));
-                console.log(
-                  `   Processed participants for ${state.documentId}. Count: ${initialRemoteUsers.length}`
-                );
-              } else {
-                // Ensure empty list if participants are null/undefined in state message
-                setRemoteUsers((prev) => ({
-                  ...prev,
-                  [state.documentId]: [],
-                }));
-                console.log(
-                  `   No participants found in state message for ${state.documentId}.`
-                );
-              }
-              // <<< End processing participants >>>
-
-              // Initialize OT Client only if it doesn't exist
-              if (!clientRef.current) {
-                console.log(
-                  `   Initializing Client for ${state.documentId} @ rev ${state.revision}`
-                );
-                clientRef.current = new Client(
-                  state.revision,
-                  userId,
-                  clientCallbacks
-                );
-
-                // <<< Remove initial participant processing from here >>>
-
-                // Set initial document content (only needed during client init)
-                if (currentEditorInstance) {
-                  const model = currentEditorInstance.getModel();
-                  const currentEditorValue = model?.getValue();
-                  if (model && currentEditorValue !== state.document) {
-                    console.log(
-                      `   Setting initial document content for ${state.documentId}.`
-                    );
-                    if (adapterRef.current)
-                      adapterRef.current.ignoreNextChange = true;
-                    // Use pushEditOperations for setting initial content to avoid breaking undo stack
-                    model.pushEditOperations(
-                      [],
-                      [
-                        {
-                          range: model.getFullModelRange(),
-                          text: state.document,
-                        },
-                      ],
-                      () => null // No undo stop needed here usually
-                    );
-                    // model.setValue(state.document); // Old method
-                  } else {
-                    console.log(
-                      `   Editor content already matches for ${state.documentId}.`
-                    );
-                  }
-                }
-                // <<< End initial participant processing >>>
-
-                // Register adapter ONLY after client is initialized and doc is set
-                adapterRef.current?.registerCallbacks({
-                  change: (op: TextOperation, inverse: TextOperation) => {
-                    console.log(
-                      `[Adapter Callback] Change triggered for ${currentActiveFileId}. Op: ${op.toString()}`
-                    );
-                    if (!clientRef.current) {
-                      console.error(
-                        `[Adapter Callback] Error: clientRef is null when change occurred for ${currentActiveFileId}`
-                      );
-                      return;
-                    }
-                    console.log(
-                      `[Adapter Callback] Calling applyClient. Client State: ${clientRef.current.state.constructor.name}, Revision: ${clientRef.current.revision}`
-                    );
-                    clientRef.current?.applyClient(op); // Send op to server state machine
-
-                    // *** ADDED: Apply local op directly to fileContents for WebView updates ***
-                    setFileContents((prevContents) => {
-                      const currentContent =
-                        prevContents[currentActiveFileId] ?? "";
-                      try {
-                        const newContent = op.apply(currentContent);
-                        // Avoid unnecessary state updates if content didn't change (e.g., empty op)
-                        if (newContent === currentContent) {
-                          return prevContents;
-                        }
-                        console.log(
-                          `[Adapter Callback] Updating fileContents for ${currentActiveFileId} due to local change.`
-                        );
-                        return {
-                          ...prevContents,
-                          [currentActiveFileId]: newContent,
-                        };
-                      } catch (applyError) {
-                        console.error(
-                          `[Adapter Callback] Error applying local op to fileContents for ${currentActiveFileId}:`,
-                          applyError,
-                          "Op:",
-                          op.toString(),
-                          "Content:",
-                          currentContent
-                        );
-                        return prevContents; // Return previous state on error
-                      }
-                    });
-                    // **************************************************************************
-                  },
-                  selectionChange: () => {
-                    // console.log(`[Editor -> Client SelChange] File: ${currentActiveFileId}`);
-                    clientRef.current?.selectionChanged();
-                  },
-                  blur: () => {
-                    console.log(
-                      `[Editor -> Client Blur] File: ${currentActiveFileId}`
-                    );
-                    clientRef.current?.blur();
-                  },
-                });
-              } else {
-                console.warn(
-                  `[Server -> Client State] Received state for ${state.documentId} after client init. Rev: ${state.revision}, ClientRev: ${clientRef.current.revision}`
-                );
-                // Optional: Handle revision mismatch/resync logic here if needed
-              }
-            } catch (error) {
-              console.error(
-                "Error processing document-state message:",
-                error,
-                message.body
-              );
-            }
-          })
-        );
-
-        // Operations Handling (Subscribe to SESSION and DOCUMENT specific topic)
-        const operationsTopic = `/topic/sessions/${sessionId}/operations/document/${currentActiveFileId}`;
-        console.log(
-          `[STOMP Setup] Subscribing to Operations topic: ${operationsTopic}`
-        );
-        subscriptions.push(
-          stompClient.subscribe(operationsTopic, (message: any) => {
-            // Use the dynamic topic
-            try {
-              const payload = JSON.parse(message.body);
-              if (
-                !payload ||
-                !payload.clientId ||
-                !payload.operation ||
-                !payload.documentId
-              ) {
-                console.error(
-                  "[Server -> Client Op] Invalid payload:",
-                  message.body
-                );
-                return;
-              }
-              // Don't log every single op, maybe just errors or state changes
-              // console.log(`[Server -> Client Op] Received from ${payload.clientId} for ${payload.documentId}:`, payload.operation);
-
-              // *** Ignore own messages ***
-              if (payload.clientId === userId) {
-                // console.log("   Ignoring own operation broadcast.");
-                return;
-              }
-
-              // *** No need to check documentId again here, as we subscribed specifically ***
-              // *** Apply to ACTIVE file EDITOR via OT Client ***
-              if (clientRef.current) {
-                try {
-                  const operationForClient = TextOperation.fromJSON(
-                    payload.operation
-                  );
-                  clientRef.current.applyServer(operationForClient);
-                } catch (e) {
-                  console.error(
-                    `[Server -> Client Op] Error applying server op to ACTIVE file EDITOR ${currentActiveFileId}:`,
-                    e,
-                    payload.operation
-                  );
-                }
-              } else {
-                console.warn(
-                  `[Server -> Client Op] Received op for ACTIVE file ${payload.documentId} before client init.`
-                );
-              }
-
-              // *** Apply to fileContents state for WebView update ***
-              // We still need the documentId from the payload here to update the correct key in the state
-              // try {
-              //   const operationForState = TextOperation.fromJSON(
-              //     payload.operation
-              //   );
-              //   setFileContents((prevContents) => {
-              //     const docIdToUpdate = payload.documentId;
-              //     // Double-check if docIdToUpdate actually matches currentActiveFileId?
-              //     // Might be overly cautious, but ensures state update aligns with subscription.
-              //     if (docIdToUpdate !== currentActiveFileId) {
-              //       console.warn(
-              //         `[Server -> Client Op] Received op for doc ${docIdToUpdate} on topic for ${currentActiveFileId}. Ignoring for fileContents update.`
-              //       );
-              //       return prevContents;
-              //     }
-              //     const currentContent = prevContents[docIdToUpdate] ?? ""; // Get content for the specific doc
-              //     const newContent = operationForState.apply(currentContent);
-
-              //     // Avoid unnecessary state updates if content didn't change
-              //     if (newContent === currentContent) {
-              //       return prevContents;
-              //     }
-
-              //     console.log(
-              //       `[Server -> Client Op] Updating fileContents for ${docIdToUpdate} (WebView).`
-              //     );
-              //     return {
-              //       ...prevContents,
-              //       [docIdToUpdate]: newContent, // Update the specific document's content
-              //     };
-              //   });
-              // } catch (e) {
-              //   console.error(
-              //     `[Server -> Client Op] Error applying server op to fileContents STATE for ${payload.documentId}:`,
-              //     e,
-              //     payload.operation
-              //   );
-              // }
-              // ************************************************************
-
-              // File not open check removed - we store all updates now
-            } catch (error) {
-              console.error(
-                "Error processing operations message:",
-                error,
-                message.body
-              );
-            }
-          })
-        );
-
-        // Selections Handling (Subscribe to SESSION and DOCUMENT specific topic)
-        const selectionTopic = `/topic/sessions/${sessionId}/selections/document/${currentActiveFileId}`; // Use the dynamic topic
-        console.log(
-          `[CodeEditorUI WS Setup] Subscribing to Selections topic: ${selectionTopic}...`
-        );
-        subscriptions.push(
-          stompClient.subscribe(selectionTopic, (message: any) => {
-            // Use the dynamic topic
-            try {
-              const payload = JSON.parse(message.body);
-              // Expecting payload: { documentId: string, userInfo: UserInfo }
-              if (
-                !payload ||
-                !payload.userInfo ||
-                !payload.userInfo.id ||
-                !payload.documentId
-              ) {
-                console.error(
-                  "[Server -> Client Sel] Invalid payload structure:",
-                  payload
-                );
-                return;
-              }
-
-              const { documentId, userInfo } = payload;
-              const remoteUserId = userInfo.id;
-
-              // Enhanced debugging for cursor positions and selections
-              console.log(
-                `[DEBUG] Received selection message. Comparing remoteUserId (${remoteUserId}) with local userId (${userId})`
-              );
-              console.log(
-                `[DEBUG] Full userInfo received:`,
-                JSON.stringify(userInfo, null, 2)
-              );
-              console.log(
-                `[DEBUG] User ${remoteUserId} cursorPosition:`,
-                userInfo.cursorPosition
-              );
-              console.log(
-                `[DEBUG] User ${remoteUserId} selection:`,
-                userInfo.selection
-              );
-
-              // Ignore own selection broadcasts
-              if (remoteUserId === userId) {
-                console.log(
-                  `[DEBUG] IDs match. Ignoring own selection broadcast.`
-                ); // Log ignore
-                return; // Ignore own selection broadcasts
-              }
-              // Log if the filter passes
-              console.log(
-                `[DEBUG] IDs do NOT match. Proceeding to update remoteUsers state.`
-              );
-
-              // Update the remoteUsers state
-              setRemoteUsers((prevRemoteUsers) => {
-                // Use variables from the outer scope (documentId, userInfo, remoteUserId)
-                // instead of trying to access payload directly here.
-
-                // Create a deep copy to modify safely
-                const nextRemoteUsers = JSON.parse(
-                  JSON.stringify(prevRemoteUsers)
-                ) as typeof prevRemoteUsers;
-
-                // Ensure the array for the current document exists
-                if (!nextRemoteUsers[documentId]) {
-                  // Use documentId from outer scope
-                  nextRemoteUsers[documentId] = [];
-                }
-                const usersForDoc = nextRemoteUsers[documentId]; // Get the array reference
-
-                const existingUserIndex = usersForDoc.findIndex(
-                  (u: RemoteUser) => u.id === remoteUserId // Use remoteUserId from outer scope
-                );
-
-                // Use OTSelection.fromJSON here as backend sends the JSON representation
-                // Use userInfo from the outer scope
-                const selectionFromPayload = userInfo.selection
-                  ? OTSelection.fromJSON(userInfo.selection)
-                  : null;
-
-                const updatedUserInfo: RemoteUser = {
-                  id: remoteUserId, // Use remoteUserId from outer scope
-                  name: userInfo.name || `User ${remoteUserId.substring(0, 4)}`, // Use userInfo & remoteUserId
-                  color: userInfo.color || "#CCCCCC", // Use userInfo
-                  cursorPosition: userInfo.cursorPosition, // Use userInfo
-                  selection: selectionFromPayload, // Store the OTSelection object
-                };
-
-                // Update or add the user in the current document's list
-                if (existingUserIndex > -1) {
-                  usersForDoc[existingUserIndex] = updatedUserInfo;
-                } else {
-                  usersForDoc.push(updatedUserInfo);
-                }
-                // No need to reassign nextRemoteUsers[documentId] = usersForDoc; as usersForDoc is a reference
-
-                // --- Clear selection for this user in OTHER documents ---
-                Object.keys(nextRemoteUsers).forEach((otherDocId) => {
-                  if (otherDocId !== documentId) {
-                    const usersInOtherDoc = nextRemoteUsers[otherDocId];
-                    if (usersInOtherDoc) {
-                      // Check if the document exists in state
-                      const userIndexInOtherDoc = usersInOtherDoc.findIndex(
-                        (u: RemoteUser) => u.id === remoteUserId // Use remoteUserId from outer scope
-                      );
-                      if (userIndexInOtherDoc > -1) {
-                        // Clear selection and cursor, keep other info
-                        usersInOtherDoc[userIndexInOtherDoc] = {
-                          ...usersInOtherDoc[userIndexInOtherDoc],
-                          selection: null,
-                          cursorPosition: null,
-                        };
-                      }
-                    }
-                  }
-                });
-                // ------------------------------------------------------
-
-                console.log(
-                  `[CodeEditorUI] Updated remoteUsers state:`,
-                  nextRemoteUsers
-                );
-
-                // Avoid unnecessary re-renders if state didn't actually change
-                if (
-                  JSON.stringify(prevRemoteUsers) ===
-                  JSON.stringify(nextRemoteUsers)
-                ) {
-                  return prevRemoteUsers;
-                }
-
-                return nextRemoteUsers; // Ensure the modified state is returned
-              });
-            } catch (error) {
-              console.error(
-                "Error processing selections message:",
-                error,
-                message.body
-              );
-            }
-          })
-        );
-
-        // ACK Handling (remains user-specific, not document-specific)
-        const ackTopic = `/topic/ack/${userId}`;
-        console.log(`[STOMP Setup] Subscribing to ACK topic: ${ackTopic}`);
-        subscriptions.push(
-          stompClient.subscribe(ackTopic, (message: any) => {
-            console.log(`[Server -> Client ACK] Received`);
-            if (message.body === "ack") {
-              clientRef.current?.serverAck();
-            } else {
-              console.warn(
-                "[Server -> Client ACK] Received unexpected ACK message:",
-                message.body
-              );
-            }
-          })
-        );
-
-        // Request initial state FOR THE CURRENT ACTIVE FILE
-        console.log(
-          `[Client -> Server ReqState] Requesting state for session ${sessionId}, doc ${currentActiveFileId}...` // Update log
-        );
-        stompClient.send(
-          // Corrected back to send
-          "/app/get-document-state",
-          {},
-          JSON.stringify({
-            documentId: currentActiveFileId,
-            sessionId: sessionId, // Add sessionId
-          })
-        );
-      },
-      (error: any) => {
-        console.error(
-          `[STOMP Error] Connection Failed for ${currentActiveFileId}:`,
-          error
-        );
-        setIsConnected(false); // Set connected state to false on error
-        // Optionally set code state to show error
-        // setFileContents(prev => ({...prev, [currentActiveFileId]: "// Connection failed."})) ;
-        setIsSessionActive(false); // Consider if this should affect the whole session
-        // Reset OT state on connection error
-        clientRef.current = null;
-        adapterRef.current?.detach();
-        adapterRef.current = null;
-        setIsConnected(false); // Ensure connected is false on cleanup
-        console.log(
-          `[WS Cleanup] Finished cleanup for ${currentActiveFileId}.`
-        );
-      }
-    );
-
-    // Cleanup function for the effect
-    return () => {
-      console.log(
-        `[WS Cleanup] Running cleanup for file ${currentActiveFileId} effect...`
-      );
-      subscriptions.forEach((sub) => {
-        try {
-          sub.unsubscribe();
-        } catch (e) {
-          console.warn("Error unsubscribing:", e);
-        }
-      });
-      subscriptions = [];
-      if (stompClientRef.current?.connected) {
-        // Use stompClientRef here
-        console.log("[WS Cleanup] Disconnecting STOMP client in cleanup.");
-        stompClientRef.current.disconnect(() =>
-          console.log("[STOMP] Disconnected via effect cleanup.")
-        );
-      }
-      // Don't nullify stompClientRef here, the outer check handles it
-      // Reset client and adapter refs specific to this file connection attempt
-      clientRef.current = null;
-      adapterRef.current?.detach();
-      adapterRef.current = null;
-      setIsConnected(false); // Ensure connected is false on cleanup
-      console.log(`[WS Cleanup] Finished cleanup for ${currentActiveFileId}.`);
-    };
-    // Depend only on session, active file, and editor readiness
-  }, [isSessionActive, sessionId, activeFileId, userId, isEditorReadyForOT]);
-
-  // Effect to send initial presence when connection is ready and user info is available
-  useEffect(() => {
-    if (
-      isConnected &&
-      userName.trim() &&
-      activeFileId &&
-      stompClientRef.current?.connected
-    ) {
-      // Introduce a small delay to allow state propagation
-      const timer = setTimeout(() => {
-        if (stompClientRef.current?.connected) {
-          // Re-check connection inside timeout
-          // --- Add Log ---
-          console.log(
-            "[DEBUG] Attempting to send selection via Presence Effect useEffect"
-          );
-          console.log(
-            `[Presence Effect] Sending initial presence for ${userId} in ${activeFileId}. Connected: ${isConnected}`
-          );
-          const initialPresencePayload = {
-            documentId: activeFileId,
-            userInfo: {
-              id: userId,
-              name: userName.trim(),
-              color: userColor,
-              cursorPosition: null,
-              selection: null,
-            },
-          };
-          stompClientRef.current.send(
-            "/app/selection",
-            {},
-            JSON.stringify(initialPresencePayload)
-          );
-        } else {
-          console.log(
-            "[Presence Effect] Connection lost before sending presence message in timeout."
-          );
-        }
-      }, 100); // 100ms delay
-
-      // Cleanup the timer if dependencies change before it fires
-      return () => clearTimeout(timer);
-    } else {
-      // Optional: Log why it didn't send
-      // console.log(`[Presence Effect] Conditions not met. isConnected: ${isConnected}, UserName: ${!!userName.trim()}, ActiveFileId: ${!!activeFileId}, StompConnected: ${!!stompClientRef.current?.connected}`);
-    }
-    // This effect should run whenever connection status or user details change.
-  }, [isConnected, userName, userColor, activeFileId, userId]);
 
   // Derived State (Memos)
   const htmlFileContent = useMemo(() => {
@@ -1606,19 +863,18 @@ const App = () => {
     return fileContents["script.js"] || "// script.js not loaded";
   }, [fileContents]); // Depend only on fileContents
 
-  // Get remote users for the currently active file (Moved inside component)
+  // Get remote users for the currently active file (Updated to use remoteUsers state)
   const currentRemoteUsers = useMemo(() => {
     return activeFileId ? remoteUsers[activeFileId] || [] : [];
   }, [remoteUsers, activeFileId]);
 
-  // Derive a unique list of all remote participants in the session (excluding self)
+  // Derive unique participants (Updated to use remoteUsers state)
   const uniqueRemoteParticipants = useMemo(() => {
     const allUsers = Object.values(remoteUsers).flat();
     const uniqueUsersMap = new Map<string, RemoteUser>();
     allUsers.forEach((user) => {
+      // Filter out self if present in the state (hook should ideally filter)
       if (user.id !== userId) {
-        // Exclude the current user
-        // Only add if the user has a valid name and color (implicitly handled by update logic)
         uniqueUsersMap.set(user.id, user);
       }
     });
@@ -1626,12 +882,6 @@ const App = () => {
   }, [remoteUsers, userId]);
 
   // 4. EFFECTS FOURTH
-
-  // --- Update Explorer Resizing Effect Dependencies --- START ---
-  // useEffect(() => {
-  // ... (Explorer effect code, now removed, but update deps in other effects)
-  // }, [isExplorerPanelResizing, isTerminalPanelResizing, isWebViewResizing]); // Add TERMINAL hook state
-  // --- Update Explorer Resizing Effect Dependencies --- END ---
 
   // Global Pointer Up Effect (No change needed here, uses handleGlobalPointerUp)
   useEffect(() => {
@@ -1719,54 +969,6 @@ const App = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSessionActive, joinState, setExplorerPanelSize]); // Add setExplorerPanelSize to dependencies
-
-  // NEW Handler for sending selection data via STOMP
-  const handleSendSelectionData = useCallback(
-    (data: {
-      cursorPosition: { lineNumber: number; column: number } | null;
-      // Fix: Expect OTSelection, matching the prop type
-      selection: OTSelection | null;
-    }) => {
-      console.log(
-        "[CodeEditorUI handleSendSelectionData] Received data from CodeEditor:",
-        data
-      );
-
-      if (
-        stompClientRef.current?.connected &&
-        activeFileId &&
-        sessionId &&
-        userName.trim()
-      ) {
-        const payload = {
-          documentId: activeFileId,
-          sessionId: sessionId, // Add sessionId
-          userInfo: {
-            id: userId,
-            name: userName.trim(),
-            color: userColor,
-            cursorPosition: data.cursorPosition,
-            // Fix: Convert received OTSelection to JSON for the backend DTO
-            selection: data.selection ? data.selection.toJSON() : null,
-          },
-        };
-
-        console.log(
-          "[CodeEditorUI handleSendSelectionData] Sending payload object:",
-          payload
-        );
-        stompClientRef.current.send(
-          "/app/selection",
-          {},
-          JSON.stringify(payload)
-        );
-      } else {
-        // console.warn(...);
-      }
-    },
-    // @ts-ignore <-- Suppress potentially incorrect linter errors about implicit 'any' for dependencies
-    [activeFileId, sessionId, userId, userName, userColor] // Include dependencies
-  );
 
   // 5. RETURN JSX LAST
   return (
@@ -2011,7 +1213,6 @@ const App = () => {
           </button>
         </div>
       </div>
-
       {/* Main Content */}
       <div ref={mainContentRef} className="flex flex-1 min-h-0">
         {/* Combined Sidebar Area */}
@@ -2141,8 +1342,7 @@ const App = () => {
                         <div
                           key={id}
                           className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
-                            activeFileId === id &&
-                            openFiles.some((f) => f.id === id)
+                            activeFileId === id
                               ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
                               : "hover:bg-stone-700"
                           }`}
@@ -2154,8 +1354,7 @@ const App = () => {
                           />
                           <span
                             className={`w-full pl-1 truncate ${
-                              activeFileId === id &&
-                              openFiles.some((f) => f.id === id)
+                              activeFileId === id
                                 ? "text-stone-100"
                                 : "text-stone-300"
                             }`}
@@ -2317,8 +1516,6 @@ const App = () => {
                   onEditorDidMount={handleEditorDidMount}
                   users={currentRemoteUsers} // Pass remote user data
                   // *** Add the missing prop here ***
-                  sendSelectionData={handleSendSelectionData}
-                  // *** Add the new prop here ***
                   localUserId={userId} // Pass the local userId
                 />
               ) : (
@@ -2392,10 +1589,11 @@ const App = () => {
           )}
         </div>
       </div>
-
       {/* Status Bar */}
-      <StatusBar />
-
+      <StatusBar
+        connectionStatus={isConnected ? "connected" : "disconnected"}
+      />{" "}
+      {/* Pass connection status */}
       {/* --- Update Resizing Overlay Check --- START --- */}
       {(isExplorerPanelResizing ||
         isTerminalPanelResizing ||
