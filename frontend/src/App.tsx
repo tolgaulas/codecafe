@@ -86,6 +86,7 @@ import { useCollaborationSession } from "./hooks/useCollaborationSession"; // <-
 import Header from "./components/Header"; // <-- Add import for Header
 import Sidebar from "./components/Sidebar"; // <-- Add import for Sidebar
 import MainEditorArea from "./components/MainEditorArea"; // <-- Add import for MainEditorArea
+import { useFileStore } from "./store/useFileStore"; // <-- Import Zustand store
 
 const App = () => {
   // 1. REFS FIRST
@@ -99,42 +100,59 @@ const App = () => {
   // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
 
-  // Tab / File Management State
-  const initialOpenFileIds = ["index.html", "style.css", "script.js"];
-  const initialOpenFilesData = initialOpenFileIds.map((id) => {
-    if (!MOCK_FILES[id]) {
-      console.error(`Initial file ${id} not found in MOCK_FILES!`);
-      return { id, name: "Error", language: "plaintext" as EditorLanguageKey };
-    }
-    return {
-      id: id,
-      name: MOCK_FILES[id].name,
-      language: MOCK_FILES[id].language as EditorLanguageKey,
-    };
-  });
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>(initialOpenFilesData);
-  const [activeFileId, setActiveFileId] = useState<string | null>("index.html");
+  // Tab / File Management State (Moved to Zustand)
+  // const initialOpenFileIds = ["index.html", "style.css", "script.js"];
+  // const initialOpenFilesData = initialOpenFileIds.map((id) => {
+  //   if (!MOCK_FILES[id]) {
+  //     console.error(`Initial file ${id} not found in MOCK_FILES!`);
+  //     return { id, name: "Error", language: "plaintext" as EditorLanguageKey };
+  //   }
+  //   return {
+  //     id: id,
+  //     name: MOCK_FILES[id].name,
+  //     language: MOCK_FILES[id].language as EditorLanguageKey,
+  //   };
+  // });
+  // const [openFiles, setOpenFiles] = useState<OpenFile[]>(initialOpenFilesData);
+  // const [activeFileId, setActiveFileId] = useState<string | null>("index.html");
 
+  // --- Use Zustand Store ---
+  const {
+    openFiles,
+    activeFileId,
+    draggingId, // Still needed by MainEditorArea -> FileTabs
+    dropIndicator, // Still needed by MainEditorArea -> FileTabs
+    setOpenFiles, // Needed for handleOpenFile/handleCloseTab
+    setActiveFileId, // Needed for handleOpenFile/handleCloseTab/handleSwitchTab
+    setDraggingId, // Still needed by MainEditorArea -> FileTabs
+    setDropIndicator, // Still needed by MainEditorArea -> FileTabs
+  } = useFileStore();
+  // --- End Zustand Store ---
+
+  // File Contents State (Remains in App for now due to collaboration logic)
   const [fileContents, setFileContents] = useState<{ [id: string]: string }>(
     () => {
       const initialContents: { [id: string]: string } = {};
-      initialOpenFileIds.forEach((id) => {
-        if (MOCK_FILES[id]) {
-          initialContents[id] = MOCK_FILES[id].content;
+      // Use store's initial files to initialize content
+      useFileStore.getState().openFiles.forEach((file) => {
+        const fileData = MOCK_FILES[file.id];
+        if (fileData) {
+          initialContents[file.id] = fileData.content;
         } else {
-          initialContents[id] = `// Error: Content for ${id} not found`;
+          // Handle error case if file from store isn't in MOCK_FILES (shouldn't happen with current init)
+          initialContents[
+            file.id
+          ] = `// Error: Content for ${file.id} not found`;
         }
       });
       return initialContents;
     }
   );
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-
-  // Add state for drop indicator
-  const [dropIndicator, setDropIndicator] = useState<{
-    tabId: string | null;
-    side: "left" | "right" | null;
-  }>({ tabId: null, side: null });
+  // const [draggingId, setDraggingId] = useState<string | null>(null); // Moved to Zustand
+  // const [dropIndicator, setDropIndicator] = useState<{
+  //   tabId: string | null;
+  //   side: "left" | "right" | null;
+  // }>({ tabId: null, side: null }); // Moved to Zustand
 
   // View Menu State
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
@@ -461,65 +479,79 @@ const App = () => {
   //   }
   // };
 
-  // File Handling
+  // File Handling (Update to use Zustand setters)
   const handleOpenFile = (fileId: string) => {
     if (!MOCK_FILES[fileId]) return;
     const fileData = MOCK_FILES[fileId];
 
-    if (!openFiles.some((f) => f.id === fileId)) {
+    // Use store state directly
+    const currentOpenFiles = useFileStore.getState().openFiles;
+    if (!currentOpenFiles.some((f) => f.id === fileId)) {
       const newOpenFile: OpenFile = {
         id: fileId,
         name: fileData.name,
-        language: fileData.language,
+        language: fileData.language as EditorLanguageKey, // Cast assuming MOCK_FILES is correct
       };
+      // Use Zustand action
       setOpenFiles((prev) => [...prev, newOpenFile]);
 
-      // If NOT in a session, set initial content.
-      // If in a session, the collaboration hook's onStateReceived will handle content.
+      // File content logic remains here for now
       if (!isSessionActive) {
         setFileContents((prev) => ({
           ...prev,
           [fileId]: prev[fileId] ?? fileData.content,
         }));
       } else {
-        // If in a session, ensure the file key exists but content will come from WS.
-        // Avoid setting mock content which might overwrite the real state briefly.
         setFileContents((prev) => ({
           ...prev,
-          [fileId]: prev[fileId], // Keep existing (potentially undefined), wait for WS
+          [fileId]: prev[fileId], // Keep existing, wait for WS
         }));
-        // The collaboration hook will request the state for this file when it becomes active.
       }
     }
-    // Switch to the tab (triggers collaboration hook to connect if needed)
+    // Use Zustand action
     setActiveFileId(fileId);
   };
 
   const handleSwitchTab = (fileId: string) => {
-    setActiveFileId(fileId); // This will trigger the collaboration hook effect
+    // Use Zustand action
+    setActiveFileId(fileId);
   };
 
   const handleCloseTab = (fileIdToClose: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    const indexToRemove = openFiles.findIndex((f) => f.id === fileIdToClose);
+    // Get state from store *before* update
+    const currentOpenFiles = useFileStore.getState().openFiles;
+    const currentActiveFileId = useFileStore.getState().activeFileId;
+
+    const indexToRemove = currentOpenFiles.findIndex(
+      (f) => f.id === fileIdToClose
+    );
     if (indexToRemove === -1) return;
+
     let nextActiveId: string | null = null;
-    if (activeFileId === fileIdToClose) {
-      if (openFiles.length > 1) {
-        const remainingFiles = openFiles.filter((f) => f.id !== fileIdToClose);
+    if (currentActiveFileId === fileIdToClose) {
+      if (currentOpenFiles.length > 1) {
+        // Important: Filter based on currentOpenFiles *before* the update
+        const remainingFiles = currentOpenFiles.filter(
+          (f) => f.id !== fileIdToClose
+        );
+        // Calculate next ID based on the *state before removal*
+        const newIndex = Math.max(0, indexToRemove - 1);
         nextActiveId =
-          remainingFiles[Math.max(0, indexToRemove - 1)]?.id ??
-          remainingFiles[0]?.id;
+          remainingFiles[newIndex]?.id ?? remainingFiles[0]?.id ?? null; // Ensure fallback to null
+      } else {
+        nextActiveId = null; // Closing the last tab
       }
     } else {
-      nextActiveId = activeFileId;
+      nextActiveId = currentActiveFileId; // Active tab is not the one being closed
     }
 
-    // Update open files FIRST
+    // Update open files using Zustand action
     setOpenFiles((prev) => prev.filter((f) => f.id !== fileIdToClose));
-    // THEN set the next active ID
+    // THEN set the next active ID using Zustand action
     setActiveFileId(nextActiveId);
-    // Remove associated remote users for the closed file
+
+    // Remove associated remote users (still managed locally in App for now)
     setRemoteUsers((prev) => {
       const newState = { ...prev };
       delete newState[fileIdToClose];
@@ -844,7 +876,7 @@ const App = () => {
           handleConfirmJoin={handleConfirmJoin}
           activeFileId={activeFileId}
           handleOpenFile={handleOpenFile}
-          mockFiles={MOCK_FILES} // Pass imported constant
+          mockFiles={MOCK_FILES} // <-- Add this prop back
         />
         {/* Code and Terminal Area + Optional WebView - Use new component */}
         <MainEditorArea
@@ -852,16 +884,19 @@ const App = () => {
           tabContainerRef={tabContainerRef}
           terminalRef={terminalRef}
           editorInstanceRef={editorInstanceRef}
-          openFiles={openFiles}
-          setOpenFiles={setOpenFiles}
-          activeFileId={activeFileId}
-          setActiveFileId={setActiveFileId}
-          handleSwitchTab={handleSwitchTab}
-          handleCloseTab={handleCloseTab}
-          draggingId={draggingId}
-          setDraggingId={setDraggingId}
-          dropIndicator={dropIndicator}
-          setDropIndicator={setDropIndicator}
+          // Remove props managed by useFileStore
+          // openFiles={openFiles}
+          // setOpenFiles={setOpenFiles}
+          // activeFileId={activeFileId}
+          // setActiveFileId={setActiveFileId}
+          handleSwitchTab={handleSwitchTab} // Still needed by FileTabs via MainEditorArea
+          handleCloseTab={handleCloseTab} // Still needed by FileTabs via MainEditorArea
+          // Remove Store state/setters that FileTabs will get directly
+          // draggingId={draggingId} // Pass from store
+          // setDraggingId={setDraggingId} // Pass from store
+          // dropIndicator={dropIndicator} // Pass from store
+          // setDropIndicator={setDropIndicator} // Pass from store
+          // Keep remaining props
           fileContents={fileContents}
           handleCodeChange={handleCodeChange}
           handleEditorDidMount={handleEditorDidMount}

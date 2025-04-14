@@ -26,44 +26,54 @@ import {
   defaultIconColor,
 } from "../constants/mappings"; // Adjust path if needed
 import { VscFile } from "react-icons/vsc";
+import { useFileStore } from "../store/useFileStore"; // <-- Import store
 
 interface FileTabsProps {
   // Refs
   tabContainerRef: React.RefObject<HTMLDivElement>;
 
-  // Tab State & Handlers
-  openFiles: OpenFile[];
-  setOpenFiles: React.Dispatch<React.SetStateAction<OpenFile[]>>; // For drag end
-  activeFileId: string | null;
-  setActiveFileId: React.Dispatch<React.SetStateAction<string | null>>;
-  handleSwitchTab: (fileId: string) => void;
-  handleCloseTab: (fileIdToClose: string, e: React.MouseEvent) => void;
+  // Tab State & Handlers (Get state/setters from store instead of props)
+  // openFiles: OpenFile[];
+  // setOpenFiles: React.Dispatch<React.SetStateAction<OpenFile[]>>;
+  // activeFileId: string | null;
+  // setActiveFileId: (id: string | null) => void;
+  handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea
+  handleCloseTab: (fileIdToClose: string, e: React.MouseEvent) => void; // Still passed from App via MainEditorArea
 
-  // Drag & Drop State & Handlers
-  draggingId: string | null;
-  setDraggingId: React.Dispatch<React.SetStateAction<string | null>>;
-  dropIndicator: { tabId: string | null; side: "left" | "right" | null };
-  setDropIndicator: React.Dispatch<
-    React.SetStateAction<{
-      tabId: string | null;
-      side: "left" | "right" | null;
-    }>
-  >;
+  // Drag & Drop State & Handlers (Get state/setters from store instead of props)
+  // draggingId: string | null;
+  // setDraggingId: (id: string | null) => void;
+  // dropIndicator: { tabId: string | null; side: "left" | "right" | null };
+  // setDropIndicator: (indicator: { tabId: string | null; side: "left" | "right" | null }) => void;
 }
 
 const FileTabs: React.FC<FileTabsProps> = ({
   tabContainerRef,
-  openFiles,
-  setOpenFiles,
-  activeFileId,
-  setActiveFileId,
+  // Remove props from destructuring
+  // openFiles,
+  // setOpenFiles,
+  // activeFileId,
+  // setActiveFileId,
   handleSwitchTab,
   handleCloseTab,
-  draggingId,
-  setDraggingId,
-  dropIndicator,
-  setDropIndicator,
+  // draggingId,
+  // setDraggingId,
+  // dropIndicator,
+  // setDropIndicator,
 }) => {
+  // --- Get state and setters from store ---
+  const {
+    openFiles,
+    activeFileId,
+    draggingId,
+    dropIndicator,
+    setOpenFiles,
+    setActiveFileId,
+    setDraggingId,
+    setDropIndicator,
+  } = useFileStore();
+  // --- End store hook ---
+
   // dnd-kit Sensors (Moved from MainEditorArea)
   const sensors = useSensors(
     useSensor(PointerSensor, {

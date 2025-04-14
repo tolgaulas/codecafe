@@ -18,30 +18,26 @@ import {
   TERMINAL_HANDLE_HEIGHT,
   WEBVIEW_HANDLE_GRAB_WIDTH,
 } from "../constants/layout"; // Adjust path
+import { useFileStore } from "../store/useFileStore"; // <-- Import Zustand store
 
 interface MainEditorAreaProps {
   // Refs (passed down)
   editorTerminalAreaRef: React.RefObject<HTMLDivElement>;
   tabContainerRef: React.RefObject<HTMLDivElement>;
   terminalRef: React.MutableRefObject<TerminalRef | undefined>;
-  editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>; // Pass the mutable ref object
+  editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>;
 
-  // Tab Management
-  openFiles: OpenFile[];
-  setOpenFiles: React.Dispatch<React.SetStateAction<OpenFile[]>>; // Needed for drag end
-  activeFileId: string | null;
-  setActiveFileId: React.Dispatch<React.SetStateAction<string | null>>; // Needed if closing last tab? or maybe handleSwitchTab is enough
-  handleSwitchTab: (fileId: string) => void;
-  handleCloseTab: (fileIdToClose: string, e: React.MouseEvent) => void;
-  draggingId: string | null; // State for drag overlay
-  setDraggingId: React.Dispatch<React.SetStateAction<string | null>>; // To set on drag start/end
-  dropIndicator: { tabId: string | null; side: "left" | "right" | null }; // State for drop indicator
-  setDropIndicator: React.Dispatch<
-    React.SetStateAction<{
-      tabId: string | null;
-      side: "left" | "right" | null;
-    }>
-  >; // To set on drag move/end
+  // Tab Management (These are now handled by FileTabs directly using the store)
+  // openFiles: OpenFile[];
+  // setOpenFiles: React.Dispatch<React.SetStateAction<OpenFile[]>>;
+  // activeFileId: string | null;
+  // setActiveFileId: (id: string | null) => void;
+  handleSwitchTab: (fileId: string) => void; // Still passed from App
+  handleCloseTab: (fileIdToClose: string, e: React.MouseEvent) => void; // Still passed from App
+  // draggingId: string | null;
+  // setDraggingId: (id: string | null) => void;
+  // dropIndicator: { tabId: string | null; side: "left" | "right" | null };
+  // setDropIndicator: (indicator: { tabId: string | null; side: "left" | "right" | null }) => void;
 
   // Editor
   fileContents: { [id: string]: string };
@@ -70,16 +66,8 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
   tabContainerRef,
   terminalRef,
   editorInstanceRef,
-  openFiles,
-  setOpenFiles,
-  activeFileId,
-  setActiveFileId,
   handleSwitchTab,
   handleCloseTab,
-  draggingId,
-  setDraggingId,
-  dropIndicator,
-  setDropIndicator,
   fileContents,
   handleCodeChange,
   handleEditorDidMount,
@@ -96,6 +84,14 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
   jsFileContent,
   toggleWebView,
 }) => {
+  // --- Get state from Zustand Store ---
+  const {
+    openFiles,
+    activeFileId,
+    // We don't need the setters here, FileTabs uses them
+  } = useFileStore();
+  // --- End Zustand Store ---
+
   return (
     <div className="flex flex-1 min-w-0 relative">
       {/* Code and Terminal Area */}
@@ -106,16 +102,8 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
         {/* Tabs - Use extracted component */}
         <FileTabs
           tabContainerRef={tabContainerRef}
-          openFiles={openFiles}
-          setOpenFiles={setOpenFiles}
-          activeFileId={activeFileId}
-          setActiveFileId={setActiveFileId}
           handleSwitchTab={handleSwitchTab}
           handleCloseTab={handleCloseTab}
-          draggingId={draggingId}
-          setDraggingId={setDraggingId}
-          dropIndicator={dropIndicator}
-          setDropIndicator={setDropIndicator}
         />
 
         {/* Code Editor */}
