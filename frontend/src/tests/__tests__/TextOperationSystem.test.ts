@@ -10,7 +10,7 @@ import {
 const expectOpsEqual = (
   actual: TextOperation,
   expected: TextOperation,
-  message: string
+  _message: string
 ) => {
   expect(actual.ops).toEqual(expected.ops);
   expect(actual.baseLength).toEqual(expected.baseLength);

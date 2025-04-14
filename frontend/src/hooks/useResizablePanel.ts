@@ -4,32 +4,6 @@ import {
   UseResizablePanelReturn,
 } from "../types/props";
 
-interface UseResizablePanelOptions {
-  initialSize: number | (() => number);
-  minSize?: number;
-  maxSize?: number;
-  direction: "horizontal-right" | "horizontal-left" | "vertical";
-  containerRef: React.RefObject<HTMLElement>; // Ref of the container the panel is within
-  panelRef?: React.RefObject<HTMLElement>; // Optional ref of the panel itself
-  handleRef?: React.RefObject<HTMLElement>; // Optional ref of the resize handle
-  onResizeStart?: () => void;
-  onResizeEnd?: (finalSize: number) => void;
-  onToggle?: (isOpen: boolean) => void;
-  collapseThreshold?: number; // Size below which the panel collapses
-  storageKey?: string; // Optional key to persist size in localStorage
-  defaultOpenSize?: number | (() => number);
-}
-
-interface UseResizablePanelReturn {
-  size: number;
-  setSize: React.Dispatch<React.SetStateAction<number>>;
-  isResizing: boolean;
-  previousSize: number;
-  isCollapsed: boolean;
-  handleMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
-  togglePanel: () => void;
-}
-
 const getSizeFromStorage = (
   key: string | undefined,
   defaultValue: number

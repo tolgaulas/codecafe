@@ -1,9 +1,8 @@
 import { create } from "zustand";
-import { OpenFile, EditorLanguageKey } from "../types/editor"; // Adjust path if needed
-import { MOCK_FILES } from "../constants/mockFiles"; // Adjust path if needed
-import { arrayMove } from "@dnd-kit/sortable"; // Import arrayMove for use in actions
+import { OpenFile, EditorLanguageKey } from "../types/editor";
+import { MOCK_FILES } from "../constants/mockFiles";
+// import { arrayMove } from "@dnd-kit/sortable"; // Import arrayMove for use in actions
 
-// --- Initial State Computation ---
 const initialOpenFileIds = ["index.html", "style.css", "script.js"];
 
 const initialOpenFilesData = initialOpenFileIds.map((id): OpenFile => {
@@ -31,40 +30,34 @@ initialOpenFileIds.forEach((id) => {
 
 const initialActiveFileId = initialOpenFileIds[0] || null;
 
-// --- State Interface ---
 interface FileState {
   openFiles: OpenFile[];
   activeFileId: string | null;
-  fileContents: { [id: string]: string }; // Added file contents
+  fileContents: { [id: string]: string };
   draggingId: string | null;
   dropIndicator: { tabId: string | null; side: "left" | "right" | null };
 }
 
-// --- Actions Interface ---
 interface FileActions {
   setOpenFiles: (
     files: OpenFile[] | ((prev: OpenFile[]) => OpenFile[])
   ) => void;
   setActiveFileId: (id: string | null) => void;
-  setFileContent: (id: string, content: string) => void; // Added
+  setFileContent: (id: string, content: string) => void;
   setDraggingId: (id: string | null) => void;
   setDropIndicator: (indicator: FileState["dropIndicator"]) => void;
-  // --- Complex Actions ---
-  openFile: (fileId: string, isSessionActive: boolean) => void; // Added
-  closeFile: (fileIdToClose: string) => void; // Added
-  switchTab: (fileId: string) => void; // Added (simple alias for setActiveFileId)
+  openFile: (fileId: string, isSessionActive: boolean) => void;
+  closeFile: (fileIdToClose: string) => void;
+  switchTab: (fileId: string) => void;
 }
 
-// --- Store Implementation ---
 export const useFileStore = create<FileState & FileActions>((set, get) => ({
-  // --- Initial State ---
   openFiles: initialOpenFilesData,
   activeFileId: initialActiveFileId,
-  fileContents: initialFileContents, // Added
+  fileContents: initialFileContents,
   draggingId: null,
   dropIndicator: { tabId: null, side: null },
 
-  // --- Basic Setters ---
   setOpenFiles: (files) =>
     set((state) => ({
       openFiles: typeof files === "function" ? files(state.openFiles) : files,
@@ -77,7 +70,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   setDraggingId: (id) => set({ draggingId: id }),
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 
-  // --- Complex Actions ---
   switchTab: (fileId) => {
     set({ activeFileId: fileId });
   },
@@ -89,7 +81,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
       return;
     }
 
-    const state = get(); // Get current state
+    const state = get();
     const fileAlreadyOpen = state.openFiles.some((f) => f.id === fileId);
 
     if (!fileAlreadyOpen) {
@@ -99,7 +91,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
         language: fileData.language as EditorLanguageKey,
       };
 
-      // Prepare new state updates together
       const newStateUpdate: Partial<FileState> = {
         openFiles: [...state.openFiles, newOpenFile],
         activeFileId: fileId,
@@ -121,7 +112,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   },
 
   closeFile: (fileIdToClose) => {
-    const state = get(); // Get current state *before* modification
+    const state = get();
     const indexToRemove = state.openFiles.findIndex(
       (f) => f.id === fileIdToClose
     );
@@ -137,7 +128,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
         // Get the ID from the *current* openFiles list before filtering
         nextActiveId =
           state.openFiles[newIndex]?.id ?? state.openFiles[0]?.id ?? null;
-        // Correction: Calculate based on remaining files AFTER filtering conceptually
         const remainingFiles = state.openFiles.filter(
           (f) => f.id !== fileIdToClose
         );
@@ -154,7 +144,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set({
       openFiles: state.openFiles.filter((f) => f.id !== fileIdToClose),
       activeFileId: nextActiveId,
-      // We don't remove fileContents here, it might be needed later if reopened
     });
   },
 }));

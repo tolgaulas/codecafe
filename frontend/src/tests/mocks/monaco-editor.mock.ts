@@ -1,4 +1,5 @@
-import { editor, IRange, Selection } from "monaco-editor";
+import { editor } from "monaco-editor";
+import * as monaco from "monaco-editor"; // Keep this for other types if needed
 
 export class Selection {
   constructor(
@@ -231,10 +232,13 @@ export class MockTextModel {
 }
 
 export class MockEditor {
-  private model: MockTextModel;
+  private decorations: string[] = [];
   private selections: Selection[] = [new Selection(1, 1, 1, 1)];
+  private model: MockTextModel = new MockTextModel("");
   private cursorStateListeners: ((e: any) => void)[] = [];
-  private viewState: any = { cursorState: [] };
+  private listeners: { [key: string]: Function[] } = {
+    onDidChangeCursorPosition: [],
+  };
 
   constructor(initialContent: string = "") {
     this.model = new MockTextModel(initialContent);
@@ -290,21 +294,14 @@ export class MockEditor {
   }
 
   pushEditOperations(
-    beforeCursorState: Selection[] | null,
-    editOperations: any[],
-    cursorStateComputer: ((edits: any[]) => Selection[] | null) | null
-  ): Selection[] | null {
-    this.model.applyEdits(editOperations);
-
-    if (cursorStateComputer) {
-      const newSelections = cursorStateComputer(editOperations) || null;
-      if (newSelections) {
-        this.setSelections(newSelections);
-        return newSelections;
-      }
-    }
-
-    return this.selections;
+    _selection: Selection | null,
+    editOperations: monaco.editor.IIdentifiedSingleEditOperation[],
+    _beforeCursorState: Selection[] | null
+  ): null {
+    editOperations.forEach((op) => {
+      this.model.applyEdits([op]);
+    });
+    return null;
   }
 
   getValue(): string {
@@ -334,12 +331,6 @@ export class MockEditor {
   }
   getConfiguration(): any {
     return {};
-  }
-  getValue(): string {
-    return this.model.getValue();
-  }
-  setValue(content: string): void {
-    this.model.setValue(content);
   }
   getContentHeight(): number {
     return 0;

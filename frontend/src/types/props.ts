@@ -1,5 +1,5 @@
 import { User } from "./user";
-import { CursorData } from "./cursorData";
+// import { CursorData } from "./cursorData";
 import * as monaco from "monaco-editor";
 import { editor } from "monaco-editor";
 import { OTSelection, TextOperation } from "../ot/TextOperationSystem"; // Assuming OTSelection is defined here
