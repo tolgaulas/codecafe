@@ -1,4 +1,4 @@
-import React from "react"; // Add this import
+import React from "react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
@@ -6,7 +6,7 @@ import { COLORS } from "./constants/colors";
 import { v4 as uuidv4 } from "uuid";
 import { editor } from "monaco-editor";
 import { RemoteUser } from "./types/props"; // Ensure RemoteUser is imported
-import StatusBar from "./components/StatusBar"; // Add this import
+import StatusBar from "./components/StatusBar";
 import {
   CodeExecutionRequest,
   CodeExecutionResponse,
@@ -30,13 +30,13 @@ import { MOCK_FILES } from "./constants/mockFiles";
 import { isExecutableLanguage } from "./utils/languageUtils";
 import { useResizablePanel } from "./hooks/useResizablePanel"; // Import the hook
 import { useCollaborationSession } from "./hooks/useCollaborationSession"; // <-- Import the new hook
-import Header from "./components/Header"; // <-- Add import for Header
-import Sidebar from "./components/Sidebar"; // <-- Add import for Sidebar
-import MainEditorArea from "./components/MainEditorArea"; // <-- Add import for MainEditorArea
-import { useFileStore } from "./store/useFileStore"; // <-- Import Zustand store
+import Header from "./components/Header";
+import Sidebar from "./components/Sidebar";
+import MainEditorArea from "./components/MainEditorArea";
+import { useFileStore } from "./store/useFileStore";
 
-// Define editor type for clarity
-type MonacoEditorInstance = editor.IStandaloneCodeEditor;
+// Define editor type for clarity - REMOVED
+// type MonacoEditorInstance = editor.IStandaloneCodeEditor; // Removed - Unused
 
 const App = () => {
   // 1. REFS FIRST
@@ -44,7 +44,7 @@ const App = () => {
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const editorTerminalAreaRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
-  const tabContainerRef = useRef<HTMLDivElement>(null); // <-- Add Ref for tab container
+  const tabContainerRef = useRef<HTMLDivElement>(null);
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null); // Keep ref for editor instance
 
   // 2. STATE SECOND
@@ -70,8 +70,6 @@ const App = () => {
   const {
     openFiles,
     activeFileId,
-    draggingId,
-    dropIndicator,
     setOpenFiles,
     setActiveFileId,
     setDraggingId,
@@ -109,7 +107,6 @@ const App = () => {
   // Session State
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
-  const [isSessionCreator, setIsSessionCreator] = useState<boolean>(false);
   const [joinState, setJoinState] = useState<JoinStateType>("idle");
 
   // OT State / Collaboration State
@@ -181,7 +178,6 @@ const App = () => {
     handleMouseDown: handleWebViewPanelMouseDown,
     togglePanel: toggleWebViewPanel,
     isCollapsed: isWebViewCollapsed,
-    setSize: setWebViewPanelWidth,
   } = useResizablePanel({
     initialSize: 0,
     minSize: MIN_WEBVIEW_WIDTH,
@@ -196,21 +192,20 @@ const App = () => {
   });
 
   // --- Instantiate Collaboration Hook ---
-  const { isConnected } = useCollaborationSession({
+  const {
+    /* isConnected */
+  } = useCollaborationSession({
     sessionId,
     userId,
-    userInfo: { name: userName, color: userColor }, // Pass relevant user info
+    userInfo: { name: userName, color: userColor },
     activeFileId,
-    editorInstance: editorInstanceRef.current, // Pass the current editor instance
-    isSessionActive, // Control connection attempt
-    webViewFileIds: ["index.html", "style.css", "script.js"], // <-- Pass webview files
+    editorInstance: editorInstanceRef.current,
+    isSessionActive,
+    webViewFileIds: ["index.html", "style.css", "script.js"],
     onStateReceived: useCallback(
       (fileId, content, revision, participants) => {
         console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
-        // Update fileContents in the store
         setFileContent(fileId, content);
-
-        // Update remote users (still local state for now)
         const filteredParticipants = participants.filter(
           (p) => p.id !== userId
         );
@@ -220,12 +215,10 @@ const App = () => {
         }));
       },
       [activeFileId, userId, setFileContent]
-    ), // Add userId dependency
+    ),
     onOperationReceived: useCallback(
       (fileId, operation) => {
-        // Apply the operation received from the server to the store's fileContents state
         try {
-          // Get current content from the store
           const currentContent =
             useFileStore.getState().fileContents[fileId] ?? "";
           const newContent = operation.apply(currentContent);
@@ -237,7 +230,6 @@ const App = () => {
             }`
           );
           if (newContent !== currentContent) {
-            // Update the store
             setFileContent(fileId, newContent);
           }
         } catch (applyError) {
@@ -252,12 +244,9 @@ const App = () => {
         }
       },
       [setFileContent]
-    ), // No dependencies needed for setFileContents based on prev state
+    ),
     onRemoteUsersUpdate: useCallback(
       (fileId, updatedUsersInfo) => {
-        // This callback now receives potentially partial updates (single user) from the hook.
-        // The hook needs to be updated to manage the full list internally for consistency.
-        // For now, implement the merging logic here as planned (suboptimally).
         console.log(
           `[App onRemoteUsersUpdate] Received for ${fileId}:`,
           updatedUsersInfo
@@ -270,32 +259,17 @@ const App = () => {
             nextRemoteUsers[fileId] = [];
           }
           const usersForDoc = nextRemoteUsers[fileId];
-
-          // Assuming updatedUsersInfo is an array, potentially with one user from selection update
           updatedUsersInfo.forEach((updatedUser) => {
-            // Skip self
             if (updatedUser.id === userId) return;
-
             const existingUserIndex = usersForDoc.findIndex(
               (u) => u.id === updatedUser.id
             );
             if (existingUserIndex > -1) {
-              // Update existing user
               usersForDoc[existingUserIndex] = updatedUser;
             } else {
-              // Add new user
               usersForDoc.push(updatedUser);
             }
           });
-
-          // **Important**: Clear selection/cursor for users in OTHER documents
-          // This logic should ideally live where the single user update originates (the hook)
-          // or be handled more robustly. Doing it here based on partial updates is tricky.
-          // Let's assume for now the hook sends updates only for the *active* file
-          // and the CodeEditor component only renders users passed for its *current* file.
-          // We won't clear selections in other files here for now.
-
-          // Avoid re-render if no actual change occurred (shallow compare might suffice if careful)
           if (
             JSON.stringify(prevRemoteUsers) === JSON.stringify(nextRemoteUsers)
           ) {
@@ -305,20 +279,16 @@ const App = () => {
         });
       },
       [userId]
-    ), // Add userId dependency
+    ),
     onConnectionStatusChange: useCallback((connected: boolean) => {
       console.log(`[App onConnectionStatusChange] Connected: ${connected}`);
-      // Can update UI based on connection status if needed
     }, []),
     onError: useCallback((error: Error | string) => {
       console.error("[App onError] Collaboration Hook Error:", error);
-      // Show error to user? Reset session state?
       alert(
         `Collaboration Error: ${error instanceof Error ? error.message : error}`
       );
-      // Maybe reset session state partially
       setIsSessionActive(false);
-      // setSessionId(null); // Keep session ID for potential reconnect?
     }, []),
   });
 
@@ -445,11 +415,10 @@ const App = () => {
 
   // Share Menu Handlers
   const toggleShareMenu = () => {
-    setIsShareMenuOpen((prev) => {
+    setIsShareMenuOpen((prev: boolean) => {
       const nextOpen = !prev;
       if (nextOpen) {
         if (isSessionActive && generatedShareLink) setShareMenuView("link");
-        else setShareMenuView("initial");
         setIsColorPickerOpen(false);
       } else {
         setIsColorPickerOpen(false);
@@ -540,7 +509,7 @@ const App = () => {
       console.log("[handleStartSession] Share link:", shareLink);
 
       setSessionId(newSessionId);
-      setIsSessionCreator(true);
+      // setIsSessionCreator(true); // Removed call to unused state setter
       // setIsSessionActive(true); // Mark session as active locally - MOVED
       setGeneratedShareLink(shareLink);
       setShareMenuView("link"); // Switch to link view
@@ -602,15 +571,15 @@ const App = () => {
       fileContents["index.html"] ||
       "<!DOCTYPE html><html><head></head><body><!-- index.html not loaded --></body></html>"
     );
-  }, [fileContents]); // Depend on fileContents from store
+  }, [fileContents]);
 
   const cssFileContent = useMemo(() => {
     return fileContents["style.css"] || "/* style.css not loaded */";
-  }, [fileContents]); // Depend on fileContents from store
+  }, [fileContents]);
 
   const jsFileContent = useMemo(() => {
     return fileContents["script.js"] || "// script.js not loaded";
-  }, [fileContents]); // Depend on fileContents from store
+  }, [fileContents]);
 
   // Get remote users for the currently active file (Updated to use remoteUsers state)
   const currentRemoteUsers = useMemo(() => {
@@ -660,7 +629,7 @@ const App = () => {
         `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerPanelSize}`
       );
       setSessionId(sessionIdFromUrl);
-      setIsSessionCreator(false); // Joining user is not the creator
+      // setIsSessionCreator(false); // Removed call to unused state setter
       setJoinState("prompting"); // Set state to show prompt panel
 
       // Ensure sidebar is visible for the prompt and meets minimum width

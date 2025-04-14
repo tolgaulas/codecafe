@@ -3,20 +3,11 @@ import { Editor, loader, OnChange, OnMount } from "@monaco-editor/react";
 import { CodeEditorProps, RemoteUser } from "../types/props";
 import * as monaco from "monaco-editor";
 import { THEMES } from "../constants/themes";
-import {
-  OTSelection,
-  positionToOffset,
-  offsetToPosition,
-} from "../ot/TextOperationSystem";
+import { offsetToPosition } from "../ot/TextOperationSystem";
 import { editor, IDisposable } from "monaco-editor";
 
 // Define the expected signature for onCodeChange more clearly
 // No need to extend CodeEditorProps if only adding isSessionActive
-interface ExtendedCodeEditorProps extends CodeEditorProps {
-  isSessionActive?: boolean; // Optional for now
-  // fontSize type is inherited from CodeEditorProps (now number | undefined)
-  // onCodeChange signature is inherited from CodeEditorProps
-}
 
 const CodeEditor = ({
   onCodeChange,
@@ -33,7 +24,7 @@ const CodeEditor = ({
   onEditorDidMount,
   localUserId,
   isSessionActive = false,
-}: ExtendedCodeEditorProps) => {
+}: CodeEditorProps) => {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const decorationsRef = useRef<string[]>([]);
   const isUpdatingRef = useRef(false);

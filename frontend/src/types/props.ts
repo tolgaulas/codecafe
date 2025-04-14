@@ -69,6 +69,7 @@ export interface CodeEditorProps {
   onEditorDidMount?: (editor: editor.IStandaloneCodeEditor) => void; // Optional: Callback when editor instance is mounted
   onLoadingChange?: (isLoading: boolean) => void; // Optional: Callback for loading state
   localUserId?: string; // Optional: The ID of the local user, to prevent self-rendering of cursors
+  isSessionActive?: boolean; // Optional: Indicates if a collaboration session is active
 }
 
 // Props for WebViewPanel component
@@ -94,4 +95,30 @@ export interface JoinSessionPanelProps {
   onColorSelect: (color: string) => void;
   onToggleColorPicker: () => void;
   onConfirmJoin: () => void;
+}
+
+// Props for Header component
+export interface HeaderProps {
+  isViewMenuOpen: boolean;
+  setIsViewMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleWebView: () => void;
+  toggleTerminalVisibility: () => void;
+  isWebViewVisible: boolean;
+  isTerminalCollapsed: boolean;
+  handleRunCode: () => void;
+  isShareMenuOpen: boolean;
+  toggleShareMenu: () => void;
+  shareMenuView: "initial" | "link";
+  userName: string;
+  userColor: string;
+  handleNameChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleColorSelect: (color: string) => void;
+  isColorPickerOpen: boolean;
+  handleToggleColorPicker: () => void;
+  handleStartSession: () => Promise<void>;
+  generatedShareLink: string | null;
+  handleCopyShareLink: () => void;
+  isSessionActive: boolean;
+  uniqueRemoteParticipants: RemoteUser[];
+  setIsColorPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }

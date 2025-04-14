@@ -1,37 +1,10 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { FiCopy } from "react-icons/fi";
-import { RemoteUser } from "../types/props"; // Adjust path if needed
-import { COLORS } from "../constants/colors"; // Adjust path if needed
+import { RemoteUser, HeaderProps } from "../types/props";
+import { COLORS } from "../constants/colors";
 
-// Define props based on what the header section uses from App.tsx
-interface HeaderProps {
-  isViewMenuOpen: boolean;
-  setIsViewMenuOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  toggleWebView: () => void;
-  toggleTerminalVisibility: () => void;
-  isWebViewVisible: boolean;
-  isTerminalCollapsed: boolean;
-  handleRunCode: () => void;
-  isShareMenuOpen: boolean;
-  toggleShareMenu: () => void;
-  shareMenuView: "initial" | "link";
-  userName: string;
-  userColor: string;
-  handleNameChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleColorSelect: (color: string) => void;
-  isColorPickerOpen: boolean;
-  handleToggleColorPicker: () => void;
-  handleStartSession: () => Promise<void>;
-  generatedShareLink: string | null;
-  handleCopyShareLink: () => void;
-  isSessionActive: boolean;
-  uniqueRemoteParticipants: RemoteUser[];
-  // Need a way to close color picker from outside click effect in header
-  setIsColorPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-const Header: React.FC<HeaderProps> = ({
+const Header = ({
   isViewMenuOpen,
   setIsViewMenuOpen,
   toggleWebView,
@@ -53,17 +26,17 @@ const Header: React.FC<HeaderProps> = ({
   handleCopyShareLink,
   isSessionActive,
   uniqueRemoteParticipants,
-  setIsColorPickerOpen, // Added prop
-}) => {
-  // Refs previously in App.tsx, now belong here
+  setIsColorPickerOpen,
+}: HeaderProps) => {
+  // Refs
   const headerRef = useRef<HTMLDivElement>(null);
   const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const shareButtonRef = useRef<HTMLButtonElement>(null);
   const shareMenuRef = useRef<HTMLDivElement>(null);
 
-  // --- Effect to handle closing View menu on outside click ---
-  React.useEffect(() => {
+  // Effects
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
         isViewMenuOpen &&
@@ -81,39 +54,30 @@ const Header: React.FC<HeaderProps> = ({
     };
   }, [isViewMenuOpen, setIsViewMenuOpen]);
 
-  // --- Effect to handle closing Share menu & Color Picker on outside click ---
-  React.useEffect(() => {
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        isShareMenuOpen && // Only act if the main share menu is open
+        isShareMenuOpen &&
         shareMenuRef.current &&
         !shareMenuRef.current.contains(event.target as Node) &&
         shareButtonRef.current &&
         !shareButtonRef.current.contains(event.target as Node)
       ) {
-        // Check if the click was outside the Share menu AND the Share button
-        toggleShareMenu(); // Close the main share menu
-        // We also need to ensure the color picker closes if it was open
-        // The simplest way is to unconditionally set it to false here.
+        toggleShareMenu();
         setIsColorPickerOpen(false);
       } else if (
-        isColorPickerOpen && // Separately handle clicks outside the color picker itself when it's open
-        shareMenuRef.current && // Assumes color picker is inside shareMenuRef
+        isColorPickerOpen &&
+        shareMenuRef.current &&
         !shareMenuRef.current.contains(event.target as Node)
-        // We don't need to check shareButtonRef here, clicking the button should toggle the menu anyway
+        // No need to check shareButtonRef here, clicking the button should toggle the menu anyway
       ) {
-        // This case might be redundant if the first block handles it,
-        // but let's keep it explicit for clicks outside the menu while picker is open.
-        // Check if click is outside the avatar/color picker area perhaps?
-        // For simplicity, let's rely on the first block and clicking the avatar to toggle the picker.
-        // The main menu closing logic should handle the picker too.
+        // This might be redundant, but I'm keeping it explicit for clicks outside the menu while picker is open.
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-    // Depend on the states and setters/toggles involved
   }, [
     isShareMenuOpen,
     isColorPickerOpen,
@@ -148,7 +112,7 @@ const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             className="h-full flex items-center px-3 text-sm text-stone-500 hover:bg-stone-700 hover:text-stone-200 active:bg-stone-600"
-            onClick={handleRunCode} // Use prop
+            onClick={handleRunCode}
           >
             Run
           </button>
@@ -166,7 +130,7 @@ const Header: React.FC<HeaderProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                toggleWebView(); // Use prop
+                toggleWebView();
               }}
               className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
             >
@@ -175,7 +139,7 @@ const Header: React.FC<HeaderProps> = ({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                toggleTerminalVisibility(); // Use prop
+                toggleTerminalVisibility();
               }}
               className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
             >
@@ -208,7 +172,7 @@ const Header: React.FC<HeaderProps> = ({
         <div className="relative flex h-full">
           <button
             ref={shareButtonRef}
-            onClick={toggleShareMenu} // Use prop
+            onClick={toggleShareMenu}
             className={`h-full flex items-center px-4 text-sm ${
               isShareMenuOpen
                 ? "bg-stone-600 text-stone-200"
@@ -240,7 +204,7 @@ const Header: React.FC<HeaderProps> = ({
                         <div
                           className="w-10 h-10 rounded-full flex items-center justify-center text-lg font-medium cursor-pointer shadow-md ring-1 ring-stone-500/50"
                           style={{ backgroundColor: userColor }}
-                          onClick={handleToggleColorPicker} // Use prop
+                          onClick={handleToggleColorPicker}
                         >
                           <span className="text-white/90">
                             {userName ? userName[0].toUpperCase() : ""}
@@ -268,7 +232,7 @@ const Header: React.FC<HeaderProps> = ({
                                         : ""
                                     }`}
                                     style={{ backgroundColor: color }}
-                                    onClick={() => handleColorSelect(color)} // Use prop
+                                    onClick={() => handleColorSelect(color)}
                                   />
                                 ))}
                               </div>
@@ -285,7 +249,7 @@ const Header: React.FC<HeaderProps> = ({
                         <input
                           type="text"
                           value={userName}
-                          onChange={handleNameChange} // Use prop
+                          onChange={handleNameChange}
                           placeholder="Enter your name"
                           className="w-full bg-neutral-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-2 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors"
                         />
@@ -294,7 +258,7 @@ const Header: React.FC<HeaderProps> = ({
 
                     {/* Start Session Button */}
                     <button
-                      onClick={handleStartSession} // Use prop
+                      onClick={handleStartSession}
                       disabled={!userName.trim()}
                       className="w-full px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -317,7 +281,7 @@ const Header: React.FC<HeaderProps> = ({
                         onFocus={(e) => e.target.select()}
                       />
                       <button
-                        onClick={handleCopyShareLink} // Use prop
+                        onClick={handleCopyShareLink}
                         className="px-2 flex items-center justify-center text-stone-400 hover:text-stone-100 bg-stone-700 hover:bg-stone-600 transition-colors flex-shrink-0"
                         aria-label="Copy link"
                       >
@@ -325,7 +289,7 @@ const Header: React.FC<HeaderProps> = ({
                       </button>
                     </div>
                     <button
-                      onClick={toggleShareMenu} // Use prop to close
+                      onClick={toggleShareMenu}
                       className="mt-4 w-full px-3 py-1.5 text-sm font-medium bg-stone-600 hover:bg-stone-500 text-stone-100 transition-colors"
                     >
                       Done

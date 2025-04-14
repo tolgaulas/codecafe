@@ -1,48 +1,29 @@
 import React from "react";
 import { editor } from "monaco-editor";
 
-import {
-  OpenFile,
-  EditorLanguageKey,
-  TerminalRef,
-  JoinStateType,
-} from "../types/editor";
+import { TerminalRef, JoinStateType } from "../types/editor";
 import { RemoteUser } from "../types/props";
 import CodeEditor from "./CodeEditor";
 import TerminalComponent from "./TerminalComponent";
 import WebViewPanel from "./WebViewPanel";
 import FileTabs from "./FileTabs";
-import {
-  languageIconMap,
-  languageColorMap,
-  defaultIconColor,
-  editorLanguageMap,
-} from "../constants/mappings"; // Adjust path
-import { VscFile } from "react-icons/vsc";
+import { editorLanguageMap } from "../constants/mappings";
 import {
   TERMINAL_HANDLE_HEIGHT,
   WEBVIEW_HANDLE_GRAB_WIDTH,
-} from "../constants/layout"; // Adjust path
-import { useFileStore } from "../store/useFileStore"; // <-- Import Zustand store
+} from "../constants/layout";
+import { useFileStore } from "../store/useFileStore";
 
 interface MainEditorAreaProps {
-  // Refs (passed down)
+  // Refs
   editorTerminalAreaRef: React.RefObject<HTMLDivElement>;
   tabContainerRef: React.RefObject<HTMLDivElement>;
   terminalRef: React.MutableRefObject<TerminalRef | undefined>;
   editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>;
 
-  // Tab Management (These are now handled by FileTabs directly using the store)
-  // openFiles: OpenFile[];
-  // setOpenFiles: React.Dispatch<React.SetStateAction<OpenFile[]>>;
-  // activeFileId: string | null;
-  // setActiveFileId: (id: string | null) => void;
-  handleSwitchTab: (fileId: string) => void; // Still passed from App
-  handleCloseTab: (fileIdToClose: string) => void; // <-- Update signature
-  // draggingId: string | null;
-  // setDraggingId: (id: string | null) => void;
-  // dropIndicator: { tabId: string | null; side: "left" | "right" | null };
-  // setDropIndicator: (indicator: { tabId: string | null; side: "left" | "right" | null }) => void;
+  // Tab Management
+  handleSwitchTab: (fileId: string) => void;
+  handleCloseTab: (fileIdToClose: string) => void;
 
   // Editor
   fileContents: { [id: string]: string };
@@ -62,16 +43,15 @@ interface MainEditorAreaProps {
   htmlFileContent: string;
   cssFileContent: string;
   jsFileContent: string;
-  toggleWebView: () => void; // Pass toggle function for WebViewPanel close button
-  isSessionActive: boolean; // <-- Add prop
-  joinState: JoinStateType; // <-- Add joinState prop
+  toggleWebView: () => void;
+  isSessionActive: boolean;
+  joinState: JoinStateType;
 }
 
-const MainEditorArea: React.FC<MainEditorAreaProps> = ({
+const MainEditorArea = ({
   editorTerminalAreaRef,
   tabContainerRef,
   terminalRef,
-  editorInstanceRef,
   handleSwitchTab,
   handleCloseTab,
   fileContents,
@@ -88,32 +68,26 @@ const MainEditorArea: React.FC<MainEditorAreaProps> = ({
   cssFileContent,
   jsFileContent,
   toggleWebView,
-  isSessionActive, // <-- Destructure prop
-  joinState, // <-- Destructure joinState
-}) => {
+  isSessionActive,
+  joinState,
+}: MainEditorAreaProps) => {
   // --- Get state from Zustand Store ---
-  const {
-    openFiles,
-    activeFileId,
-    // We don't need the setters here, FileTabs uses them
-  } = useFileStore();
-  // --- End Zustand Store ---
+  const { openFiles, activeFileId } = useFileStore();
 
   return (
     <div className="flex flex-1 min-w-0 relative">
-      {/* Code and Terminal Area */}
       <div
         ref={editorTerminalAreaRef}
         className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
       >
-        {/* Tabs - Use extracted component */}
+        {/* Tabs */}
         <FileTabs
           tabContainerRef={tabContainerRef}
           handleSwitchTab={handleSwitchTab}
           handleCloseTab={handleCloseTab}
         />
 
-        {/* Code Editor Area - Conditional Rendering */}
+        {/* Code Editor Area */}
         <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
           {joinState === "prompting" ? (
             <div className="flex items-center justify-center h-full text-stone-500">
