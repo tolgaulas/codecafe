@@ -203,57 +203,54 @@ const Sidebar: React.FC<SidebarProps> = ({
             }}
           />
         ) : (
-          // Otherwise, render the normal File Tree (only if files icon active)
-          activeIcon === "files" && (
-            <div className="flex-1 overflow-y-auto h-full">
-              <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
-                EXPLORER
-              </div>
-              <div className="w-full">
-                {Object.entries(mockFiles).map(([id, file]) => {
-                  // Use passed prop
-                  const IconComponent =
-                    languageIconMap[file.language as EditorLanguageKey] ||
-                    VscFile; // Cast needed?
-                  const iconColor =
-                    languageColorMap[file.language as EditorLanguageKey] ||
-                    defaultIconColor;
-                  return (
-                    <div
-                      key={id}
-                      className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
-                        activeFileId === id
-                          ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
-                          : "hover:bg-stone-700"
-                      }`}
-                      onClick={() => handleOpenFile(id, isSessionActive)} // <-- Call with isSessionActive
-                    >
-                      <IconComponent
-                        size={18}
-                        className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
-                      />
-                      <span
-                        className={`w-full pl-1 truncate ${
-                          activeFileId === id
-                            ? "text-stone-100"
-                            : "text-stone-300"
-                        }`}
-                      >
-                        {file.name}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+          // Otherwise, render the normal File Tree if not prompting
+          <div className="flex-1 overflow-y-auto h-full">
+            <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
+              EXPLORER
             </div>
-          )
-          // TODO: Add rendering for other activeIcon states (Search, Share, Chat) here if needed
+            <div className="w-full">
+              {Object.entries(mockFiles).map(([id, file]) => {
+                // Use passed prop
+                const IconComponent =
+                  languageIconMap[file.language as EditorLanguageKey] ||
+                  VscFile; // Cast needed?
+                const iconColor =
+                  languageColorMap[file.language as EditorLanguageKey] ||
+                  defaultIconColor;
+                return (
+                  <div
+                    key={id}
+                    className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
+                      activeFileId === id
+                        ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
+                        : "hover:bg-stone-700"
+                    }`}
+                    onClick={() => handleOpenFile(id, isSessionActive)} // <-- Call with isSessionActive
+                  >
+                    <IconComponent
+                      size={18}
+                      className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
+                    />
+                    <span
+                      className={`w-full pl-1 truncate ${
+                        activeFileId === id
+                          ? "text-stone-100"
+                          : "text-stone-300"
+                      }`}
+                    >
+                      {file.name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
 
       {/* Explorer Resizer Handle */}
-      {/* Show only when files icon is active and panel is not collapsed */}
-      {activeIcon === "files" && !isExplorerCollapsed && (
+      {/* Show only when panel is not collapsed */}
+      {!isExplorerCollapsed && (
         <div
           className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
           style={{
