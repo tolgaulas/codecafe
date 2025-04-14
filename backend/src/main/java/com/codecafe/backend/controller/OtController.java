@@ -72,6 +72,7 @@ public class OtController {
             broadcastPayload.put("documentId", documentId);
             broadcastPayload.put("clientId", clientId);
             broadcastPayload.put("operation", transformedOp.getOps());
+            broadcastPayload.put("sessionId", sessionId);
 
             // Broadcast to the session-and-document-specific topic
             String destination = String.format("/topic/sessions/%s/operations/document/%s", sessionId, documentId);
