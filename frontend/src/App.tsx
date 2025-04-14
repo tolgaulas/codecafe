@@ -1,3 +1,4 @@
+import React from "react"; // Add this import
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import CodeEditor from "./components/CodeEditor";
@@ -7,11 +8,8 @@ import { VscAccount, VscLiveShare, VscSearch } from "react-icons/vsc";
 import { VscFiles } from "react-icons/vsc";
 import { VscSettingsGear } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
-import { HiOutlineShare } from "react-icons/hi2";
-import { DiJavascript1, DiCss3Full, DiHtml5 } from "react-icons/di";
-import { VscJson } from "react-icons/vsc";
 import { VscFile } from "react-icons/vsc";
-import { FiCopy, FiX } from "react-icons/fi";
+import { FiCopy } from "react-icons/fi";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import { COLORS } from "./constants/colors";
 import {
@@ -29,7 +27,6 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -62,177 +59,38 @@ import {
   EditorLanguageKey,
   JoinStateType,
   OpenFile,
-  SortableTabProps,
 } from "./types/editor"; // Import new types
 
-// Define type for language keys
+// --- New Imports ---
+import {
+  editorLanguageMap, // Kept for editor component
+  languageIconMap,
+  languageColorMap,
+  defaultIconColor,
+} from "./constants/mappings";
+import {
+  ICON_BAR_WIDTH,
+  DEFAULT_EXPLORER_WIDTH,
+  MIN_EXPLORER_WIDTH,
+  MAX_EXPLORER_WIDTH,
+  EXPLORER_HANDLE_WIDTH,
+  MIN_JOIN_PANEL_WIDTH,
+  DEFAULT_TERMINAL_HEIGHT_FRACTION,
+  MIN_TERMINAL_HEIGHT_PX,
+  MAX_TERMINAL_HEIGHT_PX,
+  TERMINAL_COLLAPSE_THRESHOLD_PX,
+  TERMINAL_HANDLE_HEIGHT,
+  DEFAULT_WEBVIEW_WIDTH_FRACTION,
+  MIN_WEBVIEW_WIDTH,
+  MAX_WEBVIEW_WIDTH,
+  WEBVIEW_HANDLE_GRAB_WIDTH,
+} from "./constants/layout";
+import { MOCK_FILES } from "./constants/mockFiles";
+import { isExecutableLanguage } from "./utils/languageUtils";
+import { SortableTab } from "./components/SortableTab"; // Import the moved component
+import { useResizablePanel } from "./hooks/useResizablePanel"; // Import the hook
 
-// Add new state type for join process
-
-// Map Monaco language identifiers if they differ (optional, but good practice)
-const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
-  javascript: "javascript",
-  typescript: "typescript",
-  python: "python",
-  java: "java",
-  c: "c",
-  cplusplus: "cpp", // Monaco uses 'cpp'
-  go: "go",
-  rust: "rust",
-  ruby: "ruby",
-  css: "css",
-  html: "html",
-  plaintext: "plaintext",
-};
-
-// --- Constants ---
-// Explorer
-const ICON_BAR_WIDTH = 48; // Corresponds to w-12
-const DEFAULT_EXPLORER_WIDTH = 192; // w-48
-const MIN_EXPLORER_WIDTH = 100;
-const MAX_EXPLORER_WIDTH = 500;
-const EXPLORER_HANDLE_WIDTH = 8; // w-2
-
-// Minimum width specifically for the Join Session panel
-const MIN_JOIN_PANEL_WIDTH = 256; // New constant
-
-// Terminal
-const DEFAULT_TERMINAL_HEIGHT_FRACTION = 0.33; // Corresponds to h-1/3
-const MIN_TERMINAL_HEIGHT_PX = 50;
-const MAX_TERMINAL_HEIGHT_PX = window.innerHeight * 0.8; // Example max
-const TERMINAL_COLLAPSE_THRESHOLD_PX = 25;
-const TERMINAL_HANDLE_HEIGHT = 4; // h-1 (was 6)
-
-// --- WebView Resizing Constants ---
-const DEFAULT_WEBVIEW_WIDTH_FRACTION = 0.4; // Start at 40% of the main area
-const MIN_WEBVIEW_WIDTH = 150; // Minimum pixel width
-const MAX_WEBVIEW_WIDTH = window.innerWidth * 0.8; // Example max
-const WEBVIEW_HANDLE_GRAB_WIDTH = 8; // Width of the invisible grab area (like explorer)
-
-// --- Mock File Data (Replace with actual data fetching/structure later) ---
-const MOCK_FILES: {
-  [id: string]: { name: string; language: EditorLanguageKey; content: string };
-} = {
-  "script.js": {
-    name: "script.js",
-    language: "javascript",
-    content:
-      '// Start coding in script.js\nfunction helloWorld() {\n  console.log("Hello from script.js!");\n}\nhelloWorld();\n',
-  },
-  "style.css": {
-    name: "style.css",
-    language: "css",
-    content:
-      "/* Start coding in style.css */\nbody {\n  background-color: #2d2d2d;\n}\n",
-  },
-  "index.html": {
-    name: "index.html",
-    language: "html",
-    content:
-      '<!DOCTYPE html>\n<html>\n<head>\n  <title>Code Editor</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <h1>Hello from index.html!</h1>\n  <script src="script.js"></script>\n</body>\n</html>\n',
-  },
-};
-
-// Helper function to check if a language is executable
-const isExecutableLanguage = (
-  lang: EditorLanguageKey
-): lang is ExecutableLanguageKey => {
-  return lang in LANGUAGE_VERSIONS;
-};
-
-// --- Icon Mapping ---
-const languageIconMap: {
-  [key in EditorLanguageKey]?: React.ComponentType<{
-    size?: number;
-    className?: string;
-  }>;
-} = {
-  javascript: DiJavascript1,
-  css: DiCss3Full,
-  html: DiHtml5,
-  // Add more mappings as needed
-  // json: VscJson,
-  // typescript: DiTypescript // Example REMOVED
-};
-
-// --- Language Color Mapping ---
-const languageColorMap: { [key in EditorLanguageKey]?: string } = {
-  javascript: "text-yellow-400", // Yellow for JS
-  css: "text-blue-500", // Blue for CSS
-  html: "text-orange-600", // Orange for HTML
-  // Add more colors as needed
-};
-
-const defaultIconColor = "text-stone-400"; // Default color for other files/icons
-
-// --- Sortable Tab Component ---
-function SortableTab({
-  file,
-  activeFileId,
-  draggingId,
-  IconComponent,
-  iconColor,
-  onSwitchTab,
-  onCloseTab,
-}: SortableTabProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: file.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 20 : activeFileId === file.id ? 10 : "auto",
-    visibility: (isDragging
-      ? "hidden"
-      : "visible") as React.CSSProperties["visibility"],
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      onPointerDown={() => {
-        onSwitchTab(file.id);
-      }}
-      className={`pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative ${
-        activeFileId === file.id
-          ? "bg-neutral-900"
-          : "bg-stone-700 hover:bg-stone-600"
-      }`}
-    >
-      <IconComponent
-        size={16}
-        className={`mr-1.5 flex-shrink-0 ${iconColor}`}
-      />
-      <span
-        {...attributes}
-        {...listeners}
-        className={`text-sm -mt-0.5 select-none cursor-default ${
-          activeFileId === file.id ? "text-stone-200" : "text-stone-400"
-        }`}
-      >
-        {file.name}
-      </span>
-      <button
-        className={`ml-2 text-stone-500 hover:text-stone-300 rounded-sm p-0.5 -mt-0.5 z-20`}
-        onClick={(e) => onCloseTab(file.id, e)}
-        onPointerDown={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
-const CodeEditorUI = () => {
+const App = () => {
   // 1. REFS FIRST
   const terminalRef = useRef<TerminalRef>();
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
@@ -246,40 +104,6 @@ const CodeEditorUI = () => {
 
   // 2. STATE SECOND
   const [activeIcon, setActiveIcon] = useState<string | null>("files");
-
-  // Explorer State
-  const [explorerWidth, setExplorerWidth] = useState<number>(
-    DEFAULT_EXPLORER_WIDTH
-  );
-  const [isExplorerResizing, setIsExplorerResizing] = useState<boolean>(false);
-  const [previousExplorerWidth, setPreviousExplorerWidth] = useState<number>(
-    DEFAULT_EXPLORER_WIDTH
-  );
-
-  // Terminal State
-  const [terminalHeight, setTerminalHeight] = useState<number>(
-    window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
-  );
-  const [isTerminalResizing, setIsTerminalResizing] = useState<boolean>(false);
-  const [previousTerminalHeight, setPreviousTerminalHeight] = useState<number>(
-    window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION
-  );
-
-  // WebView Resizing State (Initialize using ref safely AFTER ref definition)
-  const [webViewWidth, setWebViewWidth] = useState<number>(0);
-  const [isWebViewResizing, setIsWebViewResizing] = useState<boolean>(false);
-  const [previousWebViewWidth, setPreviousWebViewWidth] = useState<number>(
-    DEFAULT_WEBVIEW_WIDTH_FRACTION // Initialize simply, update in effect if needed or handle null ref
-  );
-  // Effect to set initial previousWebViewWidth more accurately once ref is available
-  useEffect(() => {
-    if (mainContentRef.current) {
-      setPreviousWebViewWidth(
-        (mainContentRef.current.offsetWidth ?? window.innerWidth * (1 - 0.15)) *
-          DEFAULT_WEBVIEW_WIDTH_FRACTION
-      );
-    }
-  }, []); // Run only once on mount
 
   // Tab / File Management State
   // Set initial open files based on MOCK_FILES keys
@@ -349,6 +173,90 @@ const CodeEditorUI = () => {
   const [remoteUsers, setRemoteUsers] = useState<{
     [docId: string]: RemoteUser[]; // Use imported RemoteUser type
   }>({});
+
+  // --- Instantiate useResizablePanel for Explorer --- START ---
+  const explorerPanelRef = useRef<HTMLDivElement>(null); // Add ref for the panel itself
+  const {
+    size: rawExplorerPanelSize, // Get the raw size from hook
+    isResizing: isExplorerPanelResizing,
+    handleMouseDown: handleExplorerPanelMouseDown,
+    togglePanel: toggleExplorerPanel,
+    isCollapsed: isExplorerCollapsed,
+    setSize: setRawExplorerPanelSize, // Setter for raw size
+  } = useResizablePanel({
+    initialSize: DEFAULT_EXPLORER_WIDTH,
+    minSize: MIN_EXPLORER_WIDTH,
+    maxSize: MAX_EXPLORER_WIDTH,
+    direction: "horizontal-left", // Use specific direction
+    containerRef: sidebarContainerRef,
+    panelRef: explorerPanelRef, // Pass the panel ref
+    storageKey: "explorerWidth",
+    onToggle: (isOpen) => {
+      setActiveIcon(isOpen ? "files" : null);
+    },
+    defaultOpenSize: DEFAULT_EXPLORER_WIDTH, // Add default open size
+  });
+  // Adjust size for ICON_BAR_WIDTH offset
+  const explorerPanelSize = Math.max(0, rawExplorerPanelSize - ICON_BAR_WIDTH);
+  // Setter function that accounts for the offset
+  const setExplorerPanelSize = (newSize: number) => {
+    setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
+  };
+  // --- Instantiate useResizablePanel for Explorer --- END ---
+
+  // --- Instantiate useResizablePanel for Terminal --- START ---
+  const initialMaxTerminalHeight = window.innerHeight * 0.8;
+  const {
+    size: terminalPanelHeight,
+    isResizing: isTerminalPanelResizing,
+    handleMouseDown: handleTerminalPanelMouseDown,
+    togglePanel: toggleTerminalPanel,
+    isCollapsed: isTerminalCollapsed,
+    setSize: setTerminalPanelHeight,
+  } = useResizablePanel({
+    initialSize: () => window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION,
+    minSize: MIN_TERMINAL_HEIGHT_PX,
+    maxSize: initialMaxTerminalHeight,
+    direction: "vertical",
+    containerRef: editorTerminalAreaRef,
+    storageKey: "terminalHeight",
+    collapseThreshold: TERMINAL_COLLAPSE_THRESHOLD_PX,
+    defaultOpenSize: () =>
+      window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION, // Correctly placed prop
+    onResizeEnd: () => {
+      terminalRef.current?.fit();
+    },
+    onToggle: () => {
+      requestAnimationFrame(() => terminalRef.current?.fit());
+    },
+  });
+  // --- Instantiate useResizablePanel for Terminal --- END ---
+
+  // --- Instantiate useResizablePanel for WebView --- START ---
+  // Calculate initial max width outside hook call
+  const initialMaxWebViewWidth = window.innerWidth * 0.8;
+  const webViewPanelRef = useRef<HTMLDivElement>(null); // Add ref for webview panel
+  const {
+    size: webViewPanelWidth,
+    isResizing: isWebViewPanelResizing,
+    handleMouseDown: handleWebViewPanelMouseDown,
+    togglePanel: toggleWebViewPanel,
+    isCollapsed: isWebViewCollapsed,
+    setSize: setWebViewPanelWidth,
+  } = useResizablePanel({
+    initialSize: 0,
+    minSize: MIN_WEBVIEW_WIDTH,
+    maxSize: initialMaxWebViewWidth,
+    direction: "horizontal-right", // Use specific direction
+    containerRef: mainContentRef,
+    panelRef: webViewPanelRef, // Pass ref
+    storageKey: "webViewWidth",
+    // Provide a default size for when toggled open from collapsed state
+    defaultOpenSize: () =>
+      (mainContentRef.current?.offsetWidth ?? window.innerWidth * 0.85) *
+      DEFAULT_WEBVIEW_WIDTH_FRACTION,
+  });
+  // --- Instantiate useResizablePanel for WebView --- END ---
 
   // 3. HANDLERS / FUNCTIONS THIRD
 
@@ -447,166 +355,42 @@ const CodeEditorUI = () => {
     }
   };
 
-  // Explorer Resizing Handlers
-  const handleExplorerResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsExplorerResizing(true);
-  };
-
-  const handleExplorerResizeMouseUp = useCallback(() => {
-    if (isExplorerResizing) {
-      setIsExplorerResizing(false);
-      // Cursor/select reset handled by effect
-    }
-  }, [isExplorerResizing]);
-
-  const handleExplorerResizeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isExplorerResizing || !sidebarContainerRef.current) return;
-      const sidebarRect = sidebarContainerRef.current.getBoundingClientRect();
-      let newExplorerWidth = e.clientX - sidebarRect.left - ICON_BAR_WIDTH;
-      newExplorerWidth = Math.max(MIN_EXPLORER_WIDTH, newExplorerWidth);
-      newExplorerWidth = Math.min(MAX_EXPLORER_WIDTH, newExplorerWidth);
-      setExplorerWidth(newExplorerWidth);
-    },
-    [isExplorerResizing]
-  );
-
-  // Terminal Resizing Handlers
-  const handleTerminalResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsTerminalResizing(true);
-    if (terminalHeight === 0) {
-      // Let mouse move handle initial height
-    }
-  };
-
-  const handleTerminalResizeMouseUp = useCallback(() => {
-    if (isTerminalResizing) {
-      setIsTerminalResizing(false);
-      if (terminalHeight > 0) {
-        terminalRef.current?.fit();
-        setPreviousTerminalHeight(terminalHeight);
-      }
-      // Cursor/select reset handled by effect
-    }
-  }, [isTerminalResizing, terminalHeight]); // Add terminalHeight as dep
-
-  const handleTerminalResizeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isTerminalResizing || !editorTerminalAreaRef.current) return;
-      const containerRect =
-        editorTerminalAreaRef.current.getBoundingClientRect();
-      let newHeight = containerRect.bottom - e.clientY;
-      newHeight = Math.max(0, newHeight);
-
-      if (newHeight < TERMINAL_COLLAPSE_THRESHOLD_PX) {
-        if (terminalHeight > 0) {
-          setPreviousTerminalHeight(terminalHeight);
-        }
-        setTerminalHeight(0);
-      } else {
-        let constrainedHeight = Math.max(MIN_TERMINAL_HEIGHT_PX, newHeight);
-        constrainedHeight = Math.min(MAX_TERMINAL_HEIGHT_PX, constrainedHeight);
-        constrainedHeight = Math.min(
-          constrainedHeight,
-          containerRect.height - MIN_TERMINAL_HEIGHT_PX // Prevent pushing editor too small
-        );
-        setTerminalHeight(constrainedHeight);
-      }
-    },
-    [isTerminalResizing, terminalHeight, previousTerminalHeight]
-  );
-
-  // WebView Resizing Handlers
-  const handleWebViewResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsWebViewResizing(true);
-  };
-
-  const handleWebViewResizeMouseUp = useCallback(() => {
-    if (isWebViewResizing) {
-      setIsWebViewResizing(false);
-      // Cursor/select reset handled by effect
-    }
-  }, [isWebViewResizing]);
-
-  const handleWebViewResizeMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isWebViewResizing || !mainContentRef.current) return;
-      const mainRect = mainContentRef.current.getBoundingClientRect();
-      let newWidth = mainRect.right - e.clientX;
-      newWidth = Math.max(MIN_WEBVIEW_WIDTH, newWidth);
-      newWidth = Math.min(MAX_WEBVIEW_WIDTH, newWidth);
-      // Optional: Prevent editor area from becoming too small
-      // const editorAreaMinWidth = 200; // Example minimum width for editor+terminal
-      // newWidth = Math.min(newWidth, mainRect.width - (sidebarContainerRef.current?.offsetWidth ?? 0) - editorAreaMinWidth);
-      setWebViewWidth(newWidth);
-    },
-    [isWebViewResizing] // Keep minimal dependency
-  );
-
-  // Global Pointer Up Handler (MUST be defined AFTER individual MouseUp handlers)
+  // Global Pointer Up Handler (Update)
   const handleGlobalPointerUp = useCallback(
     (e: PointerEvent) => {
-      if (isWebViewResizing) handleWebViewResizeMouseUp();
-      if (isExplorerResizing) handleExplorerResizeMouseUp();
-      if (isTerminalResizing) handleTerminalResizeMouseUp();
+      // Check WebView hook state
+      if (isWebViewPanelResizing) {
+        // Hook's effect handles mouseup
+      }
+      if (isTerminalPanelResizing) {
+        // Hook's effect handles mouseup
+      }
     },
     [
-      isExplorerResizing,
-      handleExplorerResizeMouseUp,
-      isTerminalResizing,
-      handleTerminalResizeMouseUp,
-      isWebViewResizing,
-      handleWebViewResizeMouseUp, // Now these are defined above
+      isTerminalPanelResizing,
+      isWebViewPanelResizing, // Add webview hook state
+      // REMOVE handleWebViewResizeMouseUp,
     ]
   );
 
   // UI Interaction Handlers
-  const toggleExplorer = () => {
-    setActiveIcon((prevActiveIcon) => {
-      const isExplorerOpen = explorerWidth > 0;
-      if (isExplorerOpen) {
-        if (explorerWidth > MIN_EXPLORER_WIDTH / 2) {
-          setPreviousExplorerWidth(explorerWidth);
-        }
-        setExplorerWidth(0);
-        return null;
-      } else {
-        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
-        return "files";
-      }
-    });
-  };
-
   const handleIconClick = (iconName: string | null) => {
-    // --- Add this check ---
-    // If we are prompting the user to join, don't allow changing sidebar state via icons.
     if (joinState === "prompting") {
       console.log("Ignoring icon click while prompting for join details.");
-      return; // Prevent icon clicks from changing state during prompt
+      return;
     }
-    // --- End check ---
 
-    setActiveIcon((prevActiveIcon) => {
-      let nextActiveIcon = iconName;
-      const currentExplorerWidth = explorerWidth;
-
-      if (iconName === "files" && prevActiveIcon === "files") {
-        toggleExplorer();
-        nextActiveIcon = currentExplorerWidth === 0 ? "files" : null;
-      } else if (iconName === "files") {
-        setExplorerWidth(previousExplorerWidth || DEFAULT_EXPLORER_WIDTH);
-      } else {
-        // Switching to other icons or null
-        if (currentExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
-          setPreviousExplorerWidth(currentExplorerWidth);
-        }
-        setExplorerWidth(0);
+    if (iconName === "files") {
+      // Use the hook's toggle function
+      toggleExplorerPanel();
+    } else {
+      // If switching to another icon, ensure explorer is closed
+      if (!isExplorerCollapsed) {
+        toggleExplorerPanel(); // Close it if open
       }
-      return nextActiveIcon;
-    });
+      // Set the new active icon
+      setActiveIcon(iconName);
+    }
   };
 
   // File Handling
@@ -675,49 +459,24 @@ const CodeEditorUI = () => {
 
   // View Menu / WebView Handlers
   const toggleWebView = () => {
-    setIsWebViewVisible((prevVisible) => {
-      const nextVisible = !prevVisible;
-      if (nextVisible) {
-        const widthToSet =
-          previousWebViewWidth > MIN_WEBVIEW_WIDTH
-            ? previousWebViewWidth
-            : (mainContentRef.current?.offsetWidth ??
-                window.innerWidth * (1 - 0.15)) *
-              DEFAULT_WEBVIEW_WIDTH_FRACTION;
-        setWebViewWidth(widthToSet);
-      } else {
-        if (webViewWidth > MIN_WEBVIEW_WIDTH / 2) {
-          // Save width before hiding
-          setPreviousWebViewWidth(webViewWidth);
-        }
-        setWebViewWidth(0); // Set width to 0 when hiding
-      }
-      return nextVisible;
-    });
+    // Option 1: Keep separate visibility state (current implementation)
+    // setIsWebViewVisible(prev => !prev);
+    // toggleWebViewPanel();
+    // setIsViewMenuOpen(false);
+
+    // Option 2: Rely solely on hook's collapsed state
+    toggleWebViewPanel(); // Hook now handles opening to default size
     setIsViewMenuOpen(false);
+    // Also toggle the separate visibility state if we keep it
+    setIsWebViewVisible(isWebViewCollapsed); // Becomes visible if currently collapsed
   };
 
-  // Toggle Terminal Visibility
+  // --- Update toggleTerminalVisibility --- START ---
   const toggleTerminalVisibility = () => {
-    if (terminalHeight > 0) {
-      // Closing: Save current height (if substantial) and set to 0
-      if (terminalHeight > TERMINAL_COLLAPSE_THRESHOLD_PX) {
-        // Avoid saving tiny heights
-        setPreviousTerminalHeight(terminalHeight);
-      }
-      setTerminalHeight(0);
-    } else {
-      // Opening: Restore previous height or use default
-      const heightToRestore =
-        previousTerminalHeight > MIN_TERMINAL_HEIGHT_PX
-          ? previousTerminalHeight
-          : window.innerHeight * DEFAULT_TERMINAL_HEIGHT_FRACTION;
-      setTerminalHeight(heightToRestore);
-      // Fit terminal after restoring height
-      requestAnimationFrame(() => terminalRef.current?.fit());
-    }
-    setIsViewMenuOpen(false); // Close menu
+    toggleTerminalPanel(); // Use the hook's toggle function
+    setIsViewMenuOpen(false); // Close menu remains
   };
+  // --- Update toggleTerminalVisibility --- END ---
 
   // Share Menu Handlers <-- Add Share Menu Handlers
   const toggleShareMenu = () => {
@@ -1712,95 +1471,13 @@ const CodeEditorUI = () => {
 
   // 4. EFFECTS FOURTH
 
-  // Explorer Resizing Effect
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => handleExplorerResizeMouseMove(e);
-    if (isExplorerResizing) {
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", handleMouseMove);
-    } else {
-      window.removeEventListener("mousemove", handleMouseMove);
-      if (!isTerminalResizing && !isWebViewResizing) {
-        // Check other states
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      // Ensure cursor/select reset if this was the *last* active resize
-      if (!isTerminalResizing && !isWebViewResizing) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-  }, [
-    isExplorerResizing,
-    handleExplorerResizeMouseMove,
-    isTerminalResizing,
-    isWebViewResizing,
-  ]); // Add other resize states
+  // --- Update Explorer Resizing Effect Dependencies --- START ---
+  // useEffect(() => {
+  // ... (Explorer effect code, now removed, but update deps in other effects)
+  // }, [isExplorerPanelResizing, isTerminalPanelResizing, isWebViewResizing]); // Add TERMINAL hook state
+  // --- Update Explorer Resizing Effect Dependencies --- END ---
 
-  // Terminal Resizing Effect
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => handleTerminalResizeMouseMove(e);
-    if (isTerminalResizing) {
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", handleMouseMove);
-    } else {
-      window.removeEventListener("mousemove", handleMouseMove);
-      if (!isExplorerResizing && !isWebViewResizing) {
-        // Check other states
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      if (!isExplorerResizing && !isWebViewResizing) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-  }, [
-    isTerminalResizing,
-    handleTerminalResizeMouseMove,
-    isExplorerResizing,
-    isWebViewResizing,
-  ]); // Add other resize states
-
-  // WebView Resizing Effect
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => handleWebViewResizeMouseMove(e);
-    if (isWebViewResizing) {
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      window.addEventListener("mousemove", handleMouseMove);
-    } else {
-      window.removeEventListener("mousemove", handleMouseMove);
-      if (!isExplorerResizing && !isTerminalResizing) {
-        // Check other states
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    }
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      if (!isExplorerResizing && !isTerminalResizing) {
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-      }
-    };
-  }, [
-    isWebViewResizing,
-    handleWebViewResizeMouseMove,
-    isExplorerResizing,
-    isTerminalResizing,
-  ]); // Add other resize states
-
-  // Global Pointer Up Effect
+  // Global Pointer Up Effect (No change needed here, uses handleGlobalPointerUp)
   useEffect(() => {
     document.addEventListener("pointerup", handleGlobalPointerUp);
     document.addEventListener("pointercancel", handleGlobalPointerUp);
@@ -1858,7 +1535,7 @@ const CodeEditorUI = () => {
     // Check if joining via URL AND session isn't already active/joined
     if (sessionIdFromUrl && !isSessionActive && joinState === "idle") {
       console.log(
-        `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerWidth}`
+        `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerPanelSize}`
       );
       setSessionId(sessionIdFromUrl);
       setIsSessionCreator(false); // Joining user is not the creator
@@ -1866,18 +1543,18 @@ const CodeEditorUI = () => {
 
       // Ensure sidebar is visible for the prompt and meets minimum width
       let targetWidth = DEFAULT_EXPLORER_WIDTH; // Start with default
-      if (explorerWidth > 0) {
+      if (explorerPanelSize > 0) {
         // If already open, consider its current width
-        targetWidth = Math.max(targetWidth, explorerWidth);
-      } else if (previousExplorerWidth > MIN_EXPLORER_WIDTH / 2) {
+        targetWidth = Math.max(targetWidth, explorerPanelSize);
+      } else if (explorerPanelSize > MIN_EXPLORER_WIDTH / 2) {
         // If closed, consider the last known width (if valid)
-        targetWidth = Math.max(targetWidth, previousExplorerWidth);
+        targetWidth = Math.max(targetWidth, explorerPanelSize);
       }
       // Ensure it's at least the minimum required for the join panel
       targetWidth = Math.max(targetWidth, MIN_JOIN_PANEL_WIDTH);
 
       // Apply the calculated target width
-      setExplorerWidth(targetWidth);
+      setExplorerPanelSize(targetWidth);
 
       // Clean the URL
       const updatedUrl = new URL(window.location.href); // Renamed from cleanUrl
@@ -1885,7 +1562,7 @@ const CodeEditorUI = () => {
       window.history.replaceState({}, "", updatedUrl.toString());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSessionActive, joinState]); // explorerWidth was removed from deps
+  }, [isSessionActive, joinState, setExplorerPanelSize]); // Add setExplorerPanelSize to dependencies
 
   // NEW Handler for sending selection data via STOMP
   const handleSendSelectionData = useCallback(
@@ -2000,11 +1677,11 @@ const CodeEditorUI = () => {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  toggleTerminalVisibility();
+                  toggleTerminalVisibility(); // Uses updated handler
                 }}
                 className="block w-full text-left px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-600"
               >
-                {terminalHeight > 0 ? "Close Terminal" : "Open Terminal"}
+                {!isTerminalCollapsed ? "Close Terminal" : "Open Terminal"}
               </button>
             </div>
           )}
@@ -2183,7 +1860,7 @@ const CodeEditorUI = () => {
       <div ref={mainContentRef} className="flex flex-1 min-h-0">
         {/* Combined Sidebar Area */}
         <div
-          ref={sidebarContainerRef}
+          ref={sidebarContainerRef} // This ref is now used by the hook
           className="flex flex-shrink-0 h-full relative"
         >
           {/* Icon Bar */}
@@ -2260,15 +1937,15 @@ const CodeEditorUI = () => {
           {/* File Tree / Join Panel Area */}
           <div
             className={`bg-stone-800 bg-opacity-60 overflow-hidden flex flex-col h-full border-r border-stone-600 flex-shrink-0 ${
-              // Show if explorer *should* be visible (width > 0)
-              explorerWidth > 0 ? "visible" : "invisible w-0" // Ensure it truly collapses if width is 0
+              // Use hook state for visibility
+              !isExplorerCollapsed ? "visible" : "invisible w-0"
             }`}
-            style={{ width: `${explorerWidth}px` }}
+            style={{ width: `${explorerPanelSize}px` }} // Use hook size
           >
             {/* --- Add Log --- */}
             {(() => {
               console.log(
-                `[Sidebar Render] joinState: ${joinState}, explorerWidth: ${explorerWidth}, activeIcon: ${activeIcon}`
+                `[Sidebar Render] joinState: ${joinState}, explorerWidth: ${explorerPanelSize}, activeIcon: ${activeIcon}` // Use hook size in log
               );
               return null; // Return null to satisfy React
             })()}
@@ -2283,7 +1960,13 @@ const CodeEditorUI = () => {
                 onNameChange={handleNameChange}
                 onColorSelect={handleColorSelect}
                 onToggleColorPicker={handleToggleColorPicker} // Pass the toggle handler
-                onConfirmJoin={handleConfirmJoin}
+                onConfirmJoin={() => {
+                  handleConfirmJoin(); // Existing handler
+                  // Ensure explorer is open after confirming join
+                  if (isExplorerCollapsed) {
+                    toggleExplorerPanel();
+                  }
+                }}
               />
             ) : (
               // Otherwise, render the normal File Tree (only if files icon active)
@@ -2334,17 +2017,18 @@ const CodeEditorUI = () => {
           </div>
 
           {/* Explorer Resizer Handle */}
-          {activeIcon === "files" && explorerWidth > 0 && (
+          {activeIcon === "files" && !isExplorerCollapsed && (
             <div
               className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
               style={{
                 width: `${EXPLORER_HANDLE_WIDTH}px`,
+                // Adjust position based on hook size and ICON_BAR_WIDTH
                 left: `${
-                  ICON_BAR_WIDTH + explorerWidth - EXPLORER_HANDLE_WIDTH / 2
+                  ICON_BAR_WIDTH + explorerPanelSize - EXPLORER_HANDLE_WIDTH / 2
                 }px`,
                 pointerEvents: "auto",
               }}
-              onMouseDown={handleExplorerResizeMouseDown}
+              onMouseDown={handleExplorerPanelMouseDown} // Use hook mouse down handler
             />
           )}
         </div>
@@ -2353,7 +2037,7 @@ const CodeEditorUI = () => {
         <div className="flex flex-1 min-w-0 relative">
           {/* Code and Terminal Area */}
           <div
-            ref={editorTerminalAreaRef}
+            ref={editorTerminalAreaRef} // This ref is used by the Terminal hook
             className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
           >
             {/* Tabs */}
@@ -2461,59 +2145,67 @@ const CodeEditorUI = () => {
               )}
             </div>
 
-            {/* Terminal Resizer */}
+            {/* --- Update Terminal Resizer --- START --- */}
             <div
               className={`w-full bg-stone-700 flex-shrink-0 ${
-                terminalHeight === 0
+                // Use hook state for cursor style
+                isTerminalCollapsed
                   ? "cursor-pointer hover:bg-stone-500"
                   : "cursor-row-resize hover:bg-stone-600 active:bg-stone-500"
               }`}
               style={{ height: `${TERMINAL_HANDLE_HEIGHT}px` }}
-              onMouseDown={handleTerminalResizeMouseDown}
+              onMouseDown={handleTerminalPanelMouseDown} // Use hook mouse down handler
             />
+            {/* --- Update Terminal Resizer --- END --- */}
 
-            {/* Terminal */}
+            {/* --- Update Terminal Panel --- START --- */}
             <div
               className={`bg-neutral-900 bg-opacity-90 flex flex-col border-t border-stone-600 flex-shrink-0 ${
-                terminalHeight === 0 ? "hidden" : "flex"
+                // Use hook state for visibility
+                isTerminalCollapsed ? "hidden" : "flex"
               }`}
-              style={{ height: `${terminalHeight}px` }}
+              style={{ height: `${terminalPanelHeight}px` }} // Use hook height
             >
               <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
                 <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
               </div>
               <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
-                <TerminalComponent ref={terminalRef} height={terminalHeight} />
+                {/* Pass hook height to TerminalComponent */}
+                <TerminalComponent
+                  ref={terminalRef}
+                  height={terminalPanelHeight}
+                />
               </div>
             </div>
+            {/* --- Update Terminal Panel --- END --- */}
           </div>
 
           {/* Invisible WebView Resizer Handle (Positioned Absolutely) */}
-          {isWebViewVisible && webViewWidth > 0 && (
+          {isWebViewVisible && webViewPanelWidth > 0 && (
             <div
               className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
               style={{
                 width: `${WEBVIEW_HANDLE_GRAB_WIDTH}px`,
                 // Position it centered over the boundary
-                left: `calc(100% - ${webViewWidth}px - ${
+                left: `calc(100% - ${webViewPanelWidth}px - ${
                   WEBVIEW_HANDLE_GRAB_WIDTH / 2
                 }px)`,
               }}
-              onMouseDown={handleWebViewResizeMouseDown}
+              onMouseDown={handleWebViewPanelMouseDown} // Use hook handler
             />
           )}
 
           {/* WebView Panel (border provides the 1px visual line) */}
-          {isWebViewVisible && webViewWidth > 0 && (
+          {isWebViewVisible && webViewPanelWidth > 0 && (
             <div
               className="flex-shrink-0 border-l border-stone-600 overflow-hidden" // Keep the border-l for visual
-              style={{ width: `${webViewWidth}px` }}
+              style={{ width: `${webViewPanelWidth}px` }}
             >
               <WebViewPanel
                 htmlContent={htmlFileContent}
                 cssContent={cssFileContent}
                 jsContent={jsFileContent}
-                onClose={toggleWebView} // Pass the toggle function here
+                onClose={toggleWebView} // Pass the updated toggle function
               />
             </div>
           )}
@@ -2523,8 +2215,10 @@ const CodeEditorUI = () => {
       {/* Status Bar */}
       <StatusBar />
 
-      {/* Resizing Overlay */}
-      {(isExplorerResizing || isTerminalResizing || isWebViewResizing) && (
+      {/* --- Update Resizing Overlay Check --- START --- */}
+      {(isExplorerPanelResizing ||
+        isTerminalPanelResizing ||
+        isWebViewPanelResizing) && (
         <div
           style={{
             position: "fixed",
@@ -2538,8 +2232,9 @@ const CodeEditorUI = () => {
           }}
         />
       )}
+      {/* --- Update Resizing Overlay Check --- END --- */}
     </div>
   );
 };
 
-export default CodeEditorUI;
+export default App;
