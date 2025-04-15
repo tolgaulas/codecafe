@@ -13,6 +13,7 @@ import {
   JoinStateType,
   TerminalHandle,
 } from "./types/editor";
+import { TextOperation } from "./ot/TextOperationSystem";
 
 import {
   ICON_BAR_WIDTH,
@@ -181,29 +182,58 @@ const App = () => {
       [activeFileId, userId, setFileContent]
     ),
     onOperationReceived: useCallback(
-      (fileId, _operation) => {
-        // Get the latest content directly from the Monaco editor instance
-        const currentEditorContent = editorInstanceRef.current
-          ?.getModel()
-          ?.getValue();
+      (fileId, operationData) => {
+        const currentActiveFileId = useFileStore.getState().activeFileId;
 
-        // Check if we got the content successfully
-        if (currentEditorContent !== undefined) {
-          // Get the current state from Zustand *without* subscribing
-          const currentZustandContent =
-            useFileStore.getState().fileContents[fileId];
-
-          // Only update Zustand if the editor content is actually different
-          // This prevents unnecessary state updates and potential re-renders
-          if (currentEditorContent !== currentZustandContent) {
-            // Update the Zustand store with the content directly from the editor
-            setFileContent(fileId, currentEditorContent);
+        if (fileId === currentActiveFileId) {
+          // Operation is for the currently active file in the editor
+          const editor = editorInstanceRef.current;
+          if (editor) {
+            const currentEditorContent = editor.getModel()?.getValue();
+            if (currentEditorContent !== undefined) {
+              // Get the current state from Zustand *without* subscribing
+              const currentZustandContent =
+                useFileStore.getState().fileContents[fileId];
+              // Update Zustand only if editor content is different
+              if (currentEditorContent !== currentZustandContent) {
+                setFileContent(fileId, currentEditorContent);
+              }
+            } else {
+              console.warn(
+                `[App onOperationReceived] Could not get editor content for active file ${fileId}.`
+              );
+            }
+          } else {
+            console.warn(
+              `[App onOperationReceived] Editor instance not available for active file ${fileId}.`
+            );
           }
         } else {
-          console.warn(
-            `[App onOperationReceived] Could not get editor content for ${fileId} after applying operation.`
-          );
-          // Fallback or error handling could be added here if necessary
+          // Operation is for a background file (e.g., CSS/JS for WebView)
+          const currentZustandContent =
+            useFileStore.getState().fileContents[fileId];
+          if (currentZustandContent !== undefined) {
+            try {
+              // Use the operation object directly (it's already a TextOperation instance)
+              const operation = operationData; // Use the argument directly
+              const newContent = operation.apply(currentZustandContent);
+              // Check if content actually changed before updating state
+              if (newContent !== currentZustandContent) {
+                setFileContent(fileId, newContent);
+              }
+            } catch (error) {
+              console.error(
+                `[App onOperationReceived] Error applying operation to background file ${fileId}:`,
+                error,
+                operationData
+              );
+            }
+          } else {
+            console.warn(
+              `[App onOperationReceived] No content found in Zustand for background file ${fileId}. Cannot apply operation.`
+            );
+            // Consider fetching state if missing, but for now, warn.
+          }
         }
       },
       [setFileContent]
