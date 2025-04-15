@@ -181,30 +181,29 @@ const App = () => {
       [activeFileId, userId, setFileContent]
     ),
     onOperationReceived: useCallback(
-      (fileId, operation) => {
-        try {
-          const currentContent =
-            useFileStore.getState().fileContents[fileId] ?? "";
-          const newContent = operation.apply(currentContent);
-          // console.log(
-          // `[App onOperationReceived] Applied Op for ${fileId}. Prev Length: ${
-          // currentContent.length
-          // }, New Length: ${newContent.length}, Content Changed: ${
-          // currentContent !== newContent
-          // }`
-          // );
-          if (newContent !== currentContent) {
-            setFileContent(fileId, newContent);
+      (fileId, _operation) => {
+        // Get the latest content directly from the Monaco editor instance
+        const currentEditorContent = editorInstanceRef.current
+          ?.getModel()
+          ?.getValue();
+
+        // Check if we got the content successfully
+        if (currentEditorContent !== undefined) {
+          // Get the current state from Zustand *without* subscribing
+          const currentZustandContent =
+            useFileStore.getState().fileContents[fileId];
+
+          // Only update Zustand if the editor content is actually different
+          // This prevents unnecessary state updates and potential re-renders
+          if (currentEditorContent !== currentZustandContent) {
+            // Update the Zustand store with the content directly from the editor
+            setFileContent(fileId, currentEditorContent);
           }
-        } catch (applyError) {
-          console.error(
-            `[App onOperationReceived] Error applying server op to fileContents for ${fileId}:`,
-            applyError,
-            "Op:",
-            operation.toString(),
-            "Content:",
-            useFileStore.getState().fileContents[fileId] ?? ""
+        } else {
+          console.warn(
+            `[App onOperationReceived] Could not get editor content for ${fileId} after applying operation.`
           );
+          // Fallback or error handling could be added here if necessary
         }
       },
       [setFileContent]

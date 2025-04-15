@@ -76,19 +76,20 @@ const WebViewPanel = ({
             <span
               style={{
                 position: "absolute",
-                left: "-6px",
-                top: "6px",
+                left: "-8px",
+                top: "8px",
                 zIndex: 9,
                 transform: "skewX(-25deg)",
                 display: "inline-block",
               }}
             >
-              <FaEarthAmericas size={14} />
+              <FaEarthAmericas size={12} />
             </span>
             <span
               style={{
                 transform: "skewX(-25deg)",
                 display: "inline-block",
+                marginLeft: "-5px",
               }}
             >
               Preview
