@@ -96,8 +96,9 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
         activeFileId: fileId,
       };
 
-      // Only set initial content if not in a session and content doesn't exist
-      if (!isSessionActive && state.fileContents[fileId] === undefined) {
+      // Initialize content for files that don't have content yet
+      // This works for both non-session and session modes
+      if (state.fileContents[fileId] === undefined) {
         newStateUpdate.fileContents = {
           ...state.fileContents,
           [fileId]: fileData.content,

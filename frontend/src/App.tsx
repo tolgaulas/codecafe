@@ -477,7 +477,18 @@ const App = () => {
     setJoinState("joined"); // Mark as joined
     setActiveIcon("files");
 
+    // First set the session as active
     setIsSessionActive(true);
+
+    // If there's an active file, force refresh its collaboration connection
+    // by temporarily switching to null and back
+    if (activeFileId) {
+      const currentActiveId = activeFileId;
+      setTimeout(() => {
+        // Switch to a different file and back to trigger a fresh connection
+        switchTab(currentActiveId);
+      }, 100);
+    }
   };
 
   // Memos
