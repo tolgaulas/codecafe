@@ -54,25 +54,35 @@ public class OtController {
             return;
         }
 
-        logger.info(String.format("OtController received operation payload from client [%s] for session [%s], doc [%s]: Revision=%d, Op=%s",
-                 clientId, sessionId, documentId, payload.getRevision(), payload.getOperation()));
+        // Log the incoming payload including selection/cursor if present
+        logger.info(String.format("OtController received operation payload from client [%s] for session [%s], doc [%s]: %s",
+                 clientId, sessionId, documentId, payload.toString()));
 
         try {
-
+            // Extract the raw operation data and create a TextOperation
             TextOperation operation = new TextOperation(payload.getOperation()); 
+            // Process the operation through the OT service
             TextOperation transformedOp = otService.receiveOperation(sessionId, documentId, payload.getRevision(), operation);
 
-            // Broadcast the transformed operation
+            // Prepare the payload for broadcasting
             Map<String, Object> broadcastPayload = new HashMap<>();
             broadcastPayload.put("documentId", documentId);
-            broadcastPayload.put("clientId", clientId);
-            broadcastPayload.put("operation", transformedOp.getOps());
+            broadcastPayload.put("clientId", clientId); // The ID of the client who sent the original operation
+            broadcastPayload.put("operation", transformedOp.getOps()); // The transformed operation
             broadcastPayload.put("sessionId", sessionId);
+
+            // Include selection and cursor position if they were provided in the incoming payload
+            if (payload.getSelection() != null) {
+                broadcastPayload.put("selection", payload.getSelection());
+            }
+            if (payload.getCursorPosition() != null) {
+                broadcastPayload.put("cursorPosition", payload.getCursorPosition());
+            }
 
             // Broadcast to the session-and-document-specific topic
             String destination = String.format("/topic/sessions/%s/operations/document/%s", sessionId, documentId);
             messagingTemplate.convertAndSend(destination, broadcastPayload);
-            logger.fine(String.format("Broadcasted transformed op from client [%s] for session [%s], doc [%s] to %s", clientId, sessionId, documentId, destination));
+            logger.fine(String.format("Broadcasted transformed op (with selection/cursor if present) from client [%s] for session [%s], doc [%s] to %s. Payload: %s", clientId, sessionId, documentId, destination, broadcastPayload));
 
             // Send ACK back to the original sender ONLY
             String ackDestination = "/topic/ack/" + clientId;
@@ -81,44 +91,35 @@ public class OtController {
 
         } catch (IllegalArgumentException e) {
             logger.warning(String.format("Error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
-            // I might want to send an error message back to the client
+            // Consider sending an error message back to the client
         } catch (Exception e) {
             logger.severe(String.format("Unexpected error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
+             // Log the stack trace for unexpected errors
+            e.printStackTrace();
         }
     }
 
     /**
-     * Handle selection changes from clients (Optional).
-     * Based on ot.js Server/EditorSocketIOServer behavior.
+     * DEPRECATED: Selection changes are now handled via the /operation endpoint.
+     * Keeping this method temporarily might be useful for debugging or if a fallback is needed.
      *
      * @param payload JSON representation of the selection (e.g., { ranges: [{ anchor: number, head: number }] })
      * @param headerAccessor Accessor for STOMP headers.
      * @param principal Optional principal.
      */
+    @Deprecated
     public void handleSelection(@Payload IncomingSelectionPayload payload,
                                 SimpMessageHeaderAccessor headerAccessor,
                                 Principal principal) {
 
-        String clientId = payload.getClientId();
-        String documentId = payload.getDocumentId();
+        logger.warning("Received message on deprecated /selection endpoint. Selection should be bundled with /operation. Payload: " + payload);
 
-        if (clientId == null || documentId == null) {
-             logger.warning("Received selection without clientId or documentId in payload.");
-             return;
-        }
+        // Optionally, you could still process it as before, but it's redundant
+        // String clientId = payload.getClientId();
+        // String documentId = payload.getDocumentId();
+        // ... (rest of the old logic) ...
 
-        logger.finest(String.format("Received selection from client [%s] for doc [%s]: %s", clientId, documentId, payload.getSelection()));
-
-        // Broadcast selection to other clients
-        Map<String, Object> broadcastPayload = new HashMap<>();
-        broadcastPayload.put("documentId", documentId);
-        broadcastPayload.put("clientId", clientId);
-        // Forwarding the raw selection payload - Assuming frontend handles Map<String, List<Map<String, Integer>>>
-        broadcastPayload.put("selection", payload.getSelection());
-
-        // Send to the main topic, clients will ignore their own ID
-        messagingTemplate.convertAndSend("/topic/selections", broadcastPayload);
-         logger.finest(String.format("Broadcasted selection from client [%s] for doc [%s] to /topic/selections", clientId, documentId));
+        // Or just do nothing
     }
 
     /**
@@ -134,7 +135,7 @@ public class OtController {
         String requestingUserId = null;
         if (principal != null) {
             requestingUserId = principal.getName();
-            logger.info("Identified requesting user ID: " + requestingUserId);
+            // logger.info("Identified requesting user ID: " + requestingUserId); // Can be verbose
         } else {
             logger.warning("Principal not available for get-document-state request. Cannot exclude requester from participant list.");
         }
@@ -149,14 +150,16 @@ public class OtController {
         // Fetch Participants
         List<UserInfoDTO> participants = Collections.emptyList(); 
         try {
-            participants = sessionRegistryService.getActiveParticipantsForDocument(sessionId, documentId, requestingUserId);
-            logger.info(String.format("Fetched %d participants for session [%s], document [%s] (excluding user [%s])", participants.size(), sessionId, documentId, requestingUserId));
+            // Fetch participants, excluding the requester if known (null means fetch all)
+            participants = sessionRegistryService.getActiveParticipantsForDocument(sessionId, documentId, null);
+            logger.info(String.format("Fetched %d participants for session [%s], document [%s]", participants.size(), sessionId, documentId));
 
         } catch (Exception e) {
             logger.severe(String.format("Error fetching participants for session [%s], document [%s]: %s", sessionId, documentId, e.getMessage()));
         }
 
         DocumentState stateResponse = new DocumentState();
+        stateResponse.setSessionId(sessionId); // Also include sessionId in the response
         stateResponse.setDocumentId(documentId);
         stateResponse.setDocument(otService.getDocumentContent(sessionId, documentId));
         stateResponse.setRevision(otService.getRevision(sessionId, documentId));
@@ -166,8 +169,10 @@ public class OtController {
 
         logger.info("Sending document state: Revision=" + stateResponse.getRevision() +
                     ", Participants Count=" + stateResponse.getParticipants().size() + 
-                    " for doc [" + documentId + "]");
+                    " for session [" + sessionId + "], doc [" + documentId + "]");
 
+        // Send the state back to the specific topic for this session/document
+        // The client requesting the state should be subscribed to this topic.
         String destination = String.format("/topic/sessions/%s/state/document/%s", sessionId, documentId);
         messagingTemplate.convertAndSend(destination, stateResponse);
         logger.info(String.format("Sent document state for session [%s], doc [%s] to %s", sessionId, documentId, destination));

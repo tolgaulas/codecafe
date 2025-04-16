@@ -2,6 +2,7 @@ package com.codecafe.backend.dto;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Map;
 
 /**
  * DTO representing the payload sent from the client for an operation.
@@ -11,9 +12,11 @@ public class IncomingOperationPayload {
 
     private String clientId;
     private int revision;
-    private List<Object> operation; // Raw operation list (numbers or strings)
+    private List<Object> operation; // Raw operation list 
     private String documentId;
     private String sessionId;
+    private Map<String, Object> selection;
+    private Map<String, Integer> cursorPosition;
 
     // Default constructor for deserialization
     public IncomingOperationPayload() {
@@ -69,7 +72,23 @@ public class IncomingOperationPayload {
         this.sessionId = sessionId;
     }
 
-    // equals, hashCode, toString (optional but good practice)
+    public Map<String, Object> getSelection() {
+        return selection;
+    }
+
+    public void setSelection(Map<String, Object> selection) {
+        this.selection = selection;
+    }
+
+    public Map<String, Integer> getCursorPosition() {
+        return cursorPosition;
+    }
+
+    public void setCursorPosition(Map<String, Integer> cursorPosition) {
+        this.cursorPosition = cursorPosition;
+    }
+
+    // equals, hashCode, toString 
 
     @Override
     public boolean equals(Object o) {
@@ -80,12 +99,14 @@ public class IncomingOperationPayload {
                 Objects.equals(clientId, that.clientId) &&
                 Objects.equals(operation, that.operation) &&
                 Objects.equals(documentId, that.documentId) &&
-                Objects.equals(sessionId, that.sessionId);
+                Objects.equals(sessionId, that.sessionId) &&
+                Objects.equals(selection, that.selection) &&
+                Objects.equals(cursorPosition, that.cursorPosition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(clientId, revision, operation, documentId, sessionId);
+        return Objects.hash(clientId, revision, operation, documentId, sessionId, selection, cursorPosition);
     }
 
     @Override
@@ -96,6 +117,8 @@ public class IncomingOperationPayload {
                 ", operation=" + operation +
                 ", documentId='" + documentId + '\'' +
                 ", sessionId='" + sessionId + '\'' +
+                ", selection=" + selection +
+                ", cursorPosition=" + cursorPosition +
                 '}';
     }
 } 

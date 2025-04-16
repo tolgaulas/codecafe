@@ -234,36 +234,68 @@ const App = () => {
       [setFileContent]
     ),
     onRemoteUsersUpdate: useCallback(
-      (fileId, updatedUsersInfo) => {
+      (fileId, updatedUsersInfo: Partial<RemoteUser>[]) => {
         // console.log(
         // `[App onRemoteUsersUpdate] Received for ${fileId}:`,
         // updatedUsersInfo
         // );
         setRemoteUsers((prevRemoteUsers) => {
-          const nextRemoteUsers = JSON.parse(
-            JSON.stringify(prevRemoteUsers)
-          ) as typeof prevRemoteUsers;
+          // Avoid deep cloning if no changes are made for performance
+          let changed = false;
+          const nextRemoteUsers = { ...prevRemoteUsers };
+
           if (!nextRemoteUsers[fileId]) {
+            // Initialize if fileId is new, but this shouldn't happen often
+            // for updates originating from operations (users should exist from state sync)
             nextRemoteUsers[fileId] = [];
+            // console.warn(`[App onRemoteUsersUpdate] Initialized users for new fileId: ${fileId}`);
           }
-          const usersForDoc = nextRemoteUsers[fileId];
-          updatedUsersInfo.forEach((updatedUser) => {
-            if (updatedUser.id === userId) return;
+
+          // Make a shallow copy of the specific document's user array to modify it
+          const usersForDoc = [...(nextRemoteUsers[fileId] || [])];
+
+          updatedUsersInfo.forEach((partialUserUpdate) => {
+            if (!partialUserUpdate || partialUserUpdate.id === userId) return; // Ignore self or invalid updates
+
             const existingUserIndex = usersForDoc.findIndex(
-              (u) => u.id === updatedUser.id
+              (u) => u.id === partialUserUpdate.id
             );
+
             if (existingUserIndex > -1) {
-              usersForDoc[existingUserIndex] = updatedUser;
+              // User exists, merge the partial update
+              const existingUser = usersForDoc[existingUserIndex];
+              // Merge properties from partialUserUpdate into existingUser
+              const mergedUser = { ...existingUser, ...partialUserUpdate };
+
+              // Check if the user object actually changed after merging
+              if (JSON.stringify(existingUser) !== JSON.stringify(mergedUser)) {
+                usersForDoc[existingUserIndex] = mergedUser;
+                changed = true;
+              }
             } else {
-              usersForDoc.push(updatedUser);
+              // User doesn't exist. This case is less likely for operation-based updates
+              // but handle it defensively. We only have partial info.
+              // A full update should ideally come from onStateReceived.
+              // We could push the partial user, but it might lack name/color.
+              // Let's log a warning for now.
+              console.warn(
+                `[App onRemoteUsersUpdate] Received update for non-existent user ${partialUserUpdate.id} in file ${fileId}. Update:`,
+                partialUserUpdate
+              );
+              // Optionally push the partial user if needed:
+              // usersForDoc.push(partialUserUpdate as RemoteUser); // Cast needed
+              // changed = true;
             }
           });
-          if (
-            JSON.stringify(prevRemoteUsers) === JSON.stringify(nextRemoteUsers)
-          ) {
-            return prevRemoteUsers;
+
+          // If changes occurred, update the state for this fileId
+          if (changed) {
+            nextRemoteUsers[fileId] = usersForDoc;
+            return nextRemoteUsers; // Return the updated state object
           }
-          return nextRemoteUsers;
+
+          // If no changes, return the previous state object to prevent re-renders
+          return prevRemoteUsers;
         });
       },
       [userId]
