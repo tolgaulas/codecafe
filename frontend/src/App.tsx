@@ -582,6 +582,10 @@ const App = () => {
       setSessionId(sessionIdFromUrl);
       setJoinState("prompting");
 
+      // Also generate the share link for the joining user
+      const shareLink = `${window.location.origin}${window.location.pathname}?session=${sessionIdFromUrl}`;
+      setGeneratedShareLink(shareLink);
+
       let targetWidth = DEFAULT_EXPLORER_WIDTH;
       if (explorerPanelSize > 0) {
         targetWidth = Math.max(targetWidth, explorerPanelSize);
