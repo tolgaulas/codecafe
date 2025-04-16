@@ -15,10 +15,13 @@ import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
 import org.springframework.messaging.MessageHeaders; // Import MessageHeaders
-
+import org.springframework.data.redis.core.StringRedisTemplate; // Import StringRedisTemplate
+import org.springframework.data.redis.core.SetOperations; // Import SetOperations
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set; // Import Set
+import java.util.Collections; // Import Collections
 
 @Component
 public class WebSocketEventListener {
@@ -28,14 +31,26 @@ public class WebSocketEventListener {
     private final SessionRegistryService sessionRegistryService;
     private final SimpMessagingTemplate messagingTemplate;
     private final OtService otService;
+    private final StringRedisTemplate stringRedisTemplate; // Inject StringRedisTemplate
+    private final SetOperations<String, String> setOperations;
+
+    private static final String USER_ACTIVE_DOCS_KEY_PREFIX = "user:active_docs:"; // Match prefix in EditorController
 
     @Autowired
     public WebSocketEventListener(SessionRegistryService sessionRegistryService,
                                   SimpMessagingTemplate messagingTemplate,
-                                  OtService otService) {
+                                  OtService otService,
+                                  StringRedisTemplate stringRedisTemplate) { // Inject StringRedisTemplate
         this.sessionRegistryService = sessionRegistryService;
         this.messagingTemplate = messagingTemplate;
         this.otService = otService;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.setOperations = stringRedisTemplate.opsForSet(); // Initialize SetOperations
+    }
+
+    // Helper to get the tracking key for a user
+    private String getUserTrackingKey(String userId) {
+        return USER_ACTIVE_DOCS_KEY_PREFIX + userId;
     }
 
     @EventListener
@@ -76,16 +91,64 @@ public class WebSocketEventListener {
             String userId = userPrincipal.getName(); 
             log.info("WebSocket Disconnected: User={}, WebSocket SessionId={}", userId, simpSessionId);
 
-            List<Map.Entry<String, String>> affectedEntries = sessionRegistryService.userLeft(userId);
+            String trackingKey = getUserTrackingKey(userId);
+            Set<String> activeDocuments = null;
+            try {
+                activeDocuments = setOperations.members(trackingKey);
+            } catch (Exception e) {
+                log.error("Redis error retrieving active documents for user [{}], key [{}]: {}", userId, trackingKey, e.getMessage(), e);
+                 // If we can't retrieve the set, we cannot proceed with targeted removal.
+                 // Optionally fall back to scanning or log a warning.
+                 log.warn("Could not retrieve active documents for user [{}], unable to perform targeted cleanup.", userId);
+                 // NOTE: Depending on requirements, you might want to fall back to userLeftAllSessions here,
+                 // or accept that cleanup might be missed if Redis is temporarily unavailable.
+                 // For now, we just log and exit this block.
+                 activeDocuments = Collections.emptySet(); // Ensure it's not null
+            }
 
-            // Broadcast updated state for each affected document
-            affectedEntries.forEach(entry -> {
-                String sessionId = entry.getKey();
-                String documentId = entry.getValue();
-                log.info("User [{}] left session [{}], doc [{}]. Triggering state broadcast.", userId, sessionId, documentId);
-                // Pass userId of the user who left as the trigger user
-                broadcastFullDocumentState(sessionId, documentId, userId);
-            });
+            if (activeDocuments != null && !activeDocuments.isEmpty()) {
+                 log.info("Processing disconnect for user [{}]. Found {} active document entries in tracking set [{}].", 
+                         userId, activeDocuments.size(), trackingKey);
+                 
+                 activeDocuments.forEach(docEntry -> {
+                     String[] parts = docEntry.split(":", 2);
+                     if (parts.length == 2) {
+                         String sessionId = parts[0];
+                         String documentId = parts[1];
+                         log.info("Attempting to remove user [{}] from session [{}], doc [{}] based on tracking info.", 
+                                 userId, sessionId, documentId);
+                         try {
+                            boolean removed = sessionRegistryService.userLeftDocument(sessionId, documentId, userId);
+                            if (removed) {
+                                log.info("User [{}] successfully removed from session [{}], doc [{}]. Triggering state broadcast.", 
+                                        userId, sessionId, documentId);
+                                // Pass userId of the user who left as the trigger user
+                                broadcastFullDocumentState(sessionId, documentId, userId);
+                            } else {
+                                 log.warn("Call to userLeftDocument for user [{}], session [{}], doc [{}] returned false (user might have already been removed?).", 
+                                         userId, sessionId, documentId);
+                            }
+                         } catch (Exception e) {
+                             log.error("Error calling userLeftDocument or broadcasting state for user [{}], session [{}], doc [{}]: {}", 
+                                     userId, sessionId, documentId, e.getMessage(), e);
+                         }
+                     } else {
+                         log.warn("Invalid document entry format '{}' found in tracking set '{}' for user [{}]", 
+                                 docEntry, trackingKey, userId);
+                     }
+                 });
+
+                 // After processing all documents, remove the tracking key
+                 try {
+                     stringRedisTemplate.delete(trackingKey);
+                     log.info("Deleted user tracking set '{}' for user [{}]", trackingKey, userId);
+                 } catch (Exception e) {
+                     log.error("Redis error deleting tracking key [{}] for user [{}]: {}", trackingKey, userId, e.getMessage(), e);
+                 }
+            } else {
+                 log.info("No active document entries found in tracking set [{}] for disconnected user [{}]. No specific cleanup needed based on tracking.", trackingKey, userId);
+                 // This might happen if the user connected but never joined a document, or if the tracking key expired/failed.
+            }
 
          } else {
             log.warn("WebSocket Disconnected: No user principal found. WebSocket SessionId={}. Cannot clean up registry.", simpSessionId);

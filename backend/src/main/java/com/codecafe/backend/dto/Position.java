@@ -1,16 +1,12 @@
 package com.codecafe.backend.dto;
 
+// DTO matching the structure in frontend/src/hooks/useCollaborationSession.ts
 public class Position {
     private int lineNumber;
     private int column;
 
-    // Constructors
-    public Position() {}
-
-    public Position(int lineNumber, int column) {
-        this.lineNumber = lineNumber;
-        this.column = column;
-    }
+    // No-arg constructor
+    public Position() { }
 
     // Getters and Setters
     public int getLineNumber() {

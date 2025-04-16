@@ -8,9 +8,12 @@ import com.codecafe.backend.dto.DocumentState;
 import com.codecafe.backend.service.SessionRegistryService;
 import com.codecafe.backend.service.OtService;
 import com.codecafe.backend.dto.JoinPayload;
+import com.codecafe.backend.dto.SelectionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.SetOperations;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -20,6 +23,7 @@ import org.springframework.stereotype.Controller;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Controller
 public class EditorController {
@@ -30,12 +34,24 @@ public class EditorController {
     private final SimpMessagingTemplate messagingTemplate;
     private final SessionRegistryService sessionRegistryService;
     private final OtService otService;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final SetOperations<String, String> setOperations;
+
+    private static final String USER_ACTIVE_DOCS_KEY_PREFIX = "user:active_docs:";
+    private static final long USER_TRACKING_EXPIRY_HOURS = 24; // Expire user tracking info after a day of inactivity
 
     @Autowired
-    public EditorController(SimpMessagingTemplate messagingTemplate, SessionRegistryService sessionRegistryService, OtService otService) {
+    public EditorController(SimpMessagingTemplate messagingTemplate, SessionRegistryService sessionRegistryService, OtService otService, StringRedisTemplate stringRedisTemplate) {
         this.messagingTemplate = messagingTemplate;
         this.sessionRegistryService = sessionRegistryService;
         this.otService = otService;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.setOperations = stringRedisTemplate.opsForSet();
+    }
+
+    // Helper to get the tracking key for a user
+    private String getUserTrackingKey(String userId) {
+        return USER_ACTIVE_DOCS_KEY_PREFIX + userId;
     }
 
     /**
@@ -74,8 +90,22 @@ public class EditorController {
             sessionRegistryService.userJoined(sessionId, documentId, userInfoDTO);
             log.info("User [{}] registered in session [{}], doc [{}] via /app/join", userId, sessionId, documentId);
 
-            
-            broadcastFullDocumentState(sessionId, documentId, userId); 
+            // 2. Track this active document for the user (using Redis Set)
+            String trackingKey = getUserTrackingKey(userId);
+            String documentEntry = sessionId + ":" + documentId;
+            try {
+                setOperations.add(trackingKey, documentEntry);
+                // Set expiry for the tracking key itself using the StringRedisTemplate
+                stringRedisTemplate.expire(trackingKey, USER_TRACKING_EXPIRY_HOURS, TimeUnit.HOURS);
+                log.info("Added entry '{}' to user tracking set '{}' for user [{}]", documentEntry, trackingKey, userId);
+            } catch (Exception redisEx) {
+                log.error("Redis error adding entry '{}' to tracking set '{}' for user [{}]: {}",
+                          documentEntry, trackingKey, userId, redisEx.getMessage(), redisEx);
+                // Continue without tracking if Redis fails? Or handle differently?
+            }
+
+            // 3. Broadcast the updated full state
+            broadcastFullDocumentState(sessionId, documentId, userId);
 
         } catch (Exception e) {
             log.error("Error processing join request for user [{}] in session [{}], doc [{}]: {}", 
@@ -89,7 +119,6 @@ public class EditorController {
     public void handleSelectionUpdate(@Payload CursorMessage message,
                                       SimpMessageHeaderAccessor headerAccessor) {
 
-        
         String sessionId = message.getSessionId();
         String documentId = message.getDocumentId();
         UserInfo senderUserInfo = message.getUserInfo();
@@ -100,47 +129,45 @@ public class EditorController {
         }
         String senderClientId = senderUserInfo.getId();
 
-        boolean registryUpdated = false;
+        // --- Persist state update to Redis --- NEW LOGIC
         try {
-            UserInfoDTO userInfoDTO = new UserInfoDTO();
-            userInfoDTO.setId(senderUserInfo.getId());
-            userInfoDTO.setName(senderUserInfo.getName());
-            userInfoDTO.setColor(senderUserInfo.getColor());
-            
-            
+            // Convert Position to Map<String, Integer> or null
+            Map<String, Integer> cursorPositionMap = null;
             Position cursorPosition = senderUserInfo.getCursorPosition();
             if (cursorPosition != null) {
-                Map<String, Integer> cursorPositionMap = new HashMap<>();
+                cursorPositionMap = new HashMap<>();
                 cursorPositionMap.put("lineNumber", cursorPosition.getLineNumber());
                 cursorPositionMap.put("column", cursorPosition.getColumn());
-                userInfoDTO.setCursorPosition(cursorPositionMap);
-            } else {
-                userInfoDTO.setCursorPosition(null);
             }
-            
-            
-            userInfoDTO.setSelection(senderUserInfo.getSelection());
-            sessionRegistryService.userJoined(sessionId, documentId, userInfoDTO);
-            registryUpdated = true;
-            log.debug("[Session: {}] Updated/Joined user [{}] in registry for doc [{}] due to selection update", sessionId, senderClientId, documentId);
-        } catch (Exception e) {
-            log.error("[Session: {}] Error updating session registry for user [{}] in doc [{}]: {}", sessionId, senderClientId, documentId, e.getMessage(), e);
-        }
 
-        
+            // Get SelectionInfo (already the correct type)
+            SelectionInfo selectionInfo = senderUserInfo.getSelection();
+
+            // Call the service layer to update the state in Redis
+            sessionRegistryService.updateUserState(sessionId, documentId, senderClientId, cursorPositionMap, selectionInfo);
+            log.debug("[Session: {}] Updated user state for [{}] in doc [{}] via /app/selection", sessionId, senderClientId, documentId);
+
+        } catch (Exception e) {
+            // Log error during state update, but still attempt to broadcast
+            log.error("[Session: {}] Error persisting selection update for user [{}] in doc [{}]: {}", sessionId, senderClientId, documentId, e.getMessage(), e);
+        }
+        // --- End Persist state update ---
+
+        // --- Broadcast the original message to other clients --- (Existing Logic)
         String selectionDestination = String.format("/topic/sessions/%s/selections/document/%s", sessionId, documentId);
 
         log.info("Attempting to broadcast selection for session '{}', doc '{}' from client '{}' to {}", sessionId, documentId, senderClientId, selectionDestination);
         try {
-             messagingTemplate.convertAndSend(selectionDestination, message);
+             messagingTemplate.convertAndSend(selectionDestination, message); // Broadcast original message
              log.info("Successfully broadcasted selection update to {} for session '{}', doc '{}'", selectionDestination, sessionId, documentId);
         } catch (Exception e) {
             log.error("Error broadcasting selection update to {} for session '{}', doc '{}'", selectionDestination, sessionId, documentId, e);
         }
 
-        if (registryUpdated) {
-            broadcastFullDocumentState(sessionId, documentId, senderClientId);
-        }
+        // Remove the broadcast of the full state on every selection change (keep this commented out)
+        // if (registryUpdated) {
+        //    broadcastFullDocumentState(sessionId, documentId, senderClientId);
+        // }
     }
 
     /**

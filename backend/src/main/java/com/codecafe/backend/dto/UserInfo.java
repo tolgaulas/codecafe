@@ -1,22 +1,16 @@
 package com.codecafe.backend.dto;
 
+// DTO matching the nested userInfo structure in frontend's CursorMessage
+// Note: This is separate from UserInfoDTO which is used for *storing* in Redis
 public class UserInfo {
     private String id;
     private String name;
     private String color;
-    private Position cursorPosition; // Represents the user's cursor
-    private OtSelectionDto selection; // Use OtSelectionDto to match frontend
+    private Position cursorPosition; // Use Position DTO
+    private SelectionInfo selection; // Use SelectionInfo DTO
 
-    // Constructors
+    // No-arg constructor
     public UserInfo() {}
-
-    public UserInfo(String id, String name, String color, Position cursorPosition, OtSelectionDto selection) {
-        this.id = id;
-        this.name = name;
-        this.color = color;
-        this.cursorPosition = cursorPosition;
-        this.selection = selection;
-    }
 
     // Getters and Setters
     public String getId() {
@@ -51,11 +45,11 @@ public class UserInfo {
         this.cursorPosition = cursorPosition;
     }
 
-    public OtSelectionDto getSelection() {
+    public SelectionInfo getSelection() {
         return selection;
     }
 
-    public void setSelection(OtSelectionDto selection) {
+    public void setSelection(SelectionInfo selection) {
         this.selection = selection;
     }
 

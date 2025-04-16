@@ -1,6 +1,7 @@
 package com.codecafe.backend.dto;
 
 import java.util.Map;
+import java.util.List;
 
 // Data Transfer Object for user information sent to the frontend
 public class UserInfoDTO {
@@ -11,13 +12,13 @@ public class UserInfoDTO {
 
     private Map<String, Integer> cursorPosition;
 
-    private Object selection;
+    private SelectionInfo selection;
 
     // Constructors
     public UserInfoDTO() {
     }
 
-    public UserInfoDTO(String id, String name, String color, Map<String, Integer> cursorPosition, Object selection) {
+    public UserInfoDTO(String id, String name, String color, Map<String, Integer> cursorPosition, SelectionInfo selection) {
         this.id = id;
         this.name = name;
         this.color = color;
@@ -59,11 +60,22 @@ public class UserInfoDTO {
         this.cursorPosition = cursorPosition;
     }
 
-    public Object getSelection() {
+    public SelectionInfo getSelection() {
         return selection;
     }
 
-    public void setSelection(Object selection) {
+    public void setSelection(SelectionInfo selection) {
         this.selection = selection;
+    }
+
+    @Override
+    public String toString() {
+        return "UserInfoDTO{" +
+               "id='" + id + '\'' +
+               ", name='" + name + '\'' +
+               ", color='" + color + '\'' +
+               ", cursorPosition=" + cursorPosition +
+               ", selection=" + selection +
+               '}';
     }
 } 

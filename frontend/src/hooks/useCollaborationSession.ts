@@ -14,9 +14,7 @@ import {
   UseCollaborationSessionProps,
   UseCollaborationSessionReturn,
 } from "../types/props";
-import { editor as MonacoEditor } from "monaco-editor";
 
-// Define the structure expected by the /app/selection endpoint
 interface CursorMessage {
   documentId: string;
   sessionId: string;
@@ -75,7 +73,6 @@ export const useCollaborationSession = ({
 
   useEffect(() => {
     if (!isSessionActive || !sessionId || !activeFileId || !editorInstance) {
-      // Cleanup existing connection if conditions are not met
       if (stompClientRef.current?.connected) {
         stompClientRef.current.disconnect(() => {
           handleConnectionStatusChange(false);

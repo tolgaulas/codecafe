@@ -1,23 +1,16 @@
 package com.codecafe.backend.dto;
 
+// DTO matching the top-level structure sent to /app/selection
 public class CursorMessage {
-    // Renamed 'user' to 'userInfo' to avoid ambiguity with potential principal/user objects
-    private UserInfo userInfo;
-    // Keep documentId if cursors are document-specific, remove if session-wide
     private String documentId;
     private String sessionId;
+    private UserInfo userInfo; // Use UserInfo DTO
 
+    // No-arg constructor
+    public CursorMessage() {}
 
     // Getters and Setters
-    public UserInfo getUserInfo() {
-        return userInfo;
-    }
-
-    public void setUserInfo(UserInfo userInfo) {
-        this.userInfo = userInfo;
-    }
-
-     public String getDocumentId() {
+    public String getDocumentId() {
         return documentId;
     }
 
@@ -25,7 +18,7 @@ public class CursorMessage {
         this.documentId = documentId;
     }
 
-     public String getSessionId() {
+    public String getSessionId() {
         return sessionId;
     }
 
@@ -33,6 +26,13 @@ public class CursorMessage {
         this.sessionId = sessionId;
     }
 
+    public UserInfo getUserInfo() {
+        return userInfo;
+    }
+
+    public void setUserInfo(UserInfo userInfo) {
+        this.userInfo = userInfo;
+    }
 
     @Override
     public String toString() {

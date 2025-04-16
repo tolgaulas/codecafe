@@ -1,6 +1,10 @@
 package com.codecafe.backend.service;
 
 import com.codecafe.backend.dto.UserInfoDTO;
+import com.codecafe.backend.dto.SelectionInfo;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.HashOperations;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -11,107 +15,109 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.Set;
+import java.util.logging.Level;
 
 @Service
 public class SessionRegistryService {
 
     private static final Logger logger = Logger.getLogger(SessionRegistryService.class.getName());
+    private static final String SESSION_USERS_KEY_PREFIX = "session:users:";
+    private static final long SESSION_EXPIRY_MINUTES = 60; // Example: Expire inactive sessions after 60 minutes
 
-    private final Map<String, Map<String, Map<String, UserInfoDTO>>> activeSessions = new ConcurrentHashMap<>();
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final HashOperations<String, String, UserInfoDTO> hashOperations; // Specific HashOperations
 
-    /**
-     * Gets or creates the map of documents for a given session ID.
-     * Must be called within a locked context if external locking is used.
-     */
-    private Map<String, Map<String, UserInfoDTO>> getOrCreateSessionMap(String sessionId) {
-        return activeSessions.computeIfAbsent(sessionId, k -> {
-            logger.info("Creating new session map for session ID: " + sessionId);
-            return new ConcurrentHashMap<>();
-        });
+    @Autowired
+    public SessionRegistryService(RedisTemplate<String, Object> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+        this.hashOperations = redisTemplate.opsForHash();
+    }
+
+    // Helper method to construct the Redis key for a session/document
+    private String getSessionDocumentKey(String sessionId, String documentId) {
+        return SESSION_USERS_KEY_PREFIX + sessionId + ":" + documentId;
+    }
+
+    // Method to touch a key (update its TTL)
+    private void touchKey(String key) {
+        redisTemplate.expire(key, SESSION_EXPIRY_MINUTES, TimeUnit.MINUTES);
     }
 
     /**
-     * Gets or creates the map of users for a given document ID within a specific session.
-     * Must be called within a locked context if external locking is used.
-     */
-    private Map<String, UserInfoDTO> getOrCreateDocumentUserMap(String sessionId, String documentId) {
-        Map<String, Map<String, UserInfoDTO>> sessionMap = getOrCreateSessionMap(sessionId);
-        return sessionMap.computeIfAbsent(documentId, k -> {
-            logger.info(String.format("[Session: %s] Creating new document user map for document ID: %s", sessionId, documentId));
-            return new ConcurrentHashMap<>();
-        });
-    }
-
-    /**
-     * Adds or updates a user's information for a specific document within a specific session.
+     * Adds or updates a user's information for a specific document within a specific session in Redis.
+     * Also resets the TTL for the session/document key.
      * @param sessionId The ID of the session the user joined.
      * @param documentId The ID of the document the user joined.
      * @param userInfo The user's information.
      */
     public void userJoined(String sessionId, String documentId, UserInfoDTO userInfo) {
         if (sessionId == null || documentId == null || userInfo == null || userInfo.getId() == null) {
-             logger.warning("Attempted to add a user with null sessionId, documentId, info, or user ID.");
-             return;
+            logger.warning("Attempted to add a user with null sessionId, documentId, info, or user ID.");
+            return;
         }
-        Map<String, UserInfoDTO> userMap = getOrCreateDocumentUserMap(sessionId, documentId);
-        userMap.put(userInfo.getId(), userInfo);
-        logger.info(String.format("[Session: %s] User [%s] (%s) joined document [%s]", sessionId, userInfo.getId(), userInfo.getName(), documentId));
-        logSessionState(); // Log current state for debugging
+        String key = getSessionDocumentKey(sessionId, documentId);
+        String userId = userInfo.getId();
+
+        try {
+            hashOperations.put(key, userId, userInfo);
+            touchKey(key); // Update TTL on activity
+            logger.info(String.format("[Session: %s] User [%s] (%s) joined/updated in Redis for document [%s]. Key: %s",
+                    sessionId, userId, userInfo.getName(), documentId, key));
+        } catch (Exception e) {
+            logger.severe(String.format("Redis error adding user [%s] to key [%s]: %s", userId, key, e.getMessage()));
+            // Consider how to handle Redis errors - retry, log, etc.
+        }
+        // logSessionState(); // Logging Redis state might be verbose, adjust as needed
     }
 
     /**
-     * Removes a user from all document sessions they might be in across all sessions.
-     * This iterates through all sessions, which might be inefficient for large numbers of sessions.
-     * Consider modifying this if the WebSocket disconnect event can provide the session ID.
+     * Removes a user from a specific document session they were in.
+     * This version requires sessionId and documentId, unlike the previous version.
+     * The disconnect event handler should ideally provide this context.
+     * If not possible, the `userLeft(String userId)` method needs a different approach (scanning keys).
      *
+     * @param sessionId The ID of the session the user left.
+     * @param documentId The ID of the document the user left.
      * @param userId The ID of the user who disconnected.
-     * @return A list of Map.Entry where key is sessionId and value is documentId that the user left.
+     * @return true if the user was found and removed, false otherwise.
      */
-    public List<Map.Entry<String, String>> userLeft(String userId) {
-         if (userId == null) {
-             logger.warning("Attempted to remove a user with null ID.");
-             return Collections.emptyList();
-         }
-        // List to store affected session/document pairs
-        List<Map.Entry<String, String>> affectedEntries = new ArrayList<>();
-
-        activeSessions.forEach((sessionId, documentMap) -> {
-            List<String> documentsToRemoveFromSession = new ArrayList<>();
-            documentMap.forEach((documentId, users) -> {
-                if (users.remove(userId) != null) {
-                    logger.info(String.format("[Session: %s] User [%s] left document [%s]", sessionId, userId, documentId));
-                    affectedEntries.add(new AbstractMap.SimpleEntry<>(sessionId, documentId)); 
-                    // Check if the user map for the document is now empty
-                    if (users.isEmpty()) {
-                        documentsToRemoveFromSession.add(documentId); 
-                        logger.info(String.format("[Session: %s] Document user map removed as it's empty: %s", sessionId, documentId));
-                    }
-                }
-            });
-            // Remove empty document user maps from the session map
-            documentsToRemoveFromSession.forEach(documentMap::remove);
-        });
-
-        // Remove empty session maps from the main map (after iterating documents)
-        List<String> sessionsToRemove = new ArrayList<>();
-        activeSessions.forEach((sessionId, documentMap) -> {
-            if (documentMap.isEmpty()) {
-                 sessionsToRemove.add(sessionId);
-                 logger.info(String.format("Session map removed as it's empty: %s", sessionId));
-            }
-        });
-        sessionsToRemove.forEach(activeSessions::remove);
-
-        if (!affectedEntries.isEmpty()) {
-            logSessionState(); 
-        } else {
-             logger.fine("Attempted to remove user [" + userId + "] but they were not found in any active session/document.");
+    public boolean userLeftDocument(String sessionId, String documentId, String userId) {
+        if (sessionId == null || documentId == null || userId == null) {
+            logger.warning("Attempted to remove a user with null sessionId, documentId, or userId.");
+            return false;
         }
-        return affectedEntries; 
+        String key = getSessionDocumentKey(sessionId, documentId);
+        boolean removed = false;
+        try {
+            if (hashOperations.delete(key, userId) > 0) {
+                logger.info(String.format("[Session: %s] User [%s] removed from Redis for document [%s]. Key: %s",
+                        sessionId, userId, documentId, key));
+                removed = true;
+                // Check if the hash is now empty and delete if necessary
+                if (hashOperations.size(key) == 0) {
+                    redisTemplate.delete(key);
+                    logger.info(String.format("[Session: %s] Redis key [%s] deleted as it became empty after user [%s] left.",
+                            sessionId, key, userId));
+                } else {
+                    // If others are still in, refresh TTL? Optional, depends on desired behavior
+                    touchKey(key);
+                }
+            } else {
+                logger.fine(String.format("[Session: %s] Attempted to remove user [%s] from key [%s], but they were not found.",
+                        sessionId, userId, key));
+            }
+        } catch (Exception e) {
+            logger.severe(String.format("Redis error removing user [%s] from key [%s]: %s", userId, key, e.getMessage()));
+        }
+        return removed;
     }
 
     /**
-     * Updates the cursor/selection state for an active user in a specific document within a specific session.
+     * Updates the cursor/selection state for an active user in Redis.
+     * Fetches the user, updates the DTO, and puts it back.
+     * Also resets the TTL for the session/document key.
      *
      * @param sessionId The session ID.
      * @param documentId The document ID.
@@ -119,34 +125,33 @@ public class SessionRegistryService {
      * @param cursorPosition The new cursor position (can be null).
      * @param selection The new selection (can be null).
      */
-    public void updateUserState(String sessionId, String documentId, String userId, Map<String, Integer> cursorPosition, Object selection) {
-         if (sessionId == null || documentId == null || userId == null) {
-             logger.warning("Cannot update state with null sessionId, documentId or userId.");
-             return;
-         }
-        Map<String, Map<String, UserInfoDTO>> sessionMap = activeSessions.get(sessionId);
-        if (sessionMap != null) {
-            Map<String, UserInfoDTO> usersInDocument = sessionMap.get(documentId);
-            if (usersInDocument != null) {
-                UserInfoDTO user = usersInDocument.get(userId);
-                if (user != null) {
-                    user.setCursorPosition(cursorPosition);
-                    user.setSelection(selection);
-                    // No need to put back in map as we modified the object reference
-                    logger.finest(String.format("[Session: %s] Updated state for user [%s] in doc [%s]", sessionId, userId, documentId));
-                } else {
-                    logger.warning(String.format("[Session: %s] Cannot update state for user [%s], not found in doc [%s]", sessionId, userId, documentId));
-                }
+    public void updateUserState(String sessionId, String documentId, String userId, Map<String, Integer> cursorPosition, SelectionInfo selection) {
+        if (sessionId == null || documentId == null || userId == null) {
+            logger.warning("Cannot update state with null sessionId, documentId or userId.");
+            return;
+        }
+        String key = getSessionDocumentKey(sessionId, documentId);
+        try {
+            UserInfoDTO user = hashOperations.get(key, userId);
+            if (user != null) {
+                user.setCursorPosition(cursorPosition);
+                user.setSelection(selection);
+                hashOperations.put(key, userId, user); // Put the updated object back
+                touchKey(key); // Update TTL on activity
+                logger.finest(String.format("[Session: %s] Updated Redis state for user [%s] in doc [%s]. Key: %s",
+                        sessionId, userId, documentId, key));
             } else {
-                logger.warning(String.format("[Session: %s] Cannot update state for user [%s], doc [%s] not found in session map", sessionId, userId, documentId));
+                logger.warning(String.format("[Session: %s] Cannot update state for user [%s], not found in Redis key [%s]",
+                        sessionId, userId, key));
+                // Optionally, handle case where user isn't found - maybe they disconnected unexpectedly?
             }
-        } else {
-            logger.warning(String.format("Cannot update state for user [%s], session [%s] not found in active sessions", userId, sessionId));
+        } catch (Exception e) {
+            logger.severe(String.format("Redis error updating state for user [%s] in key [%s]: %s", userId, key, e.getMessage()));
         }
     }
 
     /**
-     * Gets the list of active participants (UserInfoDTO) for a specific document within a specific session,
+     * Gets the list of active participants (UserInfoDTO) from Redis for a specific document/session,
      * excluding the user making the request.
      *
      * @param sessionId The ID of the session.
@@ -155,36 +160,126 @@ public class SessionRegistryService {
      * @return A List of UserInfoDTO for other active participants, or an empty list.
      */
     public List<UserInfoDTO> getActiveParticipantsForDocument(String sessionId, String documentId, String requestingUserId) {
-         if (sessionId == null || documentId == null) {
-             logger.warning("Cannot get participants for null sessionId or documentId.");
-             return Collections.emptyList();
-         }
-        Map<String, Map<String, UserInfoDTO>> sessionMap = activeSessions.get(sessionId);
-        if (sessionMap == null) {
-            logger.fine("No active session found for session ID [" + sessionId + "]");
+        if (sessionId == null || documentId == null) {
+            logger.warning("Cannot get participants for null sessionId or documentId.");
             return Collections.emptyList();
         }
+        String key = getSessionDocumentKey(sessionId, documentId);
+        List<UserInfoDTO> participants = Collections.emptyList();
+        try {
+            // Check if key exists before fetching all values
+             if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+                 Map<String, UserInfoDTO> usersInDocument = hashOperations.entries(key);
+                 logger.info(String.format("[Session: %s, Doc: %s] Fetched %d entries from Redis hash key [%s]. Keys: %s",
+                        sessionId, documentId, usersInDocument != null ? usersInDocument.size() : 0, key, usersInDocument != null ? usersInDocument.keySet() : "null"));
 
-        Map<String, UserInfoDTO> usersInDocument = sessionMap.get(documentId);
-        if (usersInDocument == null || usersInDocument.isEmpty()) {
-            logger.fine(String.format("[Session: %s] No active users found for document [%s]", sessionId, documentId));
-            return Collections.emptyList();
+                 if (usersInDocument != null && !usersInDocument.isEmpty()) {
+                     try {
+                         participants = usersInDocument.entrySet().stream()
+                                .filter(entry -> requestingUserId == null || !entry.getKey().equals(requestingUserId))
+                                .map(Map.Entry::getValue)
+                                .collect(Collectors.toList());
+
+                         logger.info(String.format("[Session: %s, Doc: %s] Successfully mapped entries to %d participants (excluding user [%s]). Key: %s",
+                                 sessionId, documentId, participants.size(), requestingUserId, key));
+                     } catch (Exception e) {
+                         logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Error during stream processing of Redis entries for key [%s]: %s",
+                                sessionId, documentId, key, e.getMessage()), e);
+                         participants = Collections.emptyList(); // Return empty list on processing error
+                     }
+                     touchKey(key); // Refresh TTL when accessed
+                 } else {
+                     logger.fine(String.format("Redis key not found for session/document: %s", key));
+                 }
+             } else {
+                 logger.fine(String.format("Redis key not found for session/document: %s", key));
+             }
+        } catch (Exception e) {
+            logger.severe(String.format("Redis error getting participants for key [%s]: %s", key, e.getMessage()));
+            // Return empty list on error
+            participants = Collections.emptyList();
         }
-
-        // Filter out the requesting user (if provided) and collect remaining users
-        List<UserInfoDTO> participants = usersInDocument.entrySet().stream()
-                .filter(entry -> requestingUserId == null || !entry.getKey().equals(requestingUserId)) // Exclude requester only if ID is provided
-                .map(Map.Entry::getValue)
-                .collect(Collectors.toList());
-
-        logger.info(String.format("[Session: %s] Found %d participants for document [%s] (excluding user [%s])", sessionId, participants.size(), documentId, requestingUserId));
+        logger.info(String.format("[Session: %s, Doc: %s] Returning %d participants.", sessionId, documentId, participants.size()));
         return participants;
     }
 
-    // Helper method for debugging
-    private void logSessionState() {
-        if (logger.isLoggable(java.util.logging.Level.FINE)) {
-             logger.fine("Current Session Registry State: " + activeSessions.toString());
+    /**
+     * Removes a user from ALL sessions/documents they might be in.
+     * WARNING: This requires scanning keys and can be inefficient on large Redis instances.
+     * Prefer `userLeftDocument` if possible.
+     *
+     * @param userId The ID of the user who disconnected.
+     * @return A list of Map.Entry where key is sessionId and value is documentId that the user left.
+     */
+    public List<Map.Entry<String, String>> userLeftAllSessions(String userId) {
+        if (userId == null) {
+            logger.warning("Attempted to remove a user with null ID.");
+            return Collections.emptyList();
         }
+        List<Map.Entry<String, String>> affectedEntries = new ArrayList<>();
+        String pattern = SESSION_USERS_KEY_PREFIX + "*"; // Pattern to scan session keys
+
+        logger.info(String.format("Scanning Redis keys with pattern '%s' to remove user [%s]...", pattern, userId));
+
+        try {
+            // Note: SCAN is preferred over KEYS in production for performance reasons,
+            // but RedisTemplate doesn't expose SCAN directly easily for this use case.
+            // Consider using Jedis/Lettuce directly or a lua script if performance becomes an issue.
+            Set<String> keys = redisTemplate.keys(pattern);
+            if (keys != null) {
+                for (String key : keys) {
+                    try {
+                        // Extract sessionId and documentId from the key (simple parsing, adjust if key format changes)
+                        String[] parts = key.substring(SESSION_USERS_KEY_PREFIX.length()).split(":", 2);
+                        if (parts.length == 2) {
+                            String sessionId = parts[0];
+                            String documentId = parts[1];
+
+                            if (hashOperations.delete(key, userId) > 0) {
+                                logger.info(String.format("[Session: %s] User [%s] removed from Redis document [%s]. Key: %s",
+                                        sessionId, userId, documentId, key));
+                                affectedEntries.add(new AbstractMap.SimpleEntry<>(sessionId, documentId));
+
+                                // Check if the hash is now empty and delete if necessary
+                                if (hashOperations.size(key) == 0) {
+                                    redisTemplate.delete(key);
+                                    logger.info(String.format("[Session: %s] Redis key [%s] deleted as it became empty after user [%s] left.",
+                                            sessionId, key, userId));
+                                }
+                            }
+                        } else {
+                             logger.warning("Could not parse sessionId and documentId from key: " + key);
+                        }
+                    } catch (Exception e) {
+                         logger.severe(String.format("Error processing key [%s] while removing user [%s]: %s", key, userId, e.getMessage()));
+                    }
+                }
+            } else {
+                 logger.warning("Redis keys command returned null for pattern: " + pattern);
+            }
+        } catch (Exception e) {
+            logger.severe(String.format("Redis error during key scanning for user [%s] removal: %s", userId, e.getMessage()));
+        }
+
+        if (affectedEntries.isEmpty()) {
+            logger.fine("User [" + userId + "] was not found in any active Redis session/document key during scan.");
+        } else {
+             logger.info(String.format("User [%s] removed from %d session/document entries in Redis.", userId, affectedEntries.size()));
+        }
+
+        return affectedEntries;
     }
+
+    // Remove or comment out the old helper methods and logSessionState if they aren't needed
+    /*
+    private Map<String, Map<String, UserInfoDTO>> getOrCreateSessionMap(String sessionId) { ... }
+    private Map<String, UserInfoDTO> getOrCreateDocumentUserMap(String sessionId, String documentId) { ... }
+    private void logSessionState() { ... }
+    */
+
+    // Note: The original userLeft(String userId) method logic is replaced by userLeftAllSessions(String userId)
+    // and userLeftDocument(String sessionId, String documentId, String userId).
+    // You need to update the callers (e.g., WebSocketEventListener) to use the appropriate method.
+    // If the disconnect event listener CAN get sessionId and documentId, use userLeftDocument.
+    // If it ONLY gets userId, you MUST use userLeftAllSessions, but be aware of potential performance impacts.
 }

@@ -283,8 +283,8 @@ const App = () => {
                 partialUserUpdate
               );
               // Optionally push the partial user if needed:
-              // usersForDoc.push(partialUserUpdate as RemoteUser); // Cast needed
-              // changed = true;
+              usersForDoc.push(partialUserUpdate as RemoteUser);
+              changed = true;
             }
           });
 
