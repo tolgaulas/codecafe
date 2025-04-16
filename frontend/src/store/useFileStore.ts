@@ -74,7 +74,10 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set({ activeFileId: fileId });
   },
 
-  openFile: (fileId, isSessionActive) => {
+  openFile: (
+    fileId
+    //  isSessionActive
+  ) => {
     const fileData = MOCK_FILES[fileId];
     if (!fileData) {
       console.error(`Cannot open file: ${fileId} not found in MOCK_FILES.`);
