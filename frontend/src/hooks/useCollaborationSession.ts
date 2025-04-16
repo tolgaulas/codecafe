@@ -112,11 +112,20 @@ export const useCollaborationSession = ({
     stompClient.debug = () => {}; // Suppress STOMP debug logs in console
     stompClientRef.current = stompClient;
 
-    if (editorInstance && !adapterRef.current) {
+    // Ensure the editor model is ready before creating the adapter
+    const editorModel = editorInstance?.getModel();
+    if (editorInstance && editorModel && !adapterRef.current) {
       adapterRef.current = new MonacoAdapter(editorInstance);
-    } else if (editorInstance && adapterRef.current) {
+    } else if (editorInstance && editorModel && adapterRef.current) {
       adapterRef.current.detach();
       adapterRef.current = new MonacoAdapter(editorInstance);
+    } else if (!editorModel) {
+      // Log a warning or handle the case where the model isn't ready yet
+      console.warn(
+        "[useCollaborationSession] Editor model not ready when trying to initialize adapter for file:",
+        activeFileId
+      );
+      // Potentially retry after a short delay or wait for an event indicating model readiness
     }
 
     stompClient.connect(
