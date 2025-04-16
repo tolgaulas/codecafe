@@ -42,15 +42,10 @@ public class WebSocketEventListener {
     public void handleWebSocketConnectListener(SessionConnectedEvent event) {
         MessageHeaders headers = event.getMessage().getHeaders();
         Principal userPrincipal = SimpMessageHeaderAccessor.getUser(headers);
-        String simpSessionId = SimpMessageHeaderAccessor.getSessionId(headers); // WebSocket session ID
+        String simpSessionId = SimpMessageHeaderAccessor.getSessionId(headers);
 
         if (userPrincipal != null) {
             log.info("WebSocket Connected: User={}, WebSocket SessionId={}", userPrincipal.getName(), simpSessionId);
-            // TODO: Implement logic to register user immediately upon connection if possible.
-            // This is challenging because we might not have sessionId, documentId, name, color yet.
-            // Option 1: Client sends a dedicated "join" message right after connect.
-            // Option 2: Try to extract info from initial CONNECT headers (if sent by client).
-            // Option 3: Defer full registration until first selection/activity message (current approach).
         } else {
              log.warn("WebSocket Connected: No user principal found. WebSocket SessionId={}", simpSessionId);
         }
@@ -65,8 +60,6 @@ public class WebSocketEventListener {
 
         if (userPrincipal != null) {
             log.info("WebSocket Subscribed: User={}, WebSocket SessionId={}, Destination={}", userPrincipal.getName(), simpSessionId, destination);
-            // TODO: If client sends session/document info during subscription, handle it here.
-            // This could be an alternative way to register the user early.
         } else {
             log.warn("WebSocket Subscribed: No user principal found. WebSocket SessionId={}, Destination={}", simpSessionId, destination);
         }
@@ -77,13 +70,12 @@ public class WebSocketEventListener {
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
          MessageHeaders headers = event.getMessage().getHeaders();
          Principal userPrincipal = SimpMessageHeaderAccessor.getUser(headers);
-         String simpSessionId = SimpMessageHeaderAccessor.getSessionId(headers); // WebSocket session ID
+         String simpSessionId = SimpMessageHeaderAccessor.getSessionId(headers); 
 
          if (userPrincipal != null) {
-            String userId = userPrincipal.getName(); // Assuming principal name is the unique userId
+            String userId = userPrincipal.getName(); 
             log.info("WebSocket Disconnected: User={}, WebSocket SessionId={}", userId, simpSessionId);
 
-            // Remove user from registry and get affected session/document pairs
             List<Map.Entry<String, String>> affectedEntries = sessionRegistryService.userLeft(userId);
 
             // Broadcast updated state for each affected document
@@ -101,18 +93,15 @@ public class WebSocketEventListener {
     }
 
     // Helper method to broadcast the full document state 
-    // (Adapted from EditorController)
     private void broadcastFullDocumentState(String sessionId, String documentId, String triggerUserId) {
          log.info("Broadcasting full document state for session [{}], doc [{}] triggered by user action (disconnect/activity) of user [{}]", sessionId, documentId, triggerUserId);
          try {
             // Fetch current participants (excluding no one, we want the full list)
             List<UserInfoDTO> participants = sessionRegistryService.getActiveParticipantsForDocument(sessionId, documentId, null);
             
-            // Fetch current document content and revision
             String currentContent = otService.getDocumentContent(sessionId, documentId);
             int currentRevision = otService.getRevision(sessionId, documentId);
 
-            // Construct the full state object
             DocumentState fullState = new DocumentState();
             fullState.setSessionId(sessionId); // Ensure this is set
             fullState.setDocumentId(documentId);

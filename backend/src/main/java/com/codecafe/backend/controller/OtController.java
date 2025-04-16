@@ -5,7 +5,6 @@ import com.codecafe.backend.dto.IncomingOperationPayload;
 import com.codecafe.backend.dto.TextOperation;
 import com.codecafe.backend.service.OtService;
 import com.codecafe.backend.dto.IncomingSelectionPayload;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
@@ -15,9 +14,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 import java.security.Principal;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
 import java.util.List;
 import java.util.Collections;
 import com.codecafe.backend.dto.UserInfoDTO;
@@ -62,12 +58,11 @@ public class OtController {
                  clientId, sessionId, documentId, payload.getRevision(), payload.getOperation()));
 
         try {
-            // Process the operation using the new service method
-            // Deserialize List<Object> into TextOperation using the constructor
+
             TextOperation operation = new TextOperation(payload.getOperation()); 
             TextOperation transformedOp = otService.receiveOperation(sessionId, documentId, payload.getRevision(), operation);
 
-            // 1. Broadcast the transformed operation
+            // Broadcast the transformed operation
             Map<String, Object> broadcastPayload = new HashMap<>();
             broadcastPayload.put("documentId", documentId);
             broadcastPayload.put("clientId", clientId);
@@ -79,17 +74,16 @@ public class OtController {
             messagingTemplate.convertAndSend(destination, broadcastPayload);
             logger.fine(String.format("Broadcasted transformed op from client [%s] for session [%s], doc [%s] to %s", clientId, sessionId, documentId, destination));
 
-            // 2. Send ACK back to the original sender ONLY
+            // Send ACK back to the original sender ONLY
             String ackDestination = "/topic/ack/" + clientId;
             messagingTemplate.convertAndSend(ackDestination, "ack");
             logger.fine("Sent ACK to client [" + clientId + "] at " + ackDestination);
 
         } catch (IllegalArgumentException e) {
             logger.warning(String.format("Error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
-            // Optionally send an error message back to the client
+            // I might want to send an error message back to the client
         } catch (Exception e) {
             logger.severe(String.format("Unexpected error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
-            // Handle unexpected errors
         }
     }
 
@@ -101,7 +95,6 @@ public class OtController {
      * @param headerAccessor Accessor for STOMP headers.
      * @param principal Optional principal.
      */
-    // @MessageMapping("/selection") // Removed mapping to resolve conflict with EditorController
     public void handleSelection(@Payload IncomingSelectionPayload payload,
                                 SimpMessageHeaderAccessor headerAccessor,
                                 Principal principal) {
@@ -138,19 +131,13 @@ public class OtController {
         String documentId = payload.get("documentId");
         String sessionId = payload.get("sessionId");
 
-        // --- Determine Requesting User ID (Placeholder) ---
         String requestingUserId = null;
         if (principal != null) {
-            // Assuming principal.getName() corresponds to the User ID used elsewhere (e.g., clientId)
             requestingUserId = principal.getName();
             logger.info("Identified requesting user ID: " + requestingUserId);
         } else {
-            // Fallback or error if principal is needed but missing
-            // This might happen depending on WebSocket security configuration
             logger.warning("Principal not available for get-document-state request. Cannot exclude requester from participant list.");
-            // Decide how to handle this - maybe still fetch all participants?
         }
-        // ---------------------------------------------------
 
         if (documentId == null || sessionId == null) {
             logger.warning("Received get-document-state request without documentId or sessionId. Ignoring.");
@@ -159,34 +146,28 @@ public class OtController {
 
         logger.info("Received request for document state for session [" + sessionId + "], doc [" + documentId + "] from user [" + (requestingUserId != null ? requestingUserId : "unknown") + "]");
 
-        // --- Fetch Participants (Placeholder) ---
-        List<UserInfoDTO> participants = Collections.emptyList(); // Default to empty list
+        // Fetch Participants
+        List<UserInfoDTO> participants = Collections.emptyList(); 
         try {
-            // Pass sessionId to getActiveParticipantsForDocument
             participants = sessionRegistryService.getActiveParticipantsForDocument(sessionId, documentId, requestingUserId);
             logger.info(String.format("Fetched %d participants for session [%s], document [%s] (excluding user [%s])", participants.size(), sessionId, documentId, requestingUserId));
 
         } catch (Exception e) {
             logger.severe(String.format("Error fetching participants for session [%s], document [%s]: %s", sessionId, documentId, e.getMessage()));
         }
-        // ---------------------------------------
 
-
-        // --- Use DocumentState DTO for the response ---
         DocumentState stateResponse = new DocumentState();
         stateResponse.setDocumentId(documentId);
         stateResponse.setDocument(otService.getDocumentContent(sessionId, documentId));
         stateResponse.setRevision(otService.getRevision(sessionId, documentId));
-        // --- Set the fetched participants list --- 
-        stateResponse.setParticipants(participants); // Uncommented
-        // -----------------------------------------
+
+        stateResponse.setParticipants(participants); 
 
 
         logger.info("Sending document state: Revision=" + stateResponse.getRevision() +
-                    ", Participants Count=" + stateResponse.getParticipants().size() + // Use getter
+                    ", Participants Count=" + stateResponse.getParticipants().size() + 
                     " for doc [" + documentId + "]");
 
-        // Send state back to the specific session and document topic
         String destination = String.format("/topic/sessions/%s/state/document/%s", sessionId, documentId);
         messagingTemplate.convertAndSend(destination, stateResponse);
         logger.info(String.format("Sent document state for session [%s], doc [%s] to %s", sessionId, documentId, destination));

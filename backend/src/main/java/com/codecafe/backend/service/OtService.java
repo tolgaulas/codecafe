@@ -16,19 +16,16 @@ import java.util.logging.Level;
 @Service
 public class OtService {
     private static final Logger logger = Logger.getLogger(OtService.class.getName());
-    private static final int MAX_HISTORY_SIZE_PER_DOC = 5000; // Max history size per session/document
+    private static final int MAX_HISTORY_SIZE_PER_DOC = 5000; 
 
     // Inner class to hold state for a single document within a session
     private static class DocumentState {
         String content = "";
         final List<TextOperation> operationHistory = new ArrayList<>();
-        // Optional: Could add per-document lock here if needed later
     }
 
-    // Map structure: Map<sessionId, Map<documentId, DocumentState>>
     private final Map<String, Map<String, DocumentState>> sessionDocuments = new ConcurrentHashMap<>();
 
-    // Global lock for managing the sessionDocuments map structure safely (consider finer locks later)
     private final ReentrantLock serviceLock = new ReentrantLock();
 
     /**
@@ -36,12 +33,10 @@ public class OtService {
      * Must be called within a locked context (e.g., serviceLock).
      */
     private DocumentState getOrCreateDocumentState(String sessionId, String documentId) {
-        // Get or create the inner map for the session
-        Map<String, DocumentState> documentMap = sessionDocuments.computeIfAbsent(sessionId, k -> {
+        Map<String, DocumentState> documentMap = sessionDocuments.computeIfAbsent(sessionId, _ -> {
             logger.info(String.format("Creating new document map for session ID: %s", sessionId));
             return new ConcurrentHashMap<>();
         });
-        // Get or create the DocumentState within the session's map
         return documentMap.computeIfAbsent(documentId, k -> {
             logger.info(String.format("[Session: %s] Creating new document state for ID: %s", sessionId, documentId));
             return new DocumentState();
@@ -99,18 +94,17 @@ public class OtService {
             logger.info(String.format("[Session: %s, Doc: %s] Received op based on client rev %d (Server rev: %d). Op: %s",
                     sessionId, documentId, clientRevision, serverRevision, operation));
 
-            // --- Validate Revision ---
             if (clientRevision < 0 || clientRevision > serverRevision) {
                 throw new IllegalArgumentException(
                         String.format("[Session: %s, Doc: %s] Invalid client revision: %d. Server revision is: %d.", sessionId, documentId, clientRevision, serverRevision)
                 );
             }
 
-            // --- Find Concurrent Operations ---
+            // Find Concurrent Operations
             List<TextOperation> concurrentOps = state.operationHistory.subList(clientRevision, serverRevision);
             logger.fine(String.format("[Session: %s, Doc: %s] Found %d concurrent operations to transform against.", sessionId, documentId, concurrentOps.size()));
 
-            // --- Transform Operation ---
+            // Transform Operation
             TextOperation transformedOp = operation;
             for (int i = 0; i < concurrentOps.size(); i++) {
                 TextOperation concurrentOp = concurrentOps.get(i);
@@ -126,7 +120,7 @@ public class OtService {
             }
             logger.fine(String.format("[Session: %s, Doc: %s] Final transformed operation: %s", sessionId, documentId, transformedOp));
 
-            // --- Apply Transformed Operation ---
+            // Apply Transformed Operation
             try {
                 logger.info(String.format("[Session: %s, Doc: %s] Attempting to apply op [Rev %d]: %s to doc state (length %d): '%s'",
                          sessionId, documentId, state.operationHistory.size(), transformedOp, state.content.length(), state.content));
@@ -138,14 +132,13 @@ public class OtService {
                  throw new IllegalArgumentException("Apply failed: " + e.getMessage(), e);
             }
 
-            // --- Add to History ---
+            // Add to History
             state.operationHistory.add(transformedOp);
             logger.fine(String.format("[Session: %s, Doc: %s] Added transformed op to history. New server revision: %d", sessionId, documentId, state.operationHistory.size()));
 
-            // --- Prune History (Per Session/Document) ---
+            // Prune History
             pruneHistory(state, sessionId, documentId);
 
-            // Return the transformed operation for broadcasting
             return transformedOp;
 
         } finally {
@@ -193,7 +186,7 @@ public class OtService {
         try {
             Map<String, DocumentState> documentMap = sessionDocuments.get(sessionId);
             if (documentMap != null) {
-                DocumentState state = documentMap.remove(documentId); // Remove from inner map
+                DocumentState state = documentMap.remove(documentId);
                 if (state != null) {
                     logger.info(String.format("[Session: %s, Doc: %s] Document state has been reset and removed.", sessionId, documentId));
                     // If the inner map becomes empty, remove the session entry
@@ -258,7 +251,7 @@ public class OtService {
                     return new ArrayList<>(state.operationHistory);
                 }
             }
-            return Collections.emptyList(); // Return empty list if session or document doesn't exist
+            return Collections.emptyList();
         } finally {
             serviceLock.unlock();
         }

@@ -10,9 +10,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOrigins("*") // Allow requests from any origin
+                .allowedOrigins("https://codecafe.app", "http://localhost:5173") // Allow deployed frontend and local dev (Vite)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
-                // Note: allowCredentials(true) is removed as it's not compatible with allowedOrigins("*")
     }
 }

@@ -1,4 +1,3 @@
-// TODO: Adjust package to match your project structure if different
 package com.codecafe.backend.util;
 
 import com.codecafe.backend.dto.TextOperation; // Use your actual DTO
@@ -111,23 +110,23 @@ class OtUtilsTest {
     void transformDeleteInsert() {
         // Base Doc: "HelloWorld" (length 10)
         TextOperation op1 = createOp().retain(2).delete(3).retain(5); // Base 10, Target 7. Delete "llo"
-        TextOperation op2 = createOp().retain(5).insert("XXX").retain(5); // Base 10, Target 13. Insert "XXX" at 5
+        TextOperation op2 = createOp().retain(5).insert("TEST").retain(5); // Base 10, Target 13. Insert "TEST" at 5
 
         // Pre-check base lengths
         assertEquals(10, op1.getBaseLength());
         assertEquals(10, op2.getBaseLength());
 
         // apply(S,A) = "HeWorld" (len 7)
-        // apply(S,B) = "HelloXXXWorld" (len 13)
+        // apply(S,B) = "HelloTESTWorld" (len 13)
 
         // B' to apply after A: Apply to "HeWorld". Original op2 inserted at index 5. Op1 deleted 3 chars before that (at index 2). New index is 5-3=2.
-        // B' = retain(2).insert("XXX").retain(5) -> Apply to "HeWorld". "HeXXXWorld" (len 10). Correct.
-        TextOperation expectedOp2Prime = createOp().retain(2).insert("XXX").retain(5);
+        // B' = retain(2).insert("TEST").retain(5) -> Apply to "HeWorld". "HeTESTWorld". Correct.
+        TextOperation expectedOp2Prime = createOp().retain(2).insert("TEST").retain(5);
 
-        // A' to apply after B: Apply to "HelloXXXWorld". Original op1 deleted 3 chars at index 2 ("llo"). Op2 inserted "XXX" after that. Deletion is unaffected.
-        // A' = retain(2).delete(3).retain(5 + 3) -> Need to retain over original chars + inserted chars. Retain 5 (World) + 3 (XXX) = 8.
-        // A' = retain(2).delete(3).retain(8) -> Apply to "HelloXXXWorld". "HeXXXWorld" (len 10). Correct.
-        TextOperation expectedOp1Prime = createOp().retain(2).delete(3).retain(8);
+        // A' to apply after B: Apply to "HelloTESTWorld". Original op1 deleted 3 chars at index 2 ("llo"). Op2 inserted "TEST" after that. Deletion is unaffected.
+        // A' = retain(2).delete(3).retain(5 + length("TEST")) -> Need to retain over original chars + inserted chars. Retain 5 (World) + 4 (TEST) = 9.
+        // A' = retain(2).delete(3).retain(9) -> Apply to "HelloTESTWorld". "HeTESTWorld". Correct.
+        TextOperation expectedOp1Prime = createOp().retain(2).delete(3).retain(9);
 
         List<TextOperation> result = OtUtils.transform(op1, op2);
 
@@ -139,7 +138,7 @@ class OtUtilsTest {
     @DisplayName("Transform: Insert vs Delete")
     void transformInsertDelete() {
         // Base Doc: "HelloWorld" (length 10)
-        TextOperation op1 = createOp().retain(5).insert("XXX").retain(5); // Base 10, Target 13. Insert "XXX" at 5
+        TextOperation op1 = createOp().retain(5).insert("TEST").retain(5); // Base 10, Target 13. Insert "TEST" at 5
         TextOperation op2 = createOp().retain(2).delete(3).retain(5); // Base 10, Target 7. Delete "llo"
 
         // Pre-check base lengths
@@ -147,17 +146,17 @@ class OtUtilsTest {
         assertEquals(10, op2.getBaseLength());
 
         // Symmetric to previous test
-        // apply(S,A) = "HelloXXXWorld" (len 13)
+        // apply(S,A) = "HelloTESTWorld"
         // apply(S,B) = "HeWorld" (len 7)
 
-        // A' to apply after B: Apply to "HeWorld". Original op1 inserted "XXX" at index 5. Op2 deleted 3 chars before that (at index 2). New insert index is 5-3=2.
-        // A' = retain(2).insert("XXX").retain(5) -> Apply to "HeWorld". "HeXXXWorld" (len 10). Correct.
-        TextOperation expectedOp1Prime = createOp().retain(2).insert("XXX").retain(5);
+        // A' to apply after B: Apply to "HeWorld". Original op1 inserted "TEST" at index 5. Op2 deleted 3 chars before that (at index 2). New insert index is 5-3=2.
+        // A' = retain(2).insert("TEST").retain(5) -> Apply to "HeWorld". "HeTESTWorld". Correct.
+        TextOperation expectedOp1Prime = createOp().retain(2).insert("TEST").retain(5);
 
-        // B' to apply after A: Apply to "HelloXXXWorld". Original op2 deleted 3 chars at index 2 ("llo"). Op1 inserted "XXX" after that. Deletion is unaffected.
-        // B' = retain(2).delete(3).retain(5 + 3) -> Retain over "World" + "XXX".
-        // B' = retain(2).delete(3).retain(8) -> Apply to "HelloXXXWorld". "HeXXXWorld" (len 10). Correct.
-        TextOperation expectedOp2Prime = createOp().retain(2).delete(3).retain(8);
+        // B' to apply after A: Apply to "HelloTESTWorld". Original op2 deleted 3 chars at index 2 ("llo"). Op1 inserted "TEST" after that. Deletion is unaffected.
+        // B' = retain(2).delete(3).retain(5 + length("TEST")) -> Retain over "World" + "TEST".
+        // B' = retain(2).delete(3).retain(9) -> Apply to "HelloTESTWorld". "HeTESTWorld". Correct.
+        TextOperation expectedOp2Prime = createOp().retain(2).delete(3).retain(9);
 
         List<TextOperation> result = OtUtils.transform(op1, op2);
 
@@ -240,23 +239,24 @@ class OtUtilsTest {
     @DisplayName("Transform: Insert at start vs Delete spanning start")
     void transformInsertStartDeleteSpanningStart() {
         // Base Doc: "ABCDE" (length 5)
-        TextOperation op1 = createOp().insert("XXX").retain(5); // Base 5, Target 8. Insert "XXX" at 0
+        TextOperation op1 = createOp().insert("TEST").retain(5); // Base 5, Target 8. Insert "TEST" at 0
         TextOperation op2 = createOp().delete(2).retain(3); // Base 5, Target 3. Delete "AB"
 
         // Pre-check base lengths
         assertEquals(5, op1.getBaseLength());
         assertEquals(5, op2.getBaseLength());
 
-        // apply(S, A): "XXXABCDE" (len 8)
+        // apply(S, A): "TESTABCDE"
         // apply(S, B): "CDE" (len 3)
 
-        // A' after B: Apply to "CDE". Original A inserted "XXX" at 0. B deleted chars before that. Still insert at 0.
-        // A' = insert("XXX").retain(3) -> Apply to "CDE". "XXXCDE" (len 6). Correct.
-        TextOperation expectedOp1Prime = createOp().insert("XXX").retain(3);
 
-        // B' after A: Apply to "XXXABCDE". Original B deleted 2 chars at index 0 ("AB"). A inserted "XXX" before that. Delete should happen after "XXX".
-        // B' = retain(3).delete(2).retain(3) -> Apply to "XXXABCDE". "XXXCDE" (len 6). Correct.
-        TextOperation expectedOp2Prime = createOp().retain(3).delete(2).retain(3);
+        // A' after B: Apply to "CDE". Original A inserted "TEST" at 0. B deleted chars before that. Still insert at 0.
+        // A' = insert("TEST").retain(3) -> Apply to "CDE". "TESTCDE". Correct.
+        TextOperation expectedOp1Prime = createOp().insert("TEST").retain(3);
+
+        // B' after A: Apply to "TESTABCDE". Original B deleted 2 chars at index 0 ("AB"). A inserted "TEST" before that. Delete should happen after "TEST".
+        // B' = retain(length("TEST")).delete(2).retain(3) -> Apply to "TESTABCDE". "TESTCDE". Correct.
+        TextOperation expectedOp2Prime = createOp().retain(4).delete(2).retain(3);
 
         List<TextOperation> result = OtUtils.transform(op1, op2);
 

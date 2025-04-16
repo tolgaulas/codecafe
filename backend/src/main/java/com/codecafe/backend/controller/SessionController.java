@@ -19,7 +19,7 @@ public class SessionController {
     private final OtService otService;
     private static final Logger logger = Logger.getLogger(SessionController.class.getName());
 
-    // In-memory storage for sessions (replace with database in production)
+    // TODO: In-memory storage for sessions (replace with database in production) IMPORTANT!!!
     private static final Map<String, SessionInfo> activeSessions = new ConcurrentHashMap<>();
 
     static class SessionInfo {
@@ -62,7 +62,6 @@ public class SessionController {
         
         logger.info("Created session: " + sessionId + " by " + creatorName);
         
-        // Return the session ID
         return ResponseEntity.ok(Map.of("sessionId", sessionId));
     }
 
@@ -85,20 +84,17 @@ public class SessionController {
 
         logger.info(String.format("Received request to set content for doc [%s] in session [%s]", payload.getDocumentId(), sessionId));
 
-        // Basic validation
         if (payload.getDocumentId() == null || payload.getDocumentId().isEmpty()) {
             logger.warning("Request to set document content is missing documentId.");
             return ResponseEntity.badRequest().build();
         }
 
-        // Check if session exists using the local map
         if (!activeSessions.containsKey(sessionId)) {
            logger.warning("Attempted to set document content for non-existent session: " + sessionId);
            return ResponseEntity.notFound().build();
         }
 
         try {
-            // Call OtService to set the initial content, NOW INCLUDING sessionId
             otService.setDocumentContent(sessionId, payload.getDocumentId(), payload.getContent());
             logger.info(String.format("Successfully set initial content for doc [%s] in session [%s]", payload.getDocumentId(), sessionId));
             return ResponseEntity.ok().build();

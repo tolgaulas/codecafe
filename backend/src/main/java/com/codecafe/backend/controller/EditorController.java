@@ -2,7 +2,6 @@ package com.codecafe.backend.controller;
 
 import com.codecafe.backend.dto.UserInfo;
 import com.codecafe.backend.dto.UserInfoDTO;
-import com.codecafe.backend.dto.TextOperation;
 import com.codecafe.backend.dto.CursorMessage;
 import com.codecafe.backend.dto.Position;
 import com.codecafe.backend.dto.DocumentState;
@@ -13,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.MessageMapping;
-import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -58,40 +56,40 @@ public class EditorController {
 
         if (sessionId == null || documentId == null || userId == null || userName == null || userColor == null) {
             log.warn("Invalid join payload received. Missing required fields. Payload: {}", payload);
-            // Optionally send an error back to the specific user?
+            
             return;
         }
 
-        // Create UserInfoDTO from payload
+        
         UserInfoDTO userInfoDTO = new UserInfoDTO();
         userInfoDTO.setId(userId);
         userInfoDTO.setName(userName);
         userInfoDTO.setColor(userColor);
-        // Initial join doesn't necessarily have cursor/selection
+        
         userInfoDTO.setCursorPosition(null); 
         userInfoDTO.setSelection(null);
 
         try {
-            // Register the user in the specific session/document
+            
             sessionRegistryService.userJoined(sessionId, documentId, userInfoDTO);
             log.info("User [{}] registered in session [{}], doc [{}] via /app/join", userId, sessionId, documentId);
 
-            // Immediately broadcast the updated full state
+            
             broadcastFullDocumentState(sessionId, documentId, userId); 
 
         } catch (Exception e) {
             log.error("Error processing join request for user [{}] in session [{}], doc [{}]: {}", 
                       userId, sessionId, documentId, e.getMessage(), e);
-            // Optionally send an error back?
+            
         }
     }
 
-    // Endpoint to receive cursor/selection data from a client.
+    
     @MessageMapping("/selection")
     public void handleSelectionUpdate(@Payload CursorMessage message,
                                       SimpMessageHeaderAccessor headerAccessor) {
 
-        // Extract fields and validate
+        
         String sessionId = message.getSessionId();
         String documentId = message.getDocumentId();
         UserInfo senderUserInfo = message.getUserInfo();
@@ -109,7 +107,7 @@ public class EditorController {
             userInfoDTO.setName(senderUserInfo.getName());
             userInfoDTO.setColor(senderUserInfo.getColor());
             
-            // Convert Position to Map<String, Integer>
+            
             Position cursorPosition = senderUserInfo.getCursorPosition();
             if (cursorPosition != null) {
                 Map<String, Integer> cursorPositionMap = new HashMap<>();
@@ -120,7 +118,7 @@ public class EditorController {
                 userInfoDTO.setCursorPosition(null);
             }
             
-            // Assuming UserInfo.getSelection() returns the correct type for UserInfoDTO.setSelection(Object)
+            
             userInfoDTO.setSelection(senderUserInfo.getSelection());
             sessionRegistryService.userJoined(sessionId, documentId, userInfoDTO);
             registryUpdated = true;
@@ -129,7 +127,7 @@ public class EditorController {
             log.error("[Session: {}] Error updating session registry for user [{}] in doc [{}]: {}", sessionId, senderClientId, documentId, e.getMessage(), e);
         }
 
-        // Construct session-specific broadcast topic
+        
         String selectionDestination = String.format("/topic/sessions/%s/selections/document/%s", sessionId, documentId);
 
         log.info("Attempting to broadcast selection for session '{}', doc '{}' from client '{}' to {}", sessionId, documentId, senderClientId, selectionDestination);
@@ -145,6 +143,15 @@ public class EditorController {
         }
     }
 
+    /**
+     * Broadcasts the full document state (content, revision, participants)
+     * to all clients subscribed to the specific session/document state topic.
+     * Typically called after a user joins, leaves, or a significant state change occurs.
+     *
+     * @param sessionId The ID of the session.
+     * @param documentId The ID of the document within the session.
+     * @param updatedByClientId The client ID that triggered this broadcast (used for logging).
+     */
     private void broadcastFullDocumentState(String sessionId, String documentId, String updatedByClientId) {
         log.info("Broadcasting full document state for session [{}], doc [{}] triggered by user [{}]", sessionId, documentId, updatedByClientId);
         try {

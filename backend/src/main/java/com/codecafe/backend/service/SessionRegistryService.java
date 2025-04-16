@@ -17,8 +17,6 @@ public class SessionRegistryService {
 
     private static final Logger logger = Logger.getLogger(SessionRegistryService.class.getName());
 
-    // Structure: Map<sessionId, Map<documentId, Map<userId, UserInfoDTO>>>
-    // Stores active users and their details for each document within each session
     private final Map<String, Map<String, Map<String, UserInfoDTO>>> activeSessions = new ConcurrentHashMap<>();
 
     /**
@@ -78,14 +76,14 @@ public class SessionRegistryService {
         List<Map.Entry<String, String>> affectedEntries = new ArrayList<>();
 
         activeSessions.forEach((sessionId, documentMap) -> {
-            List<String> documentsToRemoveFromSession = new ArrayList<>(); // Store keys to remove from inner map
+            List<String> documentsToRemoveFromSession = new ArrayList<>();
             documentMap.forEach((documentId, users) -> {
                 if (users.remove(userId) != null) {
                     logger.info(String.format("[Session: %s] User [%s] left document [%s]", sessionId, userId, documentId));
-                    affectedEntries.add(new AbstractMap.SimpleEntry<>(sessionId, documentId)); // Add to affected list
+                    affectedEntries.add(new AbstractMap.SimpleEntry<>(sessionId, documentId)); 
                     // Check if the user map for the document is now empty
                     if (users.isEmpty()) {
-                        documentsToRemoveFromSession.add(documentId); // Mark document user map for removal
+                        documentsToRemoveFromSession.add(documentId); 
                         logger.info(String.format("[Session: %s] Document user map removed as it's empty: %s", sessionId, documentId));
                     }
                 }
@@ -105,11 +103,11 @@ public class SessionRegistryService {
         sessionsToRemove.forEach(activeSessions::remove);
 
         if (!affectedEntries.isEmpty()) {
-            logSessionState(); // Log current state for debugging if changes were made
+            logSessionState(); 
         } else {
              logger.fine("Attempted to remove user [" + userId + "] but they were not found in any active session/document.");
         }
-        return affectedEntries; // Return the list of affected entries
+        return affectedEntries; 
     }
 
     /**
@@ -185,7 +183,6 @@ public class SessionRegistryService {
 
     // Helper method for debugging
     private void logSessionState() {
-        // Check log level to avoid performance impact of toString() on large maps
         if (logger.isLoggable(java.util.logging.Level.FINE)) {
              logger.fine("Current Session Registry State: " + activeSessions.toString());
         }

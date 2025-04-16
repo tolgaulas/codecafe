@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 
 @RestController
-@CrossOrigin(origins = "*") // Allow requests from your Vite dev server
 @RequestMapping("/api")
 public class CodeExecutionController {
     private final RestTemplate restTemplate;
@@ -23,7 +22,7 @@ public class CodeExecutionController {
         try {
             return restTemplate.postForObject(pistonApiUrl, request, String.class);
         } catch (Exception e) {
-            e.printStackTrace(); // Log the exception details for troubleshooting
+            e.printStackTrace(); 
             return "Error: " + e.getMessage();
         }
     }

@@ -1,28 +1,18 @@
 package com.codecafe.backend.dto;
 
-// Assuming UserInfoDTO exists or will be created
+
 import java.util.List;
-import com.codecafe.backend.dto.UserInfoDTO; // Import the newly created DTO
 
 public class DocumentState {
     private String documentId;
     private String document;
     private int revision;
     private String sessionId;
-    // private VersionVector versionVector; // Commented out/Removed if using simple revision
+
     private List<UserInfoDTO> participants;
 
     public DocumentState() {
     }
-
-    // Optional: Update constructor if needed
-    // public DocumentState(String documentId, String document, int revision, String sessionId, List<UserInfoDTO> participants) {
-    //     this.documentId = documentId;
-    //     this.document = document;
-    //     this.revision = revision;
-    //     this.sessionId = sessionId;
-    //     this.participants = participants;
-    // }
 
     public String getDocumentId() {
         return documentId;
@@ -63,12 +53,4 @@ public class DocumentState {
     public void setParticipants(List<UserInfoDTO> participants) {
         this.participants = participants;
     }
-
-    // public VersionVector getVersionVector() {
-    //     return versionVector;
-    // }
-
-    // public void setVersionVector(VersionVector versionVector) {
-    //     this.versionVector = versionVector;
-    // }
 }

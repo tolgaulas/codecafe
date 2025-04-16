@@ -8,13 +8,12 @@ public class UserInfoDTO {
     private String id;
     private String name;
     private String color;
-    // Representing cursor position, e.g., {"lineNumber": 10, "column": 5}
+
     private Map<String, Integer> cursorPosition;
-    // Representing OT selection JSON structure, e.g., {"ranges": [{"anchor": 1, "head": 10}]}
-    // Using Object allows flexibility for Jackson serialization
+
     private Object selection;
 
-    // Constructors (optional, but good practice)
+    // Constructors
     public UserInfoDTO() {
     }
 
