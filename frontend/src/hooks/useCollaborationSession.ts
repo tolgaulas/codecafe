@@ -222,49 +222,62 @@ export const useCollaborationSession = ({
           },
         };
 
-        // Subscribe to topics for the *current* active file
+        // Subscribe to topics for the *current* active file AND webview files
         const currentFileId = activeFileId;
         const newSubscriptions: Stomp.Subscription[] = [];
-        const currentWebViewSubscriptions = new Set<string>();
+        const filesToSubscribeState = new Set<string>([
+          currentFileId,
+          ...(webViewFileIds || []),
+        ]);
 
-        // Document State Handling (Only for Active File)
-        const stateTopic = `/topic/sessions/${sessionId}/state/document/${currentFileId}`;
-        newSubscriptions.push(
-          stompClient.subscribe(stateTopic, (message: any) => {
-            try {
-              const state = JSON.parse(message.body);
+        const handleIncomingState = (message: any) => {
+          try {
+            const state = JSON.parse(message.body);
+            const docId = state.documentId;
 
-              // Ignore state for files other than the one this hook instance is currently handling
-              if (state.documentId !== currentFileIdRef.current) {
-                return;
-              }
+            if (!docId) {
+              console.error(
+                "[State Handler] Invalid state message, missing documentId:",
+                message.body
+              );
+              return;
+            }
 
-              // Process participants first
-              let processedParticipants: RemoteUser[] = [];
-              if (state.participants && Array.isArray(state.participants)) {
-                processedParticipants = state.participants
-                  .map((p: any): RemoteUser | null => {
-                    if (!p || typeof p.id !== "string") return null;
-                    return {
-                      id: p.id,
-                      name: p.name || `User ${p.id.substring(0, 4)}`,
-                      color: p.color || "#CCCCCC",
-                      cursorPosition: p.cursorPosition || null,
-                      selection: p.selection
-                        ? OTSelection.fromJSON(p.selection)
-                        : null,
-                    };
-                  })
-                  .filter(
-                    (user: RemoteUser | null): user is RemoteUser =>
-                      user !== null && user.id !== userId
-                  );
-                onRemoteUsersUpdate(state.documentId, processedParticipants);
-              } else {
-                onRemoteUsersUpdate(state.documentId, []);
-              }
+            // Process participants for this document
+            let processedParticipants: RemoteUser[] = [];
+            if (state.participants && Array.isArray(state.participants)) {
+              processedParticipants = state.participants
+                .map((p: any): RemoteUser | null => {
+                  if (!p || typeof p.id !== "string") return null;
+                  return {
+                    id: p.id,
+                    name: p.name || `User ${p.id.substring(0, 4)}`,
+                    color: p.color || "#CCCCCC",
+                    cursorPosition: p.cursorPosition || null,
+                    selection: p.selection
+                      ? OTSelection.fromJSON(p.selection)
+                      : null,
+                  };
+                })
+                .filter(
+                  (user: RemoteUser | null): user is RemoteUser =>
+                    user !== null && user.id !== userId
+                );
+            }
+            // Always update participants state via callback
+            onRemoteUsersUpdate(docId, processedParticipants);
 
-              // Initialize OT Client only if it doesn't exist for this file connection
+            // Always notify App component of the received state to update Zustand
+            onStateReceived(
+              docId,
+              state.document,
+              state.revision,
+              processedParticipants
+            );
+
+            // --- OT Client Initialization & Editor Update (ONLY for the ACTIVE file) ---
+            if (docId === currentFileIdRef.current) {
+              // Initialize OT Client only if it doesn't exist for this specific file connection instance
               if (!clientRef.current) {
                 clientRef.current = new Client(
                   state.revision,
@@ -272,39 +285,38 @@ export const useCollaborationSession = ({
                   clientCallbacks
                 );
 
-                // Notify App component of initial state (updates Zustand store)
-                onStateReceived(
-                  state.documentId,
-                  state.document,
-                  state.revision,
-                  processedParticipants
-                );
-
-                // Directly update the Monaco Editor via the Adapter IF it's the active document
-                if (
-                  state.documentId === currentFileIdRef.current &&
-                  adapterRef.current &&
-                  editorInstance
-                ) {
+                // Directly update the Monaco Editor via the Adapter
+                if (adapterRef.current && editorInstance) {
                   const currentEditorValue = editorInstance
                     .getModel()
                     ?.getValue();
                   if (currentEditorValue !== state.document) {
                     adapterRef.current.ignoreNextChange = true; // Prevent loopback
                     try {
-                      editorInstance.setValue(state.document);
+                      // Use setValue to ensure entire content is replaced correctly
+                      editorInstance.getModel()?.setValue(state.document);
                     } catch (error) {
-                      adapterRef.current.ignoreNextChange = false;
+                      console.error(
+                        `[State Handler] Error setting editor value for ${docId}:`,
+                        error
+                      );
+                      adapterRef.current.ignoreNextChange = false; // Ensure flag is reset on error
+                    } finally {
+                      // It's generally safer to reset the flag shortly after the operation
+                      // Monaco might trigger changes asynchronously
+                      setTimeout(() => {
+                        if (adapterRef.current)
+                          adapterRef.current.ignoreNextChange = false;
+                      }, 0);
                     }
                   }
                 }
 
+                // Register OT callbacks *after* client is initialized and editor potentially updated
                 if (adapterRef.current) {
                   adapterRef.current.registerCallbacks({
                     change: (op: TextOperation) => {
-                      if (!clientRef.current) {
-                      }
-                      clientRef.current?.applyClient(op); // Send op to server state machine
+                      clientRef.current?.applyClient(op);
                     },
                     selectionChange: () => {
                       clientRef.current?.selectionChanged();
@@ -313,16 +325,31 @@ export const useCollaborationSession = ({
                       clientRef.current?.blur();
                     },
                   });
-                } else {
                 }
               } else {
-                onRemoteUsersUpdate(state.documentId, processedParticipants);
+                // If OT client *already* exists for this active file connection,
+                // we might still need to handle edge cases or reconciliation,
+                // but the primary state update happened via onStateReceived.
+                // For now, we only initialized the client once per connection instance.
               }
-            } catch (error) {
-              handleError(`Error processing document-state message: ${error}`);
             }
-          })
-        );
+            // --- End OT Client & Editor Handling ---
+          } catch (error) {
+            handleError(
+              `Error processing document-state message: ${
+                error instanceof Error ? error.message : String(error)
+              } Message: ${message.body}`
+            );
+          }
+        };
+
+        // Subscribe to state topics for all relevant files
+        filesToSubscribeState.forEach((fileId) => {
+          const stateTopic = `/topic/sessions/${sessionId}/state/document/${fileId}`;
+          newSubscriptions.push(
+            stompClient.subscribe(stateTopic, handleIncomingState)
+          );
+        });
 
         const handleIncomingOperation = (message: any) => {
           try {
@@ -392,10 +419,9 @@ export const useCollaborationSession = ({
             newSubscriptions.push(
               stompClient.subscribe(webViewOpTopic, handleIncomingOperation)
             );
-            currentWebViewSubscriptions.add(webViewFileId);
+            subscribedWebViewOpsRef.current.add(webViewFileId);
           }
         });
-        subscribedWebViewOpsRef.current = currentWebViewSubscriptions;
 
         // Selections Handling (Only for Active File)
         const selectionTopic = `/topic/sessions/${sessionId}/selections/document/${currentFileId}`;
@@ -451,12 +477,17 @@ export const useCollaborationSession = ({
         // Store subscriptions
         subscriptionsRef.current = newSubscriptions;
 
-        // Request initial state FOR THE CURRENT ACTIVE FILE
-        stompClient.send(
-          "/app/get-document-state",
-          {},
-          JSON.stringify({ documentId: currentFileId, sessionId: sessionId })
-        );
+        // Request initial state FOR THE CURRENT ACTIVE FILE and WEBVIEW FILES
+        const filesToRequest = new Set<string>([currentFileId]);
+        webViewFileIds?.forEach((id) => filesToRequest.add(id));
+
+        filesToRequest.forEach((fileId) => {
+          stompClient.send(
+            "/app/get-document-state",
+            {},
+            JSON.stringify({ documentId: fileId, sessionId: sessionId })
+          );
+        });
       }, // End onConnect
       (error: any) => {
         handleError(
