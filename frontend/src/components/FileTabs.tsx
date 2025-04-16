@@ -18,22 +18,21 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 
-import { SortableTab } from "./SortableTab"; 
+import { SortableTab } from "./SortableTab";
 import {
   languageIconMap,
   languageColorMap,
   defaultIconColor,
-} from "../constants/mappings"; 
+} from "../constants/mappings";
 import { VscFile } from "react-icons/vsc";
-import { useFileStore } from "../store/useFileStore"; 
+import { useFileStore } from "../store/useFileStore";
 
 interface FileTabsProps {
   // Refs
   tabContainerRef: React.RefObject<HTMLDivElement>;
 
   handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea, TODO: inlude this in the store
-  handleCloseTab: (fileIdToClose: string) => void; 
-
+  handleCloseTab: (fileIdToClose: string) => void;
 }
 
 const FileTabs: React.FC<FileTabsProps> = ({
@@ -61,9 +60,9 @@ const FileTabs: React.FC<FileTabsProps> = ({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Drag Handlers 
+  // Drag Handlers
   const handleDragStart = (event: DragStartEvent) => {
-    // console.log("Drag Start:", event); 
+    // console.log("Drag Start:", event);
     setDraggingId(event.active.id as string);
     setDropIndicator({ tabId: null, side: null });
   };
@@ -188,7 +187,7 @@ const FileTabs: React.FC<FileTabsProps> = ({
         const currentOldIndex = currentOpenFiles.findIndex(
           (f) => f.id === activeId
         );
-        if (currentOldIndex === -1) return currentOpenFiles; 
+        if (currentOldIndex === -1) return currentOpenFiles;
 
         const currentClampedNewIndex = Math.max(
           0,

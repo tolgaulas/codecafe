@@ -1,7 +1,18 @@
 import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { SortableTabProps } from "../types/editor";
 import clsx from "clsx";
+import { OpenFile } from "../types/editor";
+
+export interface SortableTabProps {
+  file: OpenFile;
+  activeFileId: string | null;
+  draggingId: string | null;
+  dropIndicatorSide: "left" | "right" | null;
+  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
+  iconColor: string;
+  onSwitchTab: (id: string) => void;
+  onCloseTab: (id: string, e: React.MouseEvent) => void;
+}
 
 export function SortableTab({
   file,

@@ -107,7 +107,7 @@ const CodeEditor = ({
     styleSheetRef.current = styleSheet;
 
     if (editorRef.current) {
-      updateDecorations();
+      updateDecorations(); // <-- Make sure this is called
     }
 
     return () => {

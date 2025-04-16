@@ -71,7 +71,7 @@ const MainEditorArea = ({
   isSessionActive,
   joinState,
 }: MainEditorAreaProps) => {
-  // --- Get state from Zustand Store ---
+  // Get state from Zustand Store
   const { openFiles, activeFileId } = useFileStore();
 
   return (

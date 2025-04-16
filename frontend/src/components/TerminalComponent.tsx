@@ -15,13 +15,13 @@ import { TerminalHandle } from "../types/editor";
 
 const TerminalComponent = forwardRef<TerminalHandle, TerminalComponentProps>(
   (_, ref) => {
-    // Refs
+    // REFS
     const terminalRef = useRef<HTMLDivElement>(null);
     const terminalInstance = useRef<Terminal | null>(null);
     const fitAddonRef = useRef<FitAddon | null>(null);
     const currentLineRef = useRef<string>("");
 
-    // Effects
+    // EFFECTS
     useEffect(() => {
       const term = new Terminal({
         cursorBlink: true,

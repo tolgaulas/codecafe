@@ -15,7 +15,7 @@ body,
 }
 
 .force-mount {
-  display: block !important; /* Overrides any `display: none` */
+  display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
   content-visibility: auto;
@@ -40,7 +40,7 @@ body,
   left: 0;
   right: 0;
   top: 100%;
-  height: 200px; /* adjust as needed */
+  height: 200px;
   background: inherit;
   pointer-events: none;
   user-select: none;

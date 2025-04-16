@@ -38,22 +38,9 @@ export type EditorLanguageKey =
 export type JoinStateType = "idle" | "prompting" | "joined";
 
 export interface OpenFile {
-  id: string; // Unique ID, e.g., file path or generated UUID
+  id: string;
   name: string;
-  language: EditorLanguageKey; // Use the broader editor language type
-}
-
-// --- Sortable Tab Component Props ---
-// Consider moving this to a Tabs component file later
-export interface SortableTabProps {
-  file: OpenFile;
-  activeFileId: string | null;
-  draggingId: string | null;
-  dropIndicatorSide: "left" | "right" | null;
-  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
-  iconColor: string;
-  onSwitchTab: (id: string) => void;
-  onCloseTab: (id: string, e: React.MouseEvent) => void;
+  language: EditorLanguageKey;
 }
 
 // Interface for methods exposed by TerminalComponent ref

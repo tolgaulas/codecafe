@@ -13,7 +13,6 @@ import {
   JoinStateType,
   TerminalHandle,
 } from "./types/editor";
-import { TextOperation } from "./ot/TextOperationSystem";
 
 import {
   ICON_BAR_WIDTH,
@@ -186,12 +185,10 @@ const App = () => {
         const currentActiveFileId = useFileStore.getState().activeFileId;
 
         if (fileId === currentActiveFileId) {
-          // Operation is for the currently active file in the editor
           const editor = editorInstanceRef.current;
           if (editor) {
             const currentEditorContent = editor.getModel()?.getValue();
             if (currentEditorContent !== undefined) {
-              // Get the current state from Zustand *without* subscribing
               const currentZustandContent =
                 useFileStore.getState().fileContents[fileId];
               // Update Zustand only if editor content is different
@@ -209,13 +206,11 @@ const App = () => {
             );
           }
         } else {
-          // Operation is for a background file (e.g., CSS/JS for WebView)
           const currentZustandContent =
             useFileStore.getState().fileContents[fileId];
           if (currentZustandContent !== undefined) {
             try {
-              // Use the operation object directly (it's already a TextOperation instance)
-              const operation = operationData; // Use the argument directly
+              const operation = operationData;
               const newContent = operation.apply(currentZustandContent);
               // Check if content actually changed before updating state
               if (newContent !== currentZustandContent) {
@@ -232,7 +227,7 @@ const App = () => {
             console.warn(
               `[App onOperationReceived] No content found in Zustand for background file ${fileId}. Cannot apply operation.`
             );
-            // Consider fetching state if missing, but for now, warn.
+            // Potentially fetch state here
           }
         }
       },
@@ -286,7 +281,6 @@ const App = () => {
   });
 
   // HANDLERS
-
   const handleEditorDidMount = (
     editorInstance: editor.IStandaloneCodeEditor
   ) => {
@@ -560,7 +554,6 @@ const App = () => {
   }, [remoteUsers, userId]);
 
   // EFFECTS
-
   useEffect(() => {
     document.addEventListener("pointerup", handleGlobalPointerUp);
     document.addEventListener("pointercancel", handleGlobalPointerUp);
@@ -594,7 +587,6 @@ const App = () => {
       }
       targetWidth = Math.max(targetWidth, MIN_JOIN_PANEL_WIDTH);
 
-      // Apply the calculated target width
       setExplorerPanelSize(targetWidth);
 
       // Clean the URL
@@ -628,7 +620,7 @@ const App = () => {
     return () => {
       positionListener?.dispose();
     };
-  }, [activeFileId]);
+  }, [activeFileId, editorInstanceRef.current]);
 
   // JSX
   return (

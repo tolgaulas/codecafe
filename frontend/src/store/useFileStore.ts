@@ -100,7 +100,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
       };
 
       // Initialize content for files that don't have content yet
-      // This works for both non-session and session modes
       if (state.fileContents[fileId] === undefined) {
         newStateUpdate.fileContents = {
           ...state.fileContents,
@@ -125,11 +124,9 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
 
     let nextActiveId: string | null = state.activeFileId;
 
-    // If the closed tab was the active one, determine the next active tab
     if (state.activeFileId === fileIdToClose) {
       if (state.openFiles.length > 1) {
         const newIndex = Math.max(0, indexToRemove - 1);
-        // Get the ID from the *current* openFiles list before filtering
         nextActiveId =
           state.openFiles[newIndex]?.id ?? state.openFiles[0]?.id ?? null;
         const remainingFiles = state.openFiles.filter(

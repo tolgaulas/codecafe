@@ -44,7 +44,6 @@ export const createCursorDecoration = (
     user.selection.ranges &&
     user.selection.ranges.length > 0
   ) {
-    // Infer from selection head if cursor position is missing
     const primaryRange = user.selection.ranges[0];
     if (primaryRange) {
       try {

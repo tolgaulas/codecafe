@@ -2,7 +2,7 @@ import { User } from "./user";
 // import { CursorData } from "./cursorData";
 import * as monaco from "monaco-editor";
 import { editor } from "monaco-editor";
-import { OTSelection, TextOperation } from "../ot/TextOperationSystem"; // Assuming OTSelection is defined here
+import { OTSelection, TextOperation } from "../ot/TextOperationSystem";
 
 export interface ShareProfileProps {
   onNameChange: (name: string) => void;
@@ -35,13 +35,12 @@ export interface SettingsWindowProps {
   onShowLineNumbersChange: (showLineNumbers: boolean) => void;
 }
 
-// Define the structure for user information used in collaborative features
 export interface UserInfo {
-  id: string; // Unique identifier for the user
-  name: string; // Display name of the user
-  color: string; // Color associated with the user's cursor/selection
-  cursorPosition: { lineNumber: number; column: number } | null; // Optional: current cursor position
-  selection: OTSelection | null; // Optional: current selection range
+  id: string;
+  name: string;
+  color: string;
+  cursorPosition: { lineNumber: number; column: number } | null;
+  selection: OTSelection | null;
 }
 
 // Define the structure for remote user data extending UserInfo
@@ -50,26 +49,26 @@ export interface RemoteUser extends UserInfo {}
 
 // Define the props for the CodeEditor component
 export interface CodeEditorProps {
-  code?: string; // Current code content
-  language?: string; // Language for syntax highlighting
-  theme?: string; // Editor theme name (e.g., 'vs-dark', 'codeCafeTheme')
-  fontSize?: number; // Font size (changed to number)
-  wordWrap?: boolean; // Enable/disable word wrapping
-  showLineNumbers?: boolean; // Show/hide line numbers
+  code?: string;
+  language?: string;
+  theme?: string;
+  fontSize?: number;
+  wordWrap?: boolean;
+  showLineNumbers?: boolean;
   onCodeChange: (
     value: string,
     changes: monaco.editor.IModelContentChange[]
-  ) => void; // Adjusted signature based on later component usage
-  onCursorPositionChange?: (lineNumber: number) => void; // Optional: Callback for cursor position change
+  ) => void;
+  onCursorPositionChange?: (lineNumber: number) => void;
   sendSelectionData?: (data: {
     cursorPosition: { lineNumber: number; column: number } | null;
     selection: OTSelection | null;
-  }) => void; // Optional: Callback to send cursor/selection data
-  users?: RemoteUser[]; // Optional: Array of remote users for displaying cursors/selections
-  onEditorDidMount?: (editor: editor.IStandaloneCodeEditor) => void; // Optional: Callback when editor instance is mounted
-  onLoadingChange?: (isLoading: boolean) => void; // Optional: Callback for loading state
-  localUserId?: string; // Optional: The ID of the local user, to prevent self-rendering of cursors
-  isSessionActive?: boolean; // Optional: Indicates if a collaboration session is active
+  }) => void;
+  users?: RemoteUser[];
+  onEditorDidMount?: (editor: editor.IStandaloneCodeEditor) => void;
+  onLoadingChange?: (isLoading: boolean) => void;
+  localUserId?: string;
+  isSessionActive?: boolean;
 }
 
 // Props for WebViewPanel component
@@ -77,12 +76,12 @@ export interface WebViewPanelProps {
   htmlContent: string;
   cssContent: string;
   jsContent: string;
-  onClose?: () => void; // Add the onClose prop
+  onClose?: () => void;
 }
 
 // Props for TerminalComponent component
 export interface TerminalComponentProps {
-  height: number; // Pass height for layout adjustments
+  height: number;
 }
 
 // Props for JoinSessionPanel component
@@ -123,7 +122,7 @@ export interface HeaderProps {
   setIsColorPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-// --- Status Bar Component Types ---
+// Status Bar Component Types
 export type ConnectionStatus = "connected" | "disconnected" | "connecting";
 
 export interface StatusBarProps {
@@ -165,14 +164,14 @@ export interface UseResizablePanelOptions {
   minSize?: number;
   maxSize?: number;
   direction: "horizontal-right" | "horizontal-left" | "vertical";
-  containerRef: React.RefObject<HTMLElement>; // Ref of the container the panel is within
-  panelRef?: React.RefObject<HTMLElement>; // Optional ref of the panel itself
-  handleRef?: React.RefObject<HTMLElement>; // Optional ref of the resize handle
+  containerRef: React.RefObject<HTMLElement>;
+  panelRef?: React.RefObject<HTMLElement>;
+  handleRef?: React.RefObject<HTMLElement>;
   onResizeStart?: () => void;
   onResizeEnd?: (finalSize: number) => void;
   onToggle?: (isOpen: boolean) => void;
-  collapseThreshold?: number; // Size below which the panel collapses
-  storageKey?: string; // Optional key to persist size in localStorage
+  collapseThreshold?: number;
+  storageKey?: string;
   defaultOpenSize?: number | (() => number);
 }
 
