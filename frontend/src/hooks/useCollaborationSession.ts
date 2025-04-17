@@ -443,12 +443,6 @@ export const useCollaborationSession = ({
                       ? OTSelection.fromJSON(remoteSelectionData)
                       : null;
 
-                  // Transform the *incoming* selection based on the *incoming* operation
-                  // This represents the selection *after* the operation is applied
-                  let transformedSelection = incomingSelection
-                    ? incomingSelection.transform(operationForClient)
-                    : null;
-
                   // Get cursor position
                   // If remoteCursorPosData exists, use it. Otherwise, try to derive from transformed selection.
                   let finalCursorPosition: {
@@ -458,15 +452,15 @@ export const useCollaborationSession = ({
 
                   if (
                     !finalCursorPosition &&
-                    transformedSelection &&
+                    incomingSelection &&
                     editorInstance
                   ) {
                     const model = editorInstance.getModel();
-                    if (model && transformedSelection.ranges.length > 0) {
+                    if (model && incomingSelection.ranges.length > 0) {
                       try {
                         const headPos = offsetToPosition(
                           model,
-                          transformedSelection.ranges[0].head
+                          incomingSelection.ranges[0].head
                         );
                         // We need to adjust the derived position based on the operation
                         // Let's try transforming the original cursor if available, otherwise use the transformed selection head
@@ -495,7 +489,7 @@ export const useCollaborationSession = ({
                   const updatedUserInfo: Partial<RemoteUser> = {
                     id: sourceClientId,
                     // Use transformed selection and final cursor position
-                    selection: transformedSelection,
+                    selection: incomingSelection,
                     cursorPosition: finalCursorPosition,
                   };
 
