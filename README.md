@@ -51,55 +51,35 @@ This enables truly fluid, Google Docs-like collaboration where everyone can type
 
 ## Quick Start
 
-**Prerequisites:**
-*   Git
-*   Java JDK (17 or higher recommended)
-*   Maven
-*   Node.js (18 or higher recommended)
-*   npm (9 or higher recommended)
-*   **Redis Server** (Installation methods vary - see [Redis Quick Start](https://redis.io/learn/howtos/quick-start))
+**Prerequisites:** Git, Java JDK 17+, Maven, Node.js 18+, npm 9+, Redis Server
 
-**Steps:**
+**Setup and Run:**
+```bash
+# Clone the repo
+git clone https://github.com/mrktsm/codecafe.git
+cd codecafe
 
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/mrktsm/codecafe.git
-    cd codecafe
-    ```
+# Start Redis (keep this running in a separate terminal or as a background service)
+redis-server &
 
-2.  **Start Redis:**
-    Ensure your Redis server is running. If installed locally, the command might be:
-    ```bash
-    redis-server
-    ```
-    (This command might differ based on your OS and installation method. If using Docker, start your Redis container.)
-    _Keep Redis running in a separate terminal window or run it as a background service._
+# Create backend config file with Redis connection
+mkdir -p backend/src/main/resources
+echo "spring.redis.host=localhost
+spring.redis.port=6379" > backend/src/main/resources/application.properties
 
-3.  **Run the Backend:**
-    *   Navigate to the backend directory.
-    *   *(Optional: Configure Redis connection in `backend/src/main/resources/application.properties` if not using `localhost:6379`)*
-    ```bash
-    cd backend
-    ./mvnw install
-    ./mvnw spring-boot:run
-    ```
-    The backend API will be available at `http://localhost:8080` (or configured port).
+# Run the backend
+cd backend
+./mvnw install
+./mvnw spring-boot:run &
 
-4.  **Run the Frontend:**
-    *   Navigate to the frontend directory.
-    *   **Create a `.env` file** in the `frontend` directory (`frontend/.env`).
-    *   Add the following line to the `.env` file, specifying the URL where your backend is running:
-        ```dotenv
-        VITE_BACKEND_URL=http://localhost:8080
-        ```
-        *(Adjust the URL if your backend is running on a different port or host).*
-    *   Now, install dependencies and start the development server:
-        ```bash
-        cd ../frontend
-        npm install
-        npm run dev
-        ```
-    Access the app in your browser, usually at `http://localhost:5173` (check terminal output for the exact URL).
+# Create frontend config and run
+cd ../frontend
+echo "VITE_BACKEND_URL=http://localhost:8080" > .env
+npm install
+npm run dev
+```
+
+Access the app in your browser at the URL shown in terminal (typically http://localhost:5173).
 
 ## On the Horizon
 
