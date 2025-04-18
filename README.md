@@ -51,21 +51,55 @@ This enables truly fluid, Google Docs-like collaboration where everyone can type
 
 ## Quick Start
 
-```bash
-# Clone the cosmic code
-git clone https://github.com/mrktsm/codecafe.git
-cd codecafe
+**Prerequisites:**
+*   Git
+*   Java JDK (17 or higher recommended)
+*   Maven
+*   Node.js (18 or higher recommended)
+*   npm (9 or higher recommended)
+*   **Redis Server** (Installation methods vary - see [Redis Quick Start](https://redis.io/learn/howtos/quick-start))
 
-# Ignite the backend furnace
-cd backend
-./mvnw install
-./mvnw spring-boot:run
+**Steps:**
 
-# Launch the frontend portal
-cd ../frontend
-npm install
-npm run dev
-```
+1.  **Clone the Repository:**
+    ```bash
+    git clone https://github.com/mrktsm/codecafe.git
+    cd codecafe
+    ```
+
+2.  **Start Redis:**
+    Ensure your Redis server is running. If installed locally, the command might be:
+    ```bash
+    redis-server
+    ```
+    (This command might differ based on your OS and installation method. If using Docker, start your Redis container.)
+    _Keep Redis running in a separate terminal window or run it as a background service._
+
+3.  **Run the Backend:**
+    *   Navigate to the backend directory.
+    *   *(Optional: Configure Redis connection in `backend/src/main/resources/application.properties` if not using `localhost:6379`)*
+    ```bash
+    cd backend
+    ./mvnw install
+    ./mvnw spring-boot:run
+    ```
+    The backend API will be available at `http://localhost:8080` (or configured port).
+
+4.  **Run the Frontend:**
+    *   Navigate to the frontend directory.
+    *   **Create a `.env` file** in the `frontend` directory (`frontend/.env`).
+    *   Add the following line to the `.env` file, specifying the URL where your backend is running:
+        ```dotenv
+        VITE_BACKEND_URL=http://localhost:8080
+        ```
+        *(Adjust the URL if your backend is running on a different port or host).*
+    *   Now, install dependencies and start the development server:
+        ```bash
+        cd ../frontend
+        npm install
+        npm run dev
+        ```
+    Access the app in your browser, usually at `http://localhost:5173` (check terminal output for the exact URL).
 
 ## On the Horizon
 
