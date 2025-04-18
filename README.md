@@ -64,7 +64,7 @@ cd backend
 # Launch the frontend portal
 cd ../frontend
 npm install
-npm start
+npm run dev
 ```
 
 ## On the Horizon
