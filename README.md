@@ -25,6 +25,26 @@ We saw coding classes juggling tools built for essays, not engineers. Existing s
 - **Backend:** Java Spring Boot
 - **Real-time Collaboration:** WebSocket + Operational Transformation (OT)
 
+## Real-Time Collaboration with Operational Transformation
+
+At the heart of CodeCafé's seamless collaborative editing is our custom-built Operational Transformation (OT) system, implemented on both the frontend and backend.
+
+### What is Operational Transformation?
+
+Operational Transformation is the technology that powers real-time collaborative editing in systems like Google Docs. It allows multiple users to simultaneously edit the same document by:
+
+1. Transforming operations (like insertions and deletions) to preserve user intentions
+2. Ensuring eventual consistency across all clients
+3. Resolving conflicts automatically when users edit the same regions of text
+
+Our implementation handles the complex synchronization challenges of collaborative editing, including:
+- Managing concurrent edits from multiple users
+- Resolving edit conflicts deterministically
+- Maintaining document consistency across all connected clients
+- Preserving intention semantics of user operations
+
+This enables truly fluid, Google Docs-like collaboration where everyone can type simultaneously without stepping on each other's toes.
+
 ## Quick Start
 
 ```bash
