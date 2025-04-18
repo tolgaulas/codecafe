@@ -21,9 +21,11 @@ We saw coding classes juggling tools built for essays, not engineers. Existing s
 
 ## Tech Stack
 
-- **Frontend:** React + TypeScript, Monaco Editor, Framer Motion
-- **Backend:** Java Spring Boot
-- **Real-time Collaboration:** WebSocket + Operational Transformation (OT)
+- **Frontend:** React, TypeScript, Zustand (State Management), Tailwind CSS, Monaco Editor, Xterm.js (Integrated Terminal), Framer Motion, Axios, WebSocket Client
+- **Backend:** Java Spring Boot, WebSocket API, Jackson (JSON Processing)
+- **Real-time Collaboration:** Custom Operational Transformation (OT) Implementation
+- **State Management / Messaging:** Redis (AWS ElastiCache) utilizing Lua Scripting for atomic operations
+- **Hosting**: AWS EC2 (Backend), Vercel (Frontend), AWS ElastiCache (Redis)
 
 ## Real-Time Collaboration with Operational Transformation
 
