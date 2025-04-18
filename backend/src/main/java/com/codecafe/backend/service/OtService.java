@@ -2,12 +2,16 @@ package com.codecafe.backend.service;
 
 import com.codecafe.backend.dto.TextOperation;
 import com.codecafe.backend.util.OtUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
+import org.springframework.data.redis.serializer.SerializationException;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -19,34 +23,40 @@ import java.util.logging.Level;
 @Service
 public class OtService {
     private static final Logger logger = Logger.getLogger(OtService.class.getName());
-    private static final int MAX_HISTORY_SIZE_PER_DOC = 5000; 
+    private static final int MAX_HISTORY_SIZE_PER_DOC = 500; // Reduced history size
     private static final String DOC_CONTENT_KEY_PREFIX = "doc:content:";
     private static final String DOC_HISTORY_KEY_PREFIX = "doc:history:";
 
-    // TODO: Replace ReentrantLock with a distributed lock (e.g., using Redisson or Redis SETNX)
-    // when scaling beyond a single backend instance. The current lock only prevents races
-    // within one instance and is NOT sufficient for multi-instance deployments.
+    // Format for keys using hash tags for Redis Cluster compatibility
+    private static final String CLUSTER_KEY_FORMAT = "doc:{%s}:%s:%s"; // {sessionId} is the hash tag
+
     private final ReentrantLock serviceLock = new ReentrantLock(); // Instance-level lock ONLY
     private final RedisTemplate<String, Object> redisTemplate;
-    private final ValueOperations<String, Object> valueOperations; // For document content (String)
-    private final ListOperations<String, Object> listOperations;
+    private final ValueOperations<String, Object> valueOperations;
+    // Use <String, Object> as RedisTemplate is configured this way
+    private final ListOperations<String, Object> historyListOperations;
     private final RedisScript<Boolean> updateContentAndHistoryScript;
+    private final ObjectMapper objectMapper; // For JSON serialization/deserialization
 
     @Autowired
     public OtService(RedisTemplate<String, Object> redisTemplate,
-                     RedisScript<Boolean> updateContentAndHistoryScript) {
+                     RedisScript<Boolean> updateContentAndHistoryScript,
+                     ObjectMapper objectMapper) { // Inject ObjectMapper
         this.redisTemplate = redisTemplate;
         this.valueOperations = redisTemplate.opsForValue();
-        this.listOperations = redisTemplate.opsForList();
+        // Get ListOperations consistent with RedisTemplate configuration
+        this.historyListOperations = redisTemplate.opsForList();
         this.updateContentAndHistoryScript = updateContentAndHistoryScript;
+        this.objectMapper = objectMapper;
+        logger.info("OtService initialized.");
     }
 
     private String getContentKey(String sessionId, String documentId) {
-        return DOC_CONTENT_KEY_PREFIX + sessionId + ":" + documentId;
+        return String.format(CLUSTER_KEY_FORMAT, sessionId, "content", documentId);
     }
 
     private String getHistoryKey(String sessionId, String documentId) {
-        return DOC_HISTORY_KEY_PREFIX + sessionId + ":" + documentId;
+        return String.format(CLUSTER_KEY_FORMAT, sessionId, "history", documentId);
     }
 
     /**
@@ -75,7 +85,7 @@ public class OtService {
     public int getRevision(String sessionId, String documentId) {
         String historyKey = getHistoryKey(sessionId, documentId);
         try {
-            Long size = listOperations.size(historyKey);
+            Long size = historyListOperations.size(historyKey);
             return (size != null) ? size.intValue() : 0;
         } catch (Exception e) {
              logger.log(Level.SEVERE, String.format("Redis error getting size for key [%s]: %s", historyKey, e.getMessage()), e);
@@ -97,8 +107,7 @@ public class OtService {
      * @throws IllegalArgumentException if the clientRevision is invalid or transformation/application fails.
      */
     public TextOperation receiveOperation(String sessionId, String documentId, int clientRevision, TextOperation operation) throws IllegalArgumentException {
-        // TODO: Replace this instance-level lock with a distributed lock before scaling!
-        serviceLock.lock(); // Using instance lock for simplicity
+        serviceLock.lock();
         String contentKey = getContentKey(sessionId, documentId);
         String historyKey = getHistoryKey(sessionId, documentId);
         try {
@@ -117,72 +126,77 @@ public class OtService {
             List<TextOperation> concurrentOps = new ArrayList<>();
             if (clientRevision < serverRevision) {
                  try {
-                     List<Object> rawOps = listOperations.range(historyKey, clientRevision, serverRevision - 1);
+                     // Retrieve history as List of Objects (expecting Strings)
+                     List<Object> rawOps = historyListOperations.range(historyKey, clientRevision, serverRevision - 1);
                      if (rawOps != null) {
                          for (Object rawOp : rawOps) {
-                             if (rawOp instanceof TextOperation) {
-                                concurrentOps.add((TextOperation) rawOp);
-                             } else {
-                                 logger.warning(String.format("[Session: %s, Doc: %s] Expected TextOperation in history list [%s] at index >= %d, but got %s",
-                                        sessionId, documentId, historyKey, clientRevision, rawOp != null ? rawOp.getClass().getName() : "null"));
-                                 throw new IllegalStateException("Invalid object type found in Redis history list for key: " + historyKey);
+                             if (!(rawOp instanceof String)) {
+                                 logger.warning(String.format("[Session: %s, Doc: %s] Unexpected non-string type found in history: %s",
+                                        sessionId, documentId, rawOp != null ? rawOp.getClass().getName() : "null"));
+                                 continue; // Skip non-string entries
+                             }
+                             String opJson = (String) rawOp;
+                             try {
+                                 // Deserialize each JSON string into List<Object>
+                                 List<Object> opsList = objectMapper.readValue(opJson, new TypeReference<List<Object>>() {});
+                                 // Construct TextOperation from the list
+                                 concurrentOps.add(new TextOperation(opsList));
+                             } catch (JsonProcessingException e) {
+                                 logger.warning(String.format("[Session: %s, Doc: %s] Failed to parse operation JSON from history: %s. JSON: %s",
+                                        sessionId, documentId, e.getMessage(), opJson));
+                                 // Decide how to handle parsing errors - skip? throw? For now, throw.
+                                 throw new IllegalStateException("Invalid operation format found in Redis history list for key: " + historyKey, e);
                              }
                          }
                      }
-                 } catch (Exception e) {
-                     logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Redis error getting concurrent ops (rev %d to %d) for key [%s]: %s",
-                             sessionId, documentId, clientRevision, serverRevision -1, historyKey, e.getMessage()), e);
+                 } catch (SerializationException e) {
+                     // Catch potential Redis serializer errors specifically
+                     logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Redis DESERIALIZATION error getting concurrent ops (rev %d to %d) for key [%s]: %s",
+                             sessionId, documentId, clientRevision, serverRevision - 1, historyKey, e.getMessage()), e);
+                     throw new RuntimeException("Failed to deserialize concurrent operations from Redis history.", e);
+                 }
+                  catch (Exception e) {
+                     logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Generic Redis error getting concurrent ops (rev %d to %d) for key [%s]: %s",
+                             sessionId, documentId, clientRevision, serverRevision - 1, historyKey, e.getMessage()), e);
                      throw new RuntimeException("Failed to retrieve concurrent operations from Redis history.", e);
                  }
             }
-            logger.fine(String.format("[Session: %s, Doc: %s] Found %d concurrent operations in Redis history to transform against.", sessionId, documentId, concurrentOps.size()));
-
+            logger.fine(String.format("[Session: %s, Doc: %s] Found %d concurrent operations in Redis history to transform against.", 
+                sessionId, documentId, concurrentOps.size()));
+                
             TextOperation transformedOp = operation;
-            for (int i = 0; i < concurrentOps.size(); i++) {
-                 TextOperation concurrentOp = concurrentOps.get(i);
-                 logger.finest(String.format("[Session: %s, Doc: %s] Transforming against concurrent op [%d]: %s", sessionId, documentId, clientRevision + i, concurrentOp));
-                 try {
-                     List<TextOperation> pair = OtUtils.transform(transformedOp, concurrentOp);
-                     transformedOp = pair.get(0);
-                     logger.finest(String.format("[Session: %s, Doc: %s]  -> Transformed op: %s", sessionId, documentId, transformedOp));
-                 } catch (Exception e) {
-                     logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Error during transformation step %d. Op: %s, Concurrent: %s", sessionId, documentId, i, transformedOp, concurrentOp), e);
-                     throw new IllegalArgumentException("Transformation failed: " + e.getMessage(), e);
-                 }
-            }
-            logger.fine(String.format("[Session: %s, Doc: %s] Final transformed operation: %s", sessionId, documentId, transformedOp));
-
-            String newContent;
-            try {
-                 logger.info(String.format("[Session: %s, Doc: %s] Attempting to apply op [Rev %d]: %s to current doc content (length %d): '%s'",
-                          sessionId, documentId, serverRevision, transformedOp, currentContent.length(), currentContent));
-                 newContent = OtUtils.apply(currentContent, transformedOp);
-                 logger.fine(String.format("[Session: %s, Doc: %s] Applied transformed operation. New doc length: %d", sessionId, documentId, newContent.length()));
-                 logger.finest(String.format("[Session: %s, Doc: %s] New document content snippet: %s", sessionId, documentId, (newContent.length() > 100 ? newContent.substring(0, 100) + "..." : newContent)));
-            } catch (Exception e) {
-                  logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Error applying transformed operation: %s to doc state: '%s'", sessionId, documentId, transformedOp, currentContent), e);
-                  throw new IllegalArgumentException("Apply failed: " + e.getMessage(), e);
+            for (TextOperation concurrentOp : concurrentOps) {
+                logger.fine(String.format("[Session: %s, Doc: %s] Transforming against concurrent op: %s", sessionId, documentId, concurrentOp));
+                List<TextOperation> result = OtUtils.transform(transformedOp, concurrentOp);
+                transformedOp = result.get(0);
+                 logger.fine(String.format("[Session: %s, Doc: %s] Result after transform: %s", sessionId, documentId, transformedOp));
             }
 
-            try {
-                 List<String> keys = List.of(contentKey, historyKey);
-                 Boolean scriptResult = redisTemplate.execute(updateContentAndHistoryScript, keys, newContent, transformedOp);
+            logger.info(String.format("[Session: %s, Doc: %s] Attempting to apply op [Rev %d]: %s to current doc content (length %d): '%s'",
+                    sessionId, documentId, serverRevision, transformedOp, currentContent.length(), currentContent));
 
-                 if (Boolean.TRUE.equals(scriptResult)) {
-                    logger.fine(String.format("[Session: %s, Doc: %s] Atomically updated Redis content key [%s] and pushed op to history key [%s] via Lua script. New server revision: %d",
-                            sessionId, documentId, contentKey, historyKey, serverRevision + 1));
-                 } else {
-                     logger.severe(String.format("[Session: %s, Doc: %s] Lua script execution for keys [%s, %s] returned false or null. State might be inconsistent!",
-                            sessionId, documentId, contentKey, historyKey));
-                     throw new RuntimeException("Lua script execution failed to update Redis state.");
-                 }
+            String newContent = OtUtils.apply(currentContent, transformedOp);
+            logger.info(String.format("[Session: %s, Doc: %s] Document content after applying transformed op: '%s'", sessionId, documentId, newContent));
+
+            try {
+                // Serialize the transformed operation's OPS LIST to JSON
+                String transformedOpJson = objectMapper.writeValueAsString(transformedOp.getOps());
+
+                // Execute Lua script to update content and add JSON op to history
+                List<String> keys = List.of(contentKey, historyKey);
+                redisTemplate.execute(updateContentAndHistoryScript, keys, newContent, transformedOpJson, String.valueOf(MAX_HISTORY_SIZE_PER_DOC));
+
+                logger.fine(String.format("[Session: %s, Doc: %s] Successfully updated content and added op JSON to history via Lua script. New revision: %d",
+                        sessionId, documentId, serverRevision + 1));
+
+            } catch (JsonProcessingException e) {
+                logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Failed to serialize transformed operation to JSON: %s", sessionId, documentId, transformedOp), e);
+                throw new RuntimeException("Failed to serialize operation for Redis history.", e);
             } catch (Exception e) {
-                 logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Redis error executing Lua script for keys [%s, %s]: %s. State might be inconsistent!",
+                logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Redis error executing Lua script for key [%s] and history [%s]: %s",
                         sessionId, documentId, contentKey, historyKey, e.getMessage()), e);
-                 throw new RuntimeException("Failed to execute Lua script to update Redis state.", e);
+                throw new RuntimeException("Failed to atomically update Redis content and history.", e);
             }
-
-            pruneHistory(sessionId, documentId);
 
             return transformedOp;
 
@@ -195,13 +209,13 @@ public class OtService {
     private void pruneHistory(String sessionId, String documentId) {
         String historyKey = getHistoryKey(sessionId, documentId);
         try {
-            Long currentSize = listOperations.size(historyKey);
+            Long currentSize = historyListOperations.size(historyKey);
             if (currentSize != null && currentSize > MAX_HISTORY_SIZE_PER_DOC) {
                  long keepCount = MAX_HISTORY_SIZE_PER_DOC / 2;
                  long startIndex = -keepCount;
                  long endIndex = -1;
 
-                 listOperations.trim(historyKey, startIndex, endIndex);
+                 historyListOperations.trim(historyKey, startIndex, endIndex);
                  long removedCount = currentSize - keepCount;
 
                  logger.info(String.format("[Session: %s, Doc: %s] Pruned Redis history list [%s]. Removed approx %d ops. Aiming for size ~%d",
@@ -272,16 +286,25 @@ public class OtService {
     public List<TextOperation> getOperationHistory(String sessionId, String documentId) {
         String historyKey = getHistoryKey(sessionId, documentId);
         try {
-            List<Object> rawOps = listOperations.range(historyKey, 0, -1);
+            // Retrieve history as List of Objects (expecting Strings)
+            List<Object> rawOps = historyListOperations.range(historyKey, 0, -1);
             if (rawOps != null) {
                 List<TextOperation> history = new ArrayList<>(rawOps.size());
                 for (Object rawOp : rawOps) {
-                     if (rawOp instanceof TextOperation) {
-                        history.add((TextOperation) rawOp);
-                     } else {
-                         logger.warning(String.format("[Session: %s, Doc: %s] Expected TextOperation in history list [%s], but got %s during full history fetch",
-                                sessionId, documentId, historyKey, rawOp != null ? rawOp.getClass().getName() : "null"));
+                     if (!(rawOp instanceof String)) {
+                         logger.warning(String.format("[Session: %s, Doc: %s] Unexpected non-string type found in full history: %s",
+                                sessionId, documentId, rawOp != null ? rawOp.getClass().getName() : "null"));
+                         continue; // Skip non-string entries
                      }
+                     String opJson = (String) rawOp;
+                    try {
+                        List<Object> opsList = objectMapper.readValue(opJson, new TypeReference<List<Object>>() {});
+                        history.add(new TextOperation(opsList));
+                    } catch (JsonProcessingException e) {
+                        logger.warning(String.format("[Session: %s, Doc: %s] Failed to parse operation JSON from full history: %s. JSON: %s",
+                               sessionId, documentId, e.getMessage(), opJson));
+                        // Skip invalid entries in history? Or throw?
+                    }
                 }
                 return history;
             } else {

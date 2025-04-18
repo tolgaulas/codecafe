@@ -1,8 +1,12 @@
 package com.codecafe.backend.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
@@ -13,6 +17,29 @@ import org.springframework.data.redis.core.script.RedisScript;
 
 @Configuration
 public class RedisConfig {
+
+    @Value("${spring.redis.host}")
+    private String redisHost;
+
+    @Value("${spring.redis.port}")
+    private int redisPort;
+
+    @Bean
+    public LettuceConnectionFactory lettuceConnectionFactory() {
+        RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
+        redisStandaloneConfiguration.setHostName(redisHost);
+        redisStandaloneConfiguration.setPort(redisPort);
+        // No password set for AWS ElastiCache Serverless
+
+        // Configure Lettuce Client with SSL
+        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+                .useSsl() // Enable SSL
+                .build();
+
+        LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration, clientConfig);
+        lettuceConnectionFactory.afterPropertiesSet(); // Ensure initialization
+        return lettuceConnectionFactory;
+    }
 
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
@@ -43,21 +70,24 @@ public class RedisConfig {
     // Bean for the Lua script to atomically update content and history
     @Bean
     public RedisScript<Boolean> updateContentAndHistoryScript() {
-        // Option 1: Load script from file (Recommended)
-        // DefaultRedisScript<Boolean> redisScript = new DefaultRedisScript<>();
-        // redisScript.setLocation(new ClassPathResource("scripts/updateContentAndHistory.lua"));
-        // redisScript.setResultType(Boolean.class);
-        // return redisScript;
-
-        // Option 2: Inline script text (Simpler for short scripts)
         String luaScript = """
             local contentKey = KEYS[1]
             local historyKey = KEYS[2]
             local newContent = ARGV[1]
-            local operation = ARGV[2]
+            local operationJson = ARGV[2] -- Operation passed as JSON string
             
             redis.call('SET', contentKey, newContent)
-            redis.call('RPUSH', historyKey, operation)
+            redis.call('RPUSH', historyKey, operationJson) -- Store the JSON string
+            
+            -- Trim the history list if it exceeds the max size
+            local maxHistory = tonumber(ARGV[3])
+            if maxHistory and maxHistory > 0 then
+                local currentSize = redis.call('LLEN', historyKey)
+                if currentSize > maxHistory then
+                    redis.call('LTRIM', historyKey, currentSize - maxHistory, -1)
+                end
+            end
+
             return true
         """;
         DefaultRedisScript<Boolean> redisScript = new DefaultRedisScript<>();
