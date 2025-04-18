@@ -2,7 +2,7 @@
 
 A hyper-collaborative, real-time development environment right in your browser. CodeCafé makes pair programming, teaching, and building web projects together as fluid and instant as sharing a thought.
 
-[Try CodeCafé Live!](https://www.codecafe.app/)
+[Try CodeCafé Live!](https://codecafe.app/)
 
 ![image](https://github.com/user-attachments/assets/68590a84-a055-4876-8c66-8f446f83c038)
 
