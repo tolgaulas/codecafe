@@ -388,8 +388,10 @@ export const useCollaborationSession = ({
         });
 
         const handleIncomingOperation = (message: any) => {
+          console.log("[Op Handler] Received message:", message.body);
           try {
             const payload = JSON.parse(message.body);
+            console.log("[Op Handler] Parsed payload:", payload);
             if (
               !payload ||
               !payload.clientId ||
@@ -398,7 +400,7 @@ export const useCollaborationSession = ({
               !payload.sessionId
             ) {
               console.error(
-                "[Server -> Client Op] Invalid payload:",
+                "[Op Handler] Invalid payload structure:",
                 message.body
               );
               return;
@@ -413,119 +415,235 @@ export const useCollaborationSession = ({
             const remoteCursorPosData = payload.cursorPosition;
 
             if (sessionOfOp !== sessionId) {
-              // console.log(
-              //   `[Server -> Client Op] Ignoring op for different session: ${sessionOfOp}`
-              // );
+              console.log(
+                `[Op Handler] Ignoring op for different session: ${sessionOfOp} (current: ${sessionId})`
+              );
               return;
             }
 
+            let operationForClient: TextOperation;
             try {
-              const operationForClient = TextOperation.fromJSON(opData);
+              console.log(
+                `[Op Handler ${docId}] Attempting to parse operation from JSON:`,
+                opData
+              );
+              operationForClient = TextOperation.fromJSON(opData);
+              console.log(
+                `[Op Handler ${docId}] Successfully parsed operation:`,
+                operationForClient
+              );
+            } catch (e) {
+              console.error(
+                `[Op Handler ${docId}] Error parsing TextOperation.fromJSON:`,
+                e,
+                "Op Data:",
+                opData
+              );
+              handleError(`Error parsing server op data for ${docId}: ${e}`);
+              return; // Stop processing if op parsing fails
+            }
 
-              // Logic for Local vs Remote Ops
-              if (sourceClientId === userId) {
-                // This is an operation broadcast originating from this client
-                // Usually handled by ACK, but good for webview sync
-                if (webViewFileIds?.includes(docId)) {
-                  // console.log(
-                  //   `[Server -> Client Op] Applying own op to webview file: ${docId}`
-                  // );
-                  // If webview file, apply the operation directly via callback
-                  onOperationReceived(docId, operationForClient);
+            // Logic for Local vs Remote Ops
+            if (sourceClientId === userId) {
+              // This is an operation broadcast originating from this client
+              // Usually handled by ACK, but good for webview sync
+              if (webViewFileIds?.includes(docId)) {
+                console.log(
+                  `[Op Handler ${docId}] Applying own op to webview file.`
+                );
+                // If webview file, apply the operation directly via callback
+                onOperationReceived(docId, operationForClient);
+              }
+            } else {
+              // This is an operation from a remote client
+              console.log(
+                `[Op Handler ${docId}] Processing remote op from client: ${sourceClientId}`
+              );
+              // Handle remote selection/cursor *before* applying the operation locally
+              if (docId === currentFileIdRef.current && editorInstance) {
+                console.log(
+                  `[Op Handler ${docId}] Handling remote selection/cursor for active editor.`
+                );
+                // Only process selection/cursor for the active editor file
+                let incomingSelection: OTSelection | null = null;
+                if (remoteSelectionData) {
+                  try {
+                    console.log(
+                      `[Op Handler ${docId}] Attempting to parse selection from JSON:`,
+                      remoteSelectionData
+                    );
+                    incomingSelection =
+                      OTSelection.fromJSON(remoteSelectionData);
+                    console.log(
+                      `[Op Handler ${docId}] Successfully parsed selection:`,
+                      incomingSelection
+                    );
+                  } catch (e) {
+                    console.error(
+                      `[Op Handler ${docId}] Error parsing OTSelection.fromJSON:`,
+                      e,
+                      "Selection Data:",
+                      remoteSelectionData
+                    );
+                    // Don't stop processing the whole operation, just log the selection error
+                  }
                 }
-              } else {
-                // This is an operation from a remote client
-                // Handle remote selection/cursor *before* applying the operation locally
-                if (docId === currentFileIdRef.current && editorInstance) {
-                  // Only process selection/cursor for the active editor file
-                  let incomingSelection: OTSelection | null =
-                    remoteSelectionData
-                      ? OTSelection.fromJSON(remoteSelectionData)
-                      : null;
 
-                  // Get cursor position
-                  // If remoteCursorPosData exists, use it. Otherwise, try to derive from transformed selection.
-                  let finalCursorPosition: {
-                    lineNumber: number;
-                    column: number;
-                  } | null = remoteCursorPosData ?? null;
+                // Transform the *incoming* selection based on the *incoming* operation
+                // This represents the selection *after* the operation is applied
+                let transformedSelection: OTSelection | null = null;
+                if (incomingSelection) {
+                  try {
+                    console.log(
+                      `[Op Handler ${docId}] Transforming incoming selection against incoming op...`
+                    );
+                    transformedSelection =
+                      incomingSelection.transform(operationForClient);
+                    console.log(
+                      `[Op Handler ${docId}] Transformed selection:`,
+                      transformedSelection
+                    );
+                  } catch (e) {
+                    console.error(
+                      `[Op Handler ${docId}] Error transforming selection:`,
+                      e,
+                      "Selection:",
+                      incomingSelection,
+                      "Operation:",
+                      operationForClient
+                    );
+                    // Don't stop processing, use untransformed selection as fallback? Or null?
+                    // Let's stick with null if transform fails for now.
+                    transformedSelection = null;
+                  }
+                } else {
+                  transformedSelection = null;
+                }
 
-                  if (
-                    !finalCursorPosition &&
-                    incomingSelection &&
-                    editorInstance
-                  ) {
-                    const model = editorInstance.getModel();
-                    if (model && incomingSelection.ranges.length > 0) {
-                      try {
-                        const headPos = offsetToPosition(
-                          model,
-                          incomingSelection.ranges[0].head
+                // Get cursor position
+                // If remoteCursorPosData exists, use it. Otherwise, try to derive from transformed selection.
+                let finalCursorPosition: {
+                  lineNumber: number;
+                  column: number;
+                } | null = remoteCursorPosData ?? null;
+                console.log(
+                  `[Op Handler ${docId}] Initial remote cursor pos:`,
+                  finalCursorPosition
+                );
+
+                if (
+                  !finalCursorPosition &&
+                  transformedSelection &&
+                  editorInstance
+                ) {
+                  console.log(
+                    `[Op Handler ${docId}] Attempting to derive cursor from transformed selection head...`
+                  );
+                  const model = editorInstance.getModel();
+                  if (model && transformedSelection.ranges.length > 0) {
+                    try {
+                      const headPos = offsetToPosition(
+                        model,
+                        transformedSelection.ranges[0].head
+                      );
+                      console.log(
+                        `[Op Handler ${docId}] Derived head position:`,
+                        headPos
+                      );
+                      // We need to adjust the derived position based on the operation
+                      // Let's try transforming the original cursor if available, otherwise use the transformed selection head
+                      if (remoteCursorPosData) {
+                        // If original cursor was provided, use that as the primary source
+                        console.log(
+                          `[Op Handler ${docId}] Using original remote cursor data as final.`
                         );
-                        // We need to adjust the derived position based on the operation
-                        // Let's try transforming the original cursor if available, otherwise use the transformed selection head
-                        if (remoteCursorPosData) {
-                          // If original cursor was provided, use that as the primary source
-                          finalCursorPosition = remoteCursorPosData;
-                        } else {
-                          // Fallback: use the head of the transformed selection
-                          finalCursorPosition = {
-                            lineNumber: headPos.lineNumber,
-                            column: headPos.column,
-                          };
-                        }
-                      } catch (error) {
-                        console.error(
-                          "[Server -> Client Op] Error deriving cursor from transformed selection:",
-                          error
+                        finalCursorPosition = remoteCursorPosData;
+                      } else {
+                        // Fallback: use the head of the transformed selection
+                        console.log(
+                          `[Op Handler ${docId}] Using derived head position as final.`
                         );
+                        finalCursorPosition = {
+                          lineNumber: headPos.lineNumber,
+                          column: headPos.column,
+                        };
                       }
+                    } catch (error) {
+                      console.error(
+                        `[Op Handler ${docId}] Error deriving cursor from transformed selection:`,
+                        error,
+                        "Selection:",
+                        transformedSelection
+                      );
                     }
                   }
-
-                  // Fetch user info for the sender (name, color)
-                  // This might require accessing a shared state or passing it down
-                  // For now, we'll create a partial RemoteUser and let the App component fill the rest
-                  const updatedUserInfo: Partial<RemoteUser> = {
-                    id: sourceClientId,
-                    // Use transformed selection and final cursor position
-                    selection: incomingSelection,
-                    cursorPosition: finalCursorPosition,
-                  };
-
-                  // Update the remote user's state via callback
-                  onRemoteUsersUpdate(docId, [updatedUserInfo as RemoteUser]); // Cast needed until full user info is fetched
                 }
 
-                // Apply the operation to the editor or background document state
-                if (docId === currentFileIdRef.current) {
-                  if (clientRef.current) {
-                    // console.log(
-                    //   `[Server -> Client Op] Applying remote op to active file: ${docId}`,
-                    //   operationForClient
-                    // );
-                    clientRef.current.applyServer(operationForClient);
-                  } else {
-                    // console.warn(
-                    //   `[Server -> Client Op] OT Client not ready for active file ${docId} when receiving op.`
-                    // );
-                    // Potential state inconsistency - may need to re-fetch state
-                  }
-                } else if (webViewFileIds?.includes(docId)) {
-                  // Apply op to background webview files via callback
-                  // console.log(
-                  //   `[Server -> Client Op] Applying remote op to webview file: ${docId}`
-                  // );
-                  onOperationReceived(docId, operationForClient);
-                }
+                // Fetch user info for the sender (name, color)
+                // This might require accessing a shared state or passing it down
+                // For now, we'll create a partial RemoteUser and let the App component fill the rest
+                const updatedUserInfo: Partial<RemoteUser> = {
+                  id: sourceClientId,
+                  // Use transformed selection and final cursor position
+                  selection: transformedSelection,
+                  cursorPosition: finalCursorPosition,
+                };
+
+                // Update the remote user's state via callback
+                console.log(
+                  `[Op Handler ${docId}] Calling onRemoteUsersUpdate with derived user info:`,
+                  updatedUserInfo
+                );
+                onRemoteUsersUpdate(docId, [updatedUserInfo as RemoteUser]); // Cast needed until full user info is fetched
               }
-            } catch (e) {
-              handleError(
-                `Error processing/applying server op for ${docId}: ${e}`
-              );
+
+              // Apply the operation to the editor or background document state
+              if (docId === currentFileIdRef.current) {
+                if (clientRef.current) {
+                  console.log(
+                    `[Op Handler ${docId}] Calling client.applyServer for active file with op:`,
+                    operationForClient
+                  );
+                  try {
+                    clientRef.current.applyServer(operationForClient);
+                    console.log(
+                      `[Op Handler ${docId}] Successfully called client.applyServer.`
+                    );
+                  } catch (e) {
+                    console.error(
+                      `[Op Handler ${docId}] Error during client.applyServer:`,
+                      e,
+                      "Operation:",
+                      operationForClient
+                    );
+                    handleError(
+                      `Error applying server op locally for ${docId}: ${e}`
+                    );
+                  }
+                } else {
+                  console.warn(
+                    `[Op Handler ${docId}] OT Client not ready for active file when receiving op.`
+                  );
+                  // Potential state inconsistency - may need to re-fetch state
+                }
+              } else if (webViewFileIds?.includes(docId)) {
+                // Apply op to background webview files via callback
+                console.log(
+                  `[Op Handler ${docId}] Calling onOperationReceived for webview file with op:`,
+                  operationForClient
+                );
+                onOperationReceived(docId, operationForClient);
+              }
             }
+            console.log(`[Op Handler ${docId}] Finished processing operation.`);
           } catch (error) {
-            handleError(`Error parsing operations message: ${error}`);
+            console.error(
+              "[Op Handler] Error processing overall operations message:",
+              error,
+              "Message Body:",
+              message.body
+            );
+            handleError(`Error processing operations message: ${error}`);
           }
         };
 
@@ -551,8 +669,10 @@ export const useCollaborationSession = ({
         const selectionTopic = `/topic/sessions/${sessionId}/selections/document/${currentFileId}`;
         newSubscriptions.push(
           stompClient.subscribe(selectionTopic, (message: any) => {
+            console.log("[Selection Handler] Received message:", message.body);
             try {
               const payload = JSON.parse(message.body) as CursorMessage; // Use CursorMessage type
+              console.log("[Selection Handler] Parsed payload:", payload);
               if (
                 !payload ||
                 !payload.userInfo ||
@@ -560,7 +680,7 @@ export const useCollaborationSession = ({
                 !payload.documentId
               ) {
                 console.error(
-                  "[Server -> Client Sel] Invalid payload structure:",
+                  "[Selection Handler] Invalid payload structure:",
                   payload
                 );
                 return;
@@ -568,21 +688,75 @@ export const useCollaborationSession = ({
               const { documentId, userInfo: remoteUserInfo } = payload;
 
               // Ignore messages from self
-              if (remoteUserInfo.id === userId) return;
+              if (remoteUserInfo.id === userId) {
+                // console.log("[Selection Handler] Ignoring self message.");
+                return;
+              }
               // Ignore messages for other documents
-              if (documentId !== currentFileIdRef.current) return;
+              if (documentId !== currentFileIdRef.current) {
+                console.log(
+                  `[Selection Handler] Ignoring message for other document: ${documentId} (current: ${currentFileIdRef.current})`
+                );
+                return;
+              }
 
               // Parse the incoming selection
-              let incomingSelection: OTSelection | null =
-                remoteUserInfo.selection
-                  ? OTSelection.fromJSON(remoteUserInfo.selection)
-                  : null;
+              let incomingSelection: OTSelection | null = null;
+              if (remoteUserInfo.selection) {
+                try {
+                  console.log(
+                    "[Selection Handler] Attempting to parse selection from JSON:",
+                    remoteUserInfo.selection
+                  );
+                  incomingSelection = OTSelection.fromJSON(
+                    remoteUserInfo.selection
+                  );
+                  console.log(
+                    "[Selection Handler] Successfully parsed selection:",
+                    incomingSelection
+                  );
+                } catch (e) {
+                  console.error(
+                    "[Selection Handler] Error parsing OTSelection.fromJSON:",
+                    e,
+                    "Selection Data:",
+                    remoteUserInfo.selection
+                  );
+                  // Don't stop processing, just log error
+                }
+              } else {
+                console.log(
+                  "[Selection Handler] No selection data in payload."
+                );
+              }
 
               // *** Crucial: Transform selection against local pending operations ***
               let transformedSelection: OTSelection | null = incomingSelection;
               if (clientRef.current && incomingSelection) {
-                transformedSelection =
-                  clientRef.current.transformSelection(incomingSelection);
+                try {
+                  console.log(
+                    "[Selection Handler] Transforming selection against client state...",
+                    incomingSelection
+                  );
+                  transformedSelection =
+                    clientRef.current.transformSelection(incomingSelection);
+                  console.log(
+                    "[Selection Handler] Transformed selection:",
+                    transformedSelection
+                  );
+                } catch (e) {
+                  console.error(
+                    "[Selection Handler] Error transforming selection:",
+                    e,
+                    "Selection:",
+                    incomingSelection
+                  );
+                  transformedSelection = null; // Fallback to null if transform fails
+                }
+              } else if (!clientRef.current) {
+                console.warn(
+                  "[Selection Handler] Cannot transform selection, clientRef is null."
+                );
               }
 
               // Use the explicitly sent cursor position if available, otherwise derive from transformed selection head
@@ -590,18 +764,29 @@ export const useCollaborationSession = ({
                 lineNumber: number;
                 column: number;
               } | null = remoteUserInfo.cursorPosition ?? null; // Prefer explicitly sent cursor
+              console.log(
+                "[Selection Handler] Initial remote cursor pos:",
+                finalCursorPosition
+              );
 
               if (
                 !finalCursorPosition &&
                 transformedSelection &&
                 editorInstance
               ) {
+                console.log(
+                  "[Selection Handler] Attempting to derive cursor from transformed selection head..."
+                );
                 const model = editorInstance.getModel();
                 if (model && transformedSelection.ranges.length > 0) {
                   try {
                     const headPos = offsetToPosition(
                       model,
                       transformedSelection.ranges[0].head // Use head of *transformed* selection
+                    );
+                    console.log(
+                      "[Selection Handler] Derived head position:",
+                      headPos
                     );
                     finalCursorPosition = {
                       lineNumber: headPos.lineNumber,
@@ -610,7 +795,9 @@ export const useCollaborationSession = ({
                   } catch (error) {
                     console.error(
                       "[Selection Handler] Error deriving cursor from transformed selection:",
-                      error
+                      error,
+                      "Selection:",
+                      transformedSelection
                     );
                   }
                 }
@@ -627,8 +814,19 @@ export const useCollaborationSession = ({
                 selection: transformedSelection,
               };
               // Pass the single updated user info to App.tsx for state update
+              console.log(
+                "[Selection Handler] Calling onRemoteUsersUpdate with formatted user info:",
+                formattedUserForApp
+              );
               onRemoteUsersUpdate(documentId, [formattedUserForApp]);
+              console.log("[Selection Handler] Finished processing selection.");
             } catch (error) {
+              console.error(
+                "[Selection Handler] Error processing overall selections message:",
+                error,
+                "Message Body:",
+                message.body
+              );
               handleError(`Error processing selections message: ${error}`);
               // console.warn("[useCollaborationSession] Received message on deprecated selection topic. Ignoring.", message.body);
             }
