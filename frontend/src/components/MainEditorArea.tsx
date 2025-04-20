@@ -1,6 +1,6 @@
 import React from "react";
 import { editor } from "monaco-editor";
-import { VscChevronRight, VscFile } from "react-icons/vsc";
+import { VscFile } from "react-icons/vsc";
 
 import { JoinStateType, EditorLanguageKey } from "../types/editor";
 import { RemoteUser } from "../types/props";
