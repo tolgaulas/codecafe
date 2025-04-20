@@ -1,8 +1,8 @@
 package com.codecafe.backend.dto;
 
 public class OtOperation {
-    private int baseVersion;   // The version of the doc this op is based on
-    private int position;      // Position in text to apply
+    private int baseVersion;   
+    private int position;      
     private String insertedText;
     private int deleteCount;
 

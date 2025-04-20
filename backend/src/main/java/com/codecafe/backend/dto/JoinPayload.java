@@ -2,7 +2,7 @@ package com.codecafe.backend.dto;
 
 public class JoinPayload {
     private String sessionId;
-    private String documentId; // The initial document the user is joining
+    private String documentId; 
     private String userId;
     private String userName;
     private String userColor;

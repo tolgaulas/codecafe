@@ -2,7 +2,6 @@ package com.codecafe.backend.util;
 
 import com.codecafe.backend.dto.TextOperation;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 

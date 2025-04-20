@@ -1,6 +1,5 @@
 package com.codecafe.backend.dto;
 
-// Matches the structure { anchor: number, head: number }
 public class OtSelectionRangeDto {
     private int anchor;
     private int head;

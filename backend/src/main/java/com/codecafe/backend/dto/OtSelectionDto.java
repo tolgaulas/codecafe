@@ -2,11 +2,9 @@ package com.codecafe.backend.dto;
 
 import java.util.List;
 
-// Matches the structure { ranges: [ { anchor, head } ] }
 public class OtSelectionDto {
     private List<OtSelectionRangeDto> ranges;
 
-    // Default constructor for Jackson
     public OtSelectionDto() {}
 
     // Getters and Setters

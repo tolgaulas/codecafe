@@ -3,6 +3,7 @@ package com.codecafe.backend.dto;
 public class CursorData {
     private Position cursorPosition;
     private Selection selection;
+    
     // Getters and setters
     public Position getCursorPosition() {
         return cursorPosition;

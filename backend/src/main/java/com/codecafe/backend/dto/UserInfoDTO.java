@@ -1,7 +1,6 @@
 package com.codecafe.backend.dto;
 
 import java.util.Map;
-import java.util.List;
 
 // Data Transfer Object for user information sent to the frontend
 public class UserInfoDTO {
