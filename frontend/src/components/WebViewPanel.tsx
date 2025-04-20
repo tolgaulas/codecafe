@@ -3,14 +3,6 @@ import "./WebViewPanel.css";
 import { FaEarthAmericas } from "react-icons/fa6";
 import { WebViewPanelProps } from "../types/props";
 
-// Define props interface
-// interface WebViewPanelProps {
-//   htmlContent?: string;
-//   cssContent?: string;
-//   jsContent?: string;
-//   onClose?: () => void;
-// }
-
 const WebViewPanel = ({
   htmlContent = "",
   cssContent = "",

@@ -1,13 +1,19 @@
 import React from "react";
 import { editor } from "monaco-editor";
+import { VscChevronRight, VscFile } from "react-icons/vsc";
 
-import { JoinStateType } from "../types/editor";
+import { JoinStateType, EditorLanguageKey } from "../types/editor";
 import { RemoteUser } from "../types/props";
 import CodeEditor from "./CodeEditor";
 import TerminalComponent from "./TerminalComponent";
 import WebViewPanel from "./WebViewPanel";
 import FileTabs from "./FileTabs";
-import { editorLanguageMap } from "../constants/mappings";
+import {
+  editorLanguageMap,
+  languageIconMap,
+  languageColorMap,
+  defaultIconColor,
+} from "../constants/mappings";
 import {
   TERMINAL_HANDLE_HEIGHT,
   WEBVIEW_HANDLE_GRAB_WIDTH,
@@ -74,6 +80,21 @@ const MainEditorArea = ({
   // Get state from Zustand Store
   const { openFiles, activeFileId } = useFileStore();
 
+  // Find the active file object
+  const activeFile = openFiles.find((f) => f.id === activeFileId);
+
+  // Determine icon and color for the active file
+  let ActiveIconComponent: React.ComponentType<any> = VscFile; // Default icon
+  let activeIconColor = defaultIconColor; // Default color
+
+  if (activeFile) {
+    ActiveIconComponent =
+      languageIconMap[activeFile.language as EditorLanguageKey] || VscFile;
+    activeIconColor =
+      languageColorMap[activeFile.language as EditorLanguageKey] ||
+      defaultIconColor;
+  }
+
   return (
     <div className="flex flex-1 min-w-0 relative">
       <div
@@ -87,8 +108,27 @@ const MainEditorArea = ({
           handleCloseTab={handleCloseTab}
         />
 
-        {/* Code Editor Area */}
-        <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0 pt-4">
+        {/* Breadcrumbs Area - Simplified */}
+        <div className="h-6 flex-shrink-0 bg-neutral-900 flex items-center px-2 text-sm text-stone-400 overflow-hidden whitespace-nowrap">
+          {activeFile ? (
+            <React.Fragment>
+              {/* Removed "Project" span and Chevron */}
+              {/* File Icon and Name */}
+              <ActiveIconComponent
+                size={16}
+                className={`mr-1 flex-shrink-0 ${activeIconColor}`}
+              />
+              <span className="text-stone-400">{activeFile.name}</span>
+            </React.Fragment>
+          ) : (
+            <span>
+              {/* Optionally show something when no file is active */}
+            </span>
+          )}
+        </div>
+
+        {/* Code Editor Area - Removed pt-4 */}
+        <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0">
           {joinState === "prompting" ? (
             <div className="flex items-center justify-center h-full text-stone-500">
               Enter your details in the sidebar to join the session...

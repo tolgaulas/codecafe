@@ -19,4 +19,4 @@ export const TERMINAL_HANDLE_HEIGHT = 4;
 export const DEFAULT_WEBVIEW_WIDTH_FRACTION = 0.4;
 export const MIN_WEBVIEW_WIDTH = 150;
 export const MAX_WEBVIEW_WIDTH = window.innerWidth * 0.8;
-export const WEBVIEW_HANDLE_GRAB_WIDTH = 8; // Width of the invisible grab area (like explorer)
+export const WEBVIEW_HANDLE_GRAB_WIDTH = 8; 

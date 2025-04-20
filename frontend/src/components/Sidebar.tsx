@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   VscFiles,
   VscSearch,
   VscAccount,
   VscSettingsGear,
   VscFile,
+  VscChevronDown,
+  VscChevronRight,
 } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import JoinSessionPanel from "./JoinSessionPanel";
@@ -69,6 +71,8 @@ const Sidebar = ({
   mockFiles,
   isSessionActive,
 }: SidebarProps) => {
+  const [isProjectExpanded, setIsProjectExpanded] = useState(true);
+
   const handleIconClick = (iconName: string | null) => {
     if (joinState === "prompting") return;
     if (iconName === "files") {
@@ -79,6 +83,10 @@ const Sidebar = ({
       }
       setActiveIcon(iconName);
     }
+  };
+
+  const toggleProjectFolder = () => {
+    setIsProjectExpanded(!isProjectExpanded);
   };
 
   return (
@@ -189,39 +197,70 @@ const Sidebar = ({
               EXPLORER
             </div>
             <div className="w-full">
-              {Object.entries(mockFiles).map(([id, file]) => {
-                const IconComponent =
-                  languageIconMap[file.language as EditorLanguageKey] ||
-                  VscFile;
-                const iconColor =
-                  languageColorMap[file.language as EditorLanguageKey] ||
-                  defaultIconColor;
-                return (
-                  <div
-                    key={id}
-                    className={`flex items-center text-sm py-1 cursor-pointer w-full pl-0 ${
-                      activeFileId === id
-                        ? "bg-stone-600 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c]"
-                        : "hover:bg-stone-700"
-                    }`}
-                    onClick={() => handleOpenFile(id, isSessionActive)}
-                  >
-                    <IconComponent
-                      size={18}
-                      className={`ml-2 mr-1 flex-shrink-0 ${iconColor}`}
-                    />
-                    <span
-                      className={`w-full pl-1 truncate ${
-                        activeFileId === id
-                          ? "text-stone-100"
-                          : "text-stone-300"
-                      }`}
-                    >
-                      {file.name}
-                    </span>
-                  </div>
-                );
-              })}
+              {/* Project Folder Header */}
+              <button
+                className="flex items-center text-sm py-1 cursor-pointer w-full hover:bg-stone-700"
+                onClick={toggleProjectFolder}
+              >
+                {/* Container for arrow + indent space */}
+                <div
+                  className="flex items-center justify-center pl-1 mr-1"
+                  style={{ width: "1.5rem" }}
+                >
+                  {" "}
+                  {/* Fixed width container for alignment */}
+                  {isProjectExpanded ? (
+                    <VscChevronDown size={16} className="flex-shrink-0" />
+                  ) : (
+                    <VscChevronRight size={16} className="flex-shrink-0" />
+                  )}
+                </div>
+                <span className="font-medium text-stone-400 truncate">
+                  My CodeCafé Project
+                </span>
+              </button>
+
+              {isProjectExpanded && (
+                <div className="relative">
+                  {/* Vertical Tree Line Element */}
+                  <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
+
+                  {/* File List */}
+                  {Object.entries(mockFiles).map(([id, file]) => {
+                    const IconComponent =
+                      languageIconMap[file.language as EditorLanguageKey] ||
+                      VscFile;
+                    const iconColor =
+                      languageColorMap[file.language as EditorLanguageKey] ||
+                      defaultIconColor;
+                    return (
+                      <div
+                        key={id}
+                        className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-5 z-10 ${
+                          activeFileId === id
+                            ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
+                            : "hover:bg-stone-700/50"
+                        }`}
+                        onClick={() => handleOpenFile(id, isSessionActive)}
+                      >
+                        <IconComponent
+                          size={18}
+                          className={`mr-1 flex-shrink-0 ${iconColor}`}
+                        />
+                        <span
+                          className={`w-full pl-1 truncate ${
+                            activeFileId === id
+                              ? "text-stone-200"
+                              : "text-stone-400"
+                          }`}
+                        >
+                          {file.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -236,9 +275,9 @@ const Sidebar = ({
             left: `${
               ICON_BAR_WIDTH + explorerPanelSize - EXPLORER_HANDLE_WIDTH / 2
             }px`,
-            pointerEvents: "auto", 
+            pointerEvents: "auto",
           }}
-          onMouseDown={handleExplorerPanelMouseDown} 
+          onMouseDown={handleExplorerPanelMouseDown}
         />
       )}
     </div>
