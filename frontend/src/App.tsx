@@ -35,6 +35,7 @@ import Sidebar from "./components/Sidebar";
 import MainEditorArea from "./components/MainEditorArea";
 import { useFileStore } from "./store/useFileStore";
 import { IDisposable } from "monaco-editor";
+import { Analytics } from "@vercel/analytics/react";
 
 const App = () => {
   // REFS
@@ -755,6 +756,7 @@ const App = () => {
           }}
         />
       )}
+      <Analytics />
     </div>
   );
 };
