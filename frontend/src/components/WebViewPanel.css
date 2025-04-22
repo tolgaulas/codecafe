@@ -193,7 +193,7 @@
 /* tab add */
 #web-view-content .add {
   float: left;
-  margin: 12px 5px 0;
+  margin: 12px 5px 8px;
   width: 23px;
   height: 16px;
   background: #6e675f;

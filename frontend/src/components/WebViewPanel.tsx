@@ -91,6 +91,13 @@ const WebViewPanel = ({
               ×
             </a>
           </li>
+          {/* Add button element - No longer wrapped in <li> */}
+          <a
+            href="#"
+            className="add"
+            onClick={(e) => e.preventDefault()}
+            title="Add Tab (Placeholder)"
+          />
         </ul>
         <div className="bar clear">
           <ul>
