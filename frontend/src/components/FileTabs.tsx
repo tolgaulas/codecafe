@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -33,12 +33,14 @@ interface FileTabsProps {
 
   handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea, TODO: inlude this in the store
   handleCloseTab: (fileIdToClose: string) => void;
+  onOverflowChange: (hasOverflow: boolean) => void; // New prop
 }
 
 const FileTabs: React.FC<FileTabsProps> = ({
   tabContainerRef,
   handleSwitchTab,
   handleCloseTab,
+  onOverflowChange, // Destructure new prop
 }) => {
   // State & Setters from Store
   const {
@@ -51,6 +53,41 @@ const FileTabs: React.FC<FileTabsProps> = ({
     setDraggingId,
     setDropIndicator,
   } = useFileStore();
+
+  // Local state for overflow
+  const [hasOverflow, setHasOverflow] = useState(false);
+  // Ref to track previous overflow state to avoid unnecessary calls
+  const prevHasOverflowRef = useRef(hasOverflow);
+
+  // Effect for overflow detection
+  useEffect(() => {
+    const container = tabContainerRef.current;
+    if (!container) return;
+
+    const checkOverflow = () => {
+      const currentOverflow = container.scrollWidth > container.clientWidth;
+      if (currentOverflow !== prevHasOverflowRef.current) {
+        setHasOverflow(currentOverflow);
+        onOverflowChange(currentOverflow);
+        prevHasOverflowRef.current = currentOverflow;
+        // console.log("Overflow changed:", currentOverflow); // For debugging
+      }
+    };
+
+    // Check initially and on resize
+    checkOverflow();
+    const resizeObserver = new ResizeObserver(checkOverflow);
+    resizeObserver.observe(container);
+
+    // Also observe changes to children (like adding/removing tabs)
+    const mutationObserver = new MutationObserver(checkOverflow);
+    mutationObserver.observe(container, { childList: true, subtree: true });
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [tabContainerRef, onOverflowChange, openFiles]); // Depend on openFiles to re-check when tabs change
 
   // Sensors
   const sensors = useSensors(

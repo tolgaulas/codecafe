@@ -199,24 +199,30 @@ const Sidebar = ({
             <div className="w-full">
               {/* Project Folder Header */}
               <button
-                className="flex items-center text-sm py-1 cursor-pointer w-full hover:bg-stone-700"
+                className="flex items-center text-xs py-1 cursor-pointer w-full hover:bg-stone-700"
                 onClick={toggleProjectFolder}
               >
                 {/* Container for arrow + indent space */}
                 <div
                   className="flex items-center justify-center pl-1 mr-1"
-                  style={{ width: "1.5rem" }}
+                  style={{ width: "1rem" }}
                 >
                   {" "}
                   {/* Fixed width container for alignment */}
                   {isProjectExpanded ? (
-                    <VscChevronDown size={16} className="flex-shrink-0" />
+                    <VscChevronDown
+                      size={16}
+                      className="flex-shrink-0 text-stone-500"
+                    />
                   ) : (
-                    <VscChevronRight size={16} className="flex-shrink-0" />
+                    <VscChevronRight
+                      size={16}
+                      className="flex-shrink-0 text-stone-500"
+                    />
                   )}
                 </div>
-                <span className="font-medium text-stone-400 truncate">
-                  My CodeCafé Project
+                <span className="font-medium text-stone-500 truncate">
+                  MY CODECAFE PROJECT
                 </span>
               </button>
 
@@ -236,7 +242,7 @@ const Sidebar = ({
                     return (
                       <div
                         key={id}
-                        className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-5 z-10 ${
+                        className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-4 z-10 ${
                           activeFileId === id
                             ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
                             : "hover:bg-stone-700/50"
@@ -248,10 +254,10 @@ const Sidebar = ({
                           className={`mr-1 flex-shrink-0 ${iconColor}`}
                         />
                         <span
-                          className={`w-full pl-1 truncate ${
+                          className={`w-full truncate text-stone-500 ${
                             activeFileId === id
-                              ? "text-stone-200"
-                              : "text-stone-400"
+                              ? "text-stone-300 font-medium"
+                              : ""
                           }`}
                         >
                           {file.name}

@@ -52,6 +52,8 @@ interface MainEditorAreaProps {
   toggleWebView: () => void;
   isSessionActive: boolean;
   joinState: JoinStateType;
+  tabsHaveOverflow: boolean;
+  onTabsOverflowChange: (hasOverflow: boolean) => void;
 }
 
 const MainEditorArea = ({
@@ -76,6 +78,8 @@ const MainEditorArea = ({
   toggleWebView,
   isSessionActive,
   joinState,
+  tabsHaveOverflow,
+  onTabsOverflowChange,
 }: MainEditorAreaProps) => {
   // Get state from Zustand Store
   const { openFiles, activeFileId } = useFileStore();
@@ -106,6 +110,7 @@ const MainEditorArea = ({
           tabContainerRef={tabContainerRef}
           handleSwitchTab={handleSwitchTab}
           handleCloseTab={handleCloseTab}
+          onOverflowChange={onTabsOverflowChange}
         />
 
         {/* Breadcrumbs Area - Simplified */}
@@ -187,12 +192,14 @@ const MainEditorArea = ({
       {/* Invisible WebView Resizer Handle */}
       {webViewPanelWidth > 0 && (
         <div
-          className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
+          className="absolute cursor-col-resize bg-transparent z-20"
           style={{
             width: `${WEBVIEW_HANDLE_GRAB_WIDTH}px`,
             left: `calc(100% - ${webViewPanelWidth}px - ${
               WEBVIEW_HANDLE_GRAB_WIDTH / 2
             }px)`,
+            top: tabsHaveOverflow ? "0px" : "33px",
+            height: `calc(100% - ${tabsHaveOverflow ? "0px" : "33px"}`,
           }}
           onMouseDown={handleWebViewPanelMouseDown}
         />
@@ -201,7 +208,11 @@ const MainEditorArea = ({
       {/* WebView Panel */}
       {webViewPanelWidth > 0 && (
         <div
-          className="flex-shrink-0 border-l border-stone-600 overflow-hidden"
+          className={`flex-shrink-0 overflow-hidden bg-stone-800 relative 
+                     before:content-[''] before:absolute before:left-0 before:bottom-0 before:w-px before:bg-stone-600
+                     ${
+                       tabsHaveOverflow ? "before:top-0" : "before:top-[33px]"
+                     }`}
           style={{ width: `${webViewPanelWidth}px` }}
         >
           <WebViewPanel

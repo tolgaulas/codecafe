@@ -84,6 +84,8 @@ const App = () => {
     [docId: string]: RemoteUser[];
   }>({});
 
+  const [tabsHaveOverflow, setTabsHaveOverflow] = useState(false);
+
   // Instantiate Resizable Panels
   const explorerPanelRef = useRef<HTMLDivElement>(null);
   const {
@@ -731,7 +733,9 @@ const App = () => {
           cssFileContent={cssFileContent}
           jsFileContent={jsFileContent}
           toggleWebView={toggleWebView}
-          joinState={joinState} //
+          joinState={joinState}
+          tabsHaveOverflow={tabsHaveOverflow}
+          onTabsOverflowChange={setTabsHaveOverflow}
         />
       </div>
       {/* Status Bar */}
