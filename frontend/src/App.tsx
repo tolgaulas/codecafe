@@ -104,7 +104,13 @@ const App = () => {
     panelRef: explorerPanelRef,
     storageKey: "explorerWidth",
     onToggle: (isOpen) => {
-      setActiveIcon(isOpen ? "files" : null);
+      if (isOpen) {
+        if (activeIcon !== "chat") {
+          setActiveIcon("files");
+        }
+      } else {
+        setActiveIcon(null);
+      }
     },
     defaultOpenSize: DEFAULT_EXPLORER_WIDTH,
   });

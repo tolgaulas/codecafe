@@ -10,6 +10,7 @@ import {
 } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import JoinSessionPanel from "./JoinSessionPanel";
+import ChatPanel from "./ChatPanel";
 import { JoinStateType, EditorLanguageKey } from "../types/editor";
 import { MOCK_FILES } from "../constants/mockFiles";
 import {
@@ -75,8 +76,14 @@ const Sidebar = ({
 
   const handleIconClick = (iconName: string | null) => {
     if (joinState === "prompting") return;
+
     if (iconName === "files") {
       toggleExplorerPanel();
+    } else if (iconName === "chat") {
+      if (isExplorerCollapsed) {
+        toggleExplorerPanel();
+      }
+      setActiveIcon(iconName);
     } else {
       if (!isExplorerCollapsed) {
         toggleExplorerPanel();
@@ -167,7 +174,7 @@ const Sidebar = ({
         </div>
       </div>
 
-      {/* File Tree / Join Panel Area */}
+      {/* File Tree / Join Panel / Chat Panel Area */}
       <div
         ref={explorerPanelRef}
         className={`bg-stone-800 bg-opacity-60 overflow-hidden flex flex-col h-full border-r border-stone-600 flex-shrink-0 ${
@@ -191,6 +198,8 @@ const Sidebar = ({
               }
             }}
           />
+        ) : activeIcon === "chat" ? (
+          <ChatPanel userName={userName} userColor={userColor} />
         ) : (
           <div className="flex-1 overflow-y-auto h-full">
             <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
