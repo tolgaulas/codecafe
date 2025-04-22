@@ -254,10 +254,10 @@ const Sidebar = ({
                           className={`mr-1 flex-shrink-0 ${iconColor}`}
                         />
                         <span
-                          className={`w-full truncate text-stone-500 ${
+                          className={`w-full truncate ${
                             activeFileId === id
-                              ? "text-stone-300 font-medium"
-                              : ""
+                              ? "text-stone-100"
+                              : "text-stone-400"
                           }`}
                         >
                           {file.name}
