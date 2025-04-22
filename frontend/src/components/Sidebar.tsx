@@ -30,6 +30,7 @@ interface SidebarProps {
   explorerPanelSize: number;
   handleExplorerPanelMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   toggleExplorerPanel: () => void;
+  openPanelWithIcon: (iconName: string) => void;
 
   activeIcon: string | null;
   setActiveIcon: React.Dispatch<React.SetStateAction<string | null>>;
@@ -57,6 +58,7 @@ const Sidebar = ({
   explorerPanelSize,
   handleExplorerPanelMouseDown,
   toggleExplorerPanel,
+  openPanelWithIcon,
   activeIcon,
   setActiveIcon,
   joinState,
@@ -75,20 +77,22 @@ const Sidebar = ({
   const [isProjectExpanded, setIsProjectExpanded] = useState(true);
 
   const handleIconClick = (iconName: string | null) => {
-    if (joinState === "prompting") return;
+    if (joinState === "prompting" || !iconName) return;
 
-    if (iconName === "files") {
-      toggleExplorerPanel();
-    } else if (iconName === "chat") {
-      if (isExplorerCollapsed) {
-        toggleExplorerPanel();
+    // Case 1: Panel is closed - Set the icon. Effect in App.tsx will open panel.
+    if (isExplorerCollapsed) {
+      openPanelWithIcon(iconName);
+    }
+    // Case 2: Panel is open.
+    else {
+      // Case 2a: Clicking the *same* icon that is already active - Set icon to null. Effect in App.tsx will close panel.
+      if (iconName === activeIcon) {
+        setActiveIcon(null);
       }
-      setActiveIcon(iconName);
-    } else {
-      if (!isExplorerCollapsed) {
-        toggleExplorerPanel();
+      // Case 2b: Clicking a *different* icon while the panel is open - Just switch the active icon.
+      else {
+        setActiveIcon(iconName);
       }
-      setActiveIcon(iconName);
     }
   };
 
@@ -193,91 +197,136 @@ const Sidebar = ({
             onToggleColorPicker={handleToggleColorPicker}
             onConfirmJoin={() => {
               handleConfirmJoin();
-              if (isExplorerCollapsed) {
-                toggleExplorerPanel();
-              }
+              // Set the icon to files. Effect in App.tsx will handle opening if needed.
+              setActiveIcon("files");
             }}
           />
-        ) : activeIcon === "chat" ? (
-          <ChatPanel userName={userName} userColor={userColor} />
         ) : (
-          <div className="flex-1 overflow-y-auto h-full">
-            <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
-              EXPLORER
-            </div>
-            <div className="w-full">
-              {/* Project Folder Header */}
-              <button
-                className="flex items-center text-xs py-1 cursor-pointer w-full hover:bg-stone-700"
-                onClick={toggleProjectFolder}
-              >
-                {/* Container for arrow + indent space */}
-                <div
-                  className="flex items-center justify-center pl-1 mr-1"
-                  style={{ width: "1rem" }}
+          <>
+            {/* Always render all panels but only show the active one */}
+            <div
+              className={`flex-1 ${
+                activeIcon === "files" || activeIcon === null ? "" : "hidden"
+              }`}
+            >
+              <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
+                EXPLORER
+              </div>
+              <div className="w-full h-full overflow-y-auto">
+                {/* Project Folder Header */}
+                <button
+                  className="flex items-center text-xs py-1 cursor-pointer w-full hover:bg-stone-700"
+                  onClick={toggleProjectFolder}
                 >
-                  {" "}
-                  {/* Fixed width container for alignment */}
-                  {isProjectExpanded ? (
-                    <VscChevronDown
-                      size={16}
-                      className="flex-shrink-0 text-stone-500"
-                    />
-                  ) : (
-                    <VscChevronRight
-                      size={16}
-                      className="flex-shrink-0 text-stone-500"
-                    />
-                  )}
-                </div>
-                <span className="font-medium text-stone-500 truncate">
-                  MY CODECAFE PROJECT
-                </span>
-              </button>
+                  {/* Container for arrow + indent space */}
+                  <div
+                    className="flex items-center justify-center pl-1 mr-1"
+                    style={{ width: "1rem" }}
+                  >
+                    {" "}
+                    {/* Fixed width container for alignment */}
+                    {isProjectExpanded ? (
+                      <VscChevronDown
+                        size={16}
+                        className="flex-shrink-0 text-stone-500"
+                      />
+                    ) : (
+                      <VscChevronRight
+                        size={16}
+                        className="flex-shrink-0 text-stone-500"
+                      />
+                    )}
+                  </div>
+                  <span className="font-medium text-stone-500 truncate">
+                    MY CODECAFE PROJECT
+                  </span>
+                </button>
 
-              {isProjectExpanded && (
-                <div className="relative">
-                  {/* Vertical Tree Line Element */}
-                  <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
+                {isProjectExpanded && (
+                  <div className="relative">
+                    {/* Vertical Tree Line Element */}
+                    <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
 
-                  {/* File List */}
-                  {Object.entries(mockFiles).map(([id, file]) => {
-                    const IconComponent =
-                      languageIconMap[file.language as EditorLanguageKey] ||
-                      VscFile;
-                    const iconColor =
-                      languageColorMap[file.language as EditorLanguageKey] ||
-                      defaultIconColor;
-                    return (
-                      <div
-                        key={id}
-                        className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-4 z-10 ${
-                          activeFileId === id
-                            ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
-                            : "hover:bg-stone-700/50"
-                        }`}
-                        onClick={() => handleOpenFile(id, isSessionActive)}
-                      >
-                        <IconComponent
-                          size={18}
-                          className={`mr-1 flex-shrink-0 ${iconColor}`}
-                        />
-                        <span
-                          className={`w-full truncate ${
+                    {/* File List */}
+                    {Object.entries(mockFiles).map(([id, file]) => {
+                      const IconComponent =
+                        languageIconMap[file.language as EditorLanguageKey] ||
+                        VscFile;
+                      const iconColor =
+                        languageColorMap[file.language as EditorLanguageKey] ||
+                        defaultIconColor;
+                      return (
+                        <div
+                          key={id}
+                          className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-4 z-10 ${
                             activeFileId === id
-                              ? "text-stone-100"
-                              : "text-stone-400"
+                              ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
+                              : "hover:bg-stone-700/50"
                           }`}
+                          onClick={() => handleOpenFile(id, isSessionActive)}
                         >
-                          {file.name}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          <IconComponent
+                            size={18}
+                            className={`mr-1 flex-shrink-0 ${iconColor}`}
+                          />
+                          <span
+                            className={`w-full truncate ${
+                              activeFileId === id
+                                ? "text-stone-100"
+                                : "text-stone-400"
+                            }`}
+                          >
+                            {file.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+
+            {/* Chat Panel */}
+            <div className={`flex-1 ${activeIcon === "chat" ? "" : "hidden"}`}>
+              <ChatPanel userName={userName} userColor={userColor} />
+            </div>
+
+            {/* Search Panel */}
+            <div
+              className={`p-4 text-stone-400 ${
+                activeIcon === "search" ? "" : "hidden"
+              }`}
+            >
+              Search Panel (Not Implemented)
+            </div>
+
+            {/* Share Panel */}
+            <div
+              className={`p-4 text-stone-400 ${
+                activeIcon === "share" ? "" : "hidden"
+              }`}
+            >
+              Share Panel (Not Implemented)
+            </div>
+
+            {/* Account Panel */}
+            <div
+              className={`p-4 text-stone-400 ${
+                activeIcon === "account" ? "" : "hidden"
+              }`}
+            >
+              Account Panel (Not Implemented)
+            </div>
+
+            {/* Settings Panel */}
+            <div
+              className={`p-4 text-stone-400 ${
+                activeIcon === "settings" ? "" : "hidden"
+              }`}
+            >
+              Settings Panel (Not Implemented)
+            </div>
+          </>
         )}
       </div>
 

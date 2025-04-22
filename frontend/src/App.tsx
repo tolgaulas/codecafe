@@ -47,7 +47,7 @@ const App = () => {
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
   // STATE
-  const [activeIcon, setActiveIcon] = useState<string | null>("files");
+  const [activeIcon, setActiveIcon] = useState<string | null>(null);
 
   const { openFiles, activeFileId } = useFileStore();
 
@@ -103,20 +103,16 @@ const App = () => {
     containerRef: sidebarContainerRef,
     panelRef: explorerPanelRef,
     storageKey: "explorerWidth",
-    onToggle: (isOpen) => {
-      if (isOpen) {
-        if (activeIcon !== "chat") {
-          setActiveIcon("files");
-        }
-      } else {
-        setActiveIcon(null);
-      }
-    },
     defaultOpenSize: DEFAULT_EXPLORER_WIDTH,
   });
   const explorerPanelSize = Math.max(0, rawExplorerPanelSize - ICON_BAR_WIDTH);
   const setExplorerPanelSize = (newSize: number) => {
     setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
+  };
+
+  // Modified function: Only sets the icon
+  const openPanelWithIcon = (iconName: string) => {
+    setActiveIcon(iconName);
   };
 
   const initialMaxTerminalHeight = window.innerHeight * 0.8;
@@ -663,6 +659,21 @@ const App = () => {
     };
   }, [activeFileId, editorInstanceRef.current]);
 
+  // Effect to control explorer panel visibility based on activeIcon
+  useEffect(() => {
+    // Open panel if an icon is active and panel is closed
+    if (activeIcon && isExplorerCollapsed) {
+      toggleExplorerPanel();
+    }
+    // Close panel if no icon is active and panel is open
+    else if (!activeIcon && !isExplorerCollapsed) {
+      toggleExplorerPanel();
+    }
+    // Note: We intentionally don't list toggleExplorerPanel in dependencies
+    // to avoid loops if the hook's internal state causes re-renders.
+    // We only want this effect to run when activeIcon or isExplorerCollapsed changes.
+  }, [activeIcon, isExplorerCollapsed]);
+
   // JSX
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
@@ -701,6 +712,7 @@ const App = () => {
           explorerPanelSize={explorerPanelSize}
           handleExplorerPanelMouseDown={handleExplorerPanelMouseDown}
           toggleExplorerPanel={toggleExplorerPanel}
+          openPanelWithIcon={openPanelWithIcon}
           activeIcon={activeIcon}
           setActiveIcon={setActiveIcon}
           joinState={joinState}
