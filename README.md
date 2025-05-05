@@ -1,5 +1,5 @@
 # CodeCafé: Code Together, Instantly.
-![GitHub stars](https://img.shields.io/github/stars/mrktsm/codecafe?style=for-the-badge&logo=github)
+![GitHub stars](https://img.shields.io/github/stars/mrktsm/codecafe?style=for-the-badge&logo=github&cacheSeconds=60)
 ![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen?style=for-the-badge)
 ![GPL-3.0 License](https://img.shields.io/github/license/mrktsm/codecafe?style=for-the-badge)
 
