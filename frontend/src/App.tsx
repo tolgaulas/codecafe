@@ -41,6 +41,7 @@ interface SearchOptions {
   matchCase: boolean;
   wholeWord: boolean;
   isRegex: boolean;
+  preserveCase: boolean;
 }
 
 interface MatchInfo {
@@ -103,6 +104,7 @@ const App = () => {
     matchCase: false,
     wholeWord: false,
     isRegex: false,
+    preserveCase: false,
   });
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
   const findResultsDecorationIds = useRef<string[]>([]);
@@ -584,20 +586,13 @@ const App = () => {
     const controller = getFindController();
     if (controller) {
       const state = controller.getState();
-      const matches = editorInstanceRef.current
-        ?.getModel()
-        ?.findMatches(
-          state.searchString,
-          false,
-          state.isRegex,
-          state.matchCase,
-          state.wholeWord ? state.searchString : null,
-          true
-        );
-      setMatchInfo({
-        currentIndex: state.currentIndex + 1, // Monaco is 0-indexed for current match
-        totalMatches: matches?.length || 0,
-      });
+      // Use matchesCount and currentIndex directly from the controller state
+      const newMatchInfo = {
+        // Monaco findController state currentIndex is 0-based
+        currentIndex: state.matchesCount > 0 ? state.currentIndex + 1 : null,
+        totalMatches: state.matchesCount || 0,
+      };
+      setMatchInfo(newMatchInfo);
     }
   };
 
@@ -611,13 +606,13 @@ const App = () => {
     setReplaceValue(value);
     const controller = getFindController();
     if (controller) {
-      controller.setReplaceString(value);
+      // controller.setReplaceString(value); // REMOVED: This method doesn't exist
+      // The useEffect hook handles setting the replace string via controller.start()
     }
   };
 
   const handleToggleSearchOption = (optionKey: keyof SearchOptions) => {
     setSearchOptions((prev) => ({ ...prev, [optionKey]: !prev[optionKey] }));
-    // The useEffect for [searchTerm, searchOptions] will re-trigger the search
   };
 
   const handleFindNext = () => {
@@ -633,6 +628,58 @@ const App = () => {
     if (controller) {
       controller.findPrevious();
       updateMatchInfoFromController();
+    }
+  };
+
+  const handleReplaceAll = () => {
+    const controller = getFindController(); // Still useful for options state
+    const editor = editorInstanceRef.current;
+    const model = editor?.getModel();
+
+    if (editor && model && activeFileId && searchTerm) {
+      const currentSearchOptions = searchOptions; // Capture current options
+
+      // 1. Find all matches
+      const matches = model.findMatches(
+        searchTerm,
+        true, // findNextMatch
+        currentSearchOptions.isRegex,
+        currentSearchOptions.matchCase,
+        currentSearchOptions.wholeWord ? searchTerm : null,
+        false // captureMatches - we only need ranges
+      );
+
+      if (matches.length > 0) {
+        // 2. Create edit operations
+        const operations = matches.map((match) => ({
+          range: match.range,
+          text: replaceValue, // Replace with the current replaceValue
+          forceMoveMarkers: true,
+        }));
+
+        // 3. Apply edits atomically
+        editor.executeEdits("sidebar-replace-all", operations);
+
+        // 4. Get updated content (Optional but good practice)
+        // const newContent = model.getValue(); // executeEdits updates the model
+
+        // 5. Update application state (Zustand store) - Triggered by editor change event anyway
+        // setFileContent(activeFileId, newContent); // Usually handled by onDidChangeContent listener
+
+        // 6. Clear the search state
+        // controller?.setSearchString(""); // Let useEffect handle this based on setSearchTerm
+        setSearchTerm(""); // Clear our search term state, triggering useEffect
+        setMatchInfo(null); // Clear match info
+      } else {
+        // No matches found, maybe just clear search term if needed
+        console.log(
+          "[Search Debug] handleReplaceAll: No matches found to replace."
+        );
+        setSearchTerm(""); // Clear search term even if no matches were replaced
+        setMatchInfo(null);
+      }
+    } else {
+      console.warn("[Search Debug] handleReplaceAll conditions not met.");
     }
   };
 
@@ -763,12 +810,11 @@ const App = () => {
   useEffect(() => {
     const controller = getFindController();
     if (!controller) {
-      setMatchInfo(null); // Clear match info if no controller
+      setMatchInfo(null);
       return;
     }
 
     if (searchTerm) {
-      // Start search or update search string and options
       controller.setSearchString(searchTerm);
       controller.start({
         searchString: searchTerm,
@@ -776,16 +822,16 @@ const App = () => {
         isRegex: searchOptions.isRegex,
         matchCase: searchOptions.matchCase,
         wholeWord: searchOptions.wholeWord,
+        // preserveCase is NOT a direct option for controller.start()
+        // It would need to be handled during the replace operation itself if implemented manually
         autoFindInSelection: "never",
         seedSearchStringFromSelection: "never",
       });
       updateMatchInfoFromController();
     } else {
-      // Clear search if term is empty
       if (controller.getState().searchString !== "") {
-        controller.setSearchString(""); // Clear search string in controller
+        controller.setSearchString("");
       }
-      // Clear our custom decorations
       if (editorInstanceRef.current) {
         findResultsDecorationIds.current =
           editorInstanceRef.current.deltaDecorations(
@@ -793,10 +839,9 @@ const App = () => {
             []
           );
       }
-      setMatchInfo(null); // Clear match info display
+      setMatchInfo(null);
     }
-    // Dependency on replaceValue is added because controller.start() uses it.
-  }, [searchTerm, searchOptions, replaceValue]);
+  }, [searchTerm, searchOptions, replaceValue]); // searchOptions now includes preserveCase
 
   // JSX
   return (
@@ -867,6 +912,7 @@ const App = () => {
           replaceValue={replaceValue}
           searchOptions={searchOptions}
           matchInfo={matchInfo}
+          onReplaceAll={handleReplaceAll}
         />
         {/* Code and Terminal Area + Optional WebView  */}
         <MainEditorArea
