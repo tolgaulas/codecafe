@@ -772,7 +772,7 @@ const App = () => {
       controller.setSearchString(searchTerm);
       controller.start({
         searchString: searchTerm,
-        replaceString: replaceValue, // Keep replace string updated
+        replaceString: replaceValue,
         isRegex: searchOptions.isRegex,
         matchCase: searchOptions.matchCase,
         wholeWord: searchOptions.wholeWord,
@@ -783,7 +783,6 @@ const App = () => {
     } else {
       // Clear search if term is empty
       if (controller.getState().searchString !== "") {
-        controller.closeFindWidget(); // Close the widget if it was somehow opened
         controller.setSearchString(""); // Clear search string in controller
       }
       // Clear our custom decorations

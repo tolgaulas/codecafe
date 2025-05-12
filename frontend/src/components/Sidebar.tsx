@@ -7,6 +7,13 @@ import {
   VscFile,
   VscChevronDown,
   VscChevronRight,
+  VscCaseSensitive,
+  VscWholeWord,
+  VscRegex,
+  VscArrowDown,
+  VscArrowUp,
+  VscReplace,
+  VscReplaceAll,
 } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import JoinSessionPanel from "./JoinSessionPanel";
@@ -20,6 +27,18 @@ import {
 } from "../constants/mappings";
 import { ICON_BAR_WIDTH, EXPLORER_HANDLE_WIDTH } from "../constants/layout";
 import { COLORS } from "../constants/colors";
+
+// Define types for search options and match info
+interface SearchOptions {
+  matchCase: boolean;
+  wholeWord: boolean;
+  isRegex: boolean;
+}
+
+interface MatchInfo {
+  currentIndex: number | null; // e.g., 1 for the first match
+  totalMatches: number;
+}
 
 interface SidebarProps {
   // Refs for resizable panel hook
@@ -49,6 +68,15 @@ interface SidebarProps {
   handleOpenFile: (fileId: string, isSessionActive: boolean) => void;
   mockFiles: typeof MOCK_FILES;
   isSessionActive: boolean;
+
+  onSearchChange: (term: string, options: SearchOptions) => void;
+  onReplaceChange: (term: string) => void;
+  onFindNext: () => void;
+  onFindPrevious: () => void;
+  onToggleSearchOption: (option: keyof SearchOptions) => void;
+  replaceValue: string;
+  searchOptions: SearchOptions;
+  matchInfo: MatchInfo | null;
 }
 
 const Sidebar = ({
@@ -73,8 +101,17 @@ const Sidebar = ({
   handleOpenFile,
   mockFiles,
   isSessionActive,
+  onSearchChange,
+  onReplaceChange,
+  onFindNext,
+  onFindPrevious,
+  onToggleSearchOption,
+  replaceValue,
+  searchOptions,
+  matchInfo,
 }: SidebarProps) => {
   const [isProjectExpanded, setIsProjectExpanded] = useState(true);
+  const [searchValue, setSearchValue] = useState("");
 
   const handleIconClick = (iconName: string | null) => {
     if (joinState === "prompting" || !iconName) return;
@@ -98,6 +135,25 @@ const Sidebar = ({
 
   const toggleProjectFolder = () => {
     setIsProjectExpanded(!isProjectExpanded);
+  };
+
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const term = e.target.value;
+    setSearchValue(term);
+    onSearchChange(term, searchOptions);
+  };
+
+  const handleReplaceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onReplaceChange(e.target.value);
+  };
+
+  // Helper to format match count string
+  const formatMatchCount = (): string => {
+    if (!matchInfo || matchInfo.totalMatches === 0) {
+      return "No results";
+    }
+    const current = matchInfo.currentIndex ?? "-";
+    return `${current} of ${matchInfo.totalMatches}`;
   };
 
   return (
@@ -293,11 +349,100 @@ const Sidebar = ({
 
             {/* Search Panel */}
             <div
-              className={`p-4 text-stone-400 ${
+              className={`flex flex-col ${
                 activeIcon === "search" ? "" : "hidden"
               }`}
             >
-              Search Panel (Not Implemented)
+              {/* Sticky Header */}
+              <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-95 z-10">
+                SEARCH
+              </div>
+              {/* Input Container with padding */}
+              <div className="p-2 flex flex-col space-y-2">
+                {/* Search Input Row - Now with embedded buttons */}
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    placeholder="Search"
+                    value={searchValue}
+                    onChange={handleSearchInputChange}
+                    // Increased right padding significantly for buttons
+                    className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-36 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
+                  />
+                  {/* Buttons Container - Absolutely positioned inside */}
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
+                    {/* Search Options */}
+                    <button
+                      title="Match Case"
+                      onClick={() => onToggleSearchOption("matchCase")}
+                      className={`p-0.5 rounded ${
+                        searchOptions.matchCase
+                          ? "bg-blue-500/40 text-stone-100"
+                          : "text-stone-400 hover:bg-stone-700/50"
+                      }`}
+                    >
+                      <VscCaseSensitive size={14} />
+                    </button>
+                    <button
+                      title="Match Whole Word"
+                      onClick={() => onToggleSearchOption("wholeWord")}
+                      className={`p-0.5 rounded ${
+                        searchOptions.wholeWord
+                          ? "bg-blue-500/40 text-stone-100"
+                          : "text-stone-400 hover:bg-stone-700/50"
+                      }`}
+                    >
+                      <VscWholeWord size={14} />
+                    </button>
+                    <button
+                      title="Use Regular Expression"
+                      onClick={() => onToggleSearchOption("isRegex")}
+                      className={`p-0.5 rounded ${
+                        searchOptions.isRegex
+                          ? "bg-blue-500/40 text-stone-100"
+                          : "text-stone-400 hover:bg-stone-700/50"
+                      }`}
+                    >
+                      <VscRegex size={14} />
+                    </button>
+                    <div className="border-l border-stone-600 h-4 mx-1"></div>{" "}
+                    {/* Separator */}
+                    {/* Find Buttons */}
+                    <button
+                      title="Previous Match"
+                      onClick={onFindPrevious}
+                      disabled={!matchInfo || matchInfo.totalMatches === 0}
+                      className="p-0.5 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed"
+                    >
+                      <VscArrowUp size={14} />
+                    </button>
+                    <button
+                      title="Next Match"
+                      onClick={onFindNext}
+                      disabled={!matchInfo || matchInfo.totalMatches === 0}
+                      className="p-0.5 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed"
+                    >
+                      <VscArrowDown size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Replace Input Row - Remains the same */}
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    placeholder="Replace"
+                    value={replaceValue}
+                    onChange={handleReplaceInputChange}
+                    className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-16 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
+                  />
+                </div>
+
+                {/* Match Count Display - Now below inputs on the left */}
+                <div className="text-xs text-stone-400 text-left pl-1 h-4">
+                  {formatMatchCount()}
+                </div>
+              </div>
             </div>
 
             {/* Share Panel */}
