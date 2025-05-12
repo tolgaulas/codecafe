@@ -54,7 +54,6 @@ interface MainEditorAreaProps {
   joinState: JoinStateType;
   tabsHaveOverflow: boolean;
   onTabsOverflowChange: (hasOverflow: boolean) => void;
-  activeIcon: string | null;
 }
 
 const MainEditorArea = ({
@@ -81,7 +80,6 @@ const MainEditorArea = ({
   joinState,
   tabsHaveOverflow,
   onTabsOverflowChange,
-  activeIcon,
 }: MainEditorAreaProps) => {
   // Get state from Zustand Store
   const { openFiles, activeFileId } = useFileStore();
@@ -101,15 +99,8 @@ const MainEditorArea = ({
       defaultIconColor;
   }
 
-  // Determine if the find widget should be hidden
-  const shouldHideFindWidget = activeIcon === "search";
-
   return (
-    <div
-      className={`flex flex-1 min-w-0 relative ${
-        shouldHideFindWidget ? "force-hide-find-widget" : ""
-      }`}
-    >
+    <div className={`flex flex-1 min-w-0 relative`}>
       <div
         ref={editorTerminalAreaRef}
         className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"

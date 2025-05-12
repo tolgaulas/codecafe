@@ -108,6 +108,7 @@ const App = () => {
   });
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
   const findResultsDecorationIds = useRef<string[]>([]);
+  const [isWidgetForcedHidden, setIsWidgetForcedHidden] = useState(false);
 
   // Instantiate Resizable Panels
   const explorerPanelRef = useRef<HTMLDivElement>(null);
@@ -806,42 +807,54 @@ const App = () => {
     // We only want this effect to run when activeIcon or isExplorerCollapsed changes.
   }, [activeIcon, isExplorerCollapsed]);
 
-  // Effect to handle editor search based on searchTerm and searchOptions
+  // Effect to handle editor search AND find widget visibility control
   useEffect(() => {
     const controller = getFindController();
     if (!controller) {
       setMatchInfo(null);
+      setIsWidgetForcedHidden(false); // Ensure hidden state is reset if no controller
       return;
     }
 
-    if (searchTerm) {
-      controller.setSearchString(searchTerm);
-      controller.start({
-        searchString: searchTerm,
-        replaceString: replaceValue,
-        isRegex: searchOptions.isRegex,
-        matchCase: searchOptions.matchCase,
-        wholeWord: searchOptions.wholeWord,
-        // preserveCase is NOT a direct option for controller.start()
-        // It would need to be handled during the replace operation itself if implemented manually
-        autoFindInSelection: "never",
-        seedSearchStringFromSelection: "never",
-      });
-      updateMatchInfoFromController();
+    if (activeIcon === "search") {
+      // Panel is active: force hide the native widget via CSS
+      setIsWidgetForcedHidden(true);
+
+      // Proceed with search logic based on term/options
+      if (searchTerm) {
+        controller.setSearchString(searchTerm);
+        controller.start({
+          searchString: searchTerm,
+          replaceString: replaceValue,
+          isRegex: searchOptions.isRegex,
+          matchCase: searchOptions.matchCase,
+          wholeWord: searchOptions.wholeWord,
+          autoFindInSelection: "never",
+          seedSearchStringFromSelection: "never",
+        });
+        updateMatchInfoFromController();
+      } else {
+        // Clear search if term is empty
+        if (controller.getState().searchString !== "") {
+          controller.setSearchString("");
+        }
+        if (editorInstanceRef.current) {
+          findResultsDecorationIds.current =
+            editorInstanceRef.current.deltaDecorations(
+              findResultsDecorationIds.current,
+              []
+            );
+        }
+        setMatchInfo(null);
+      }
     } else {
-      if (controller.getState().searchString !== "") {
-        controller.setSearchString("");
-      }
-      if (editorInstanceRef.current) {
-        findResultsDecorationIds.current =
-          editorInstanceRef.current.deltaDecorations(
-            findResultsDecorationIds.current,
-            []
-          );
-      }
-      setMatchInfo(null);
+      // Panel is NOT active: close widget and unhide *after* a delay
+      controller.closeFindWidget(); // Close immediately
+      setTimeout(() => {
+        setIsWidgetForcedHidden(false); // Remove CSS hiding after delay
+      }, 100); // 100ms delay
     }
-  }, [searchTerm, searchOptions, replaceValue]); // searchOptions now includes preserveCase
+  }, [searchTerm, searchOptions, replaceValue, activeIcon]); // Dependencies
 
   // JSX
   return (
@@ -880,7 +893,12 @@ const App = () => {
         setIsColorPickerOpen={setIsColorPickerOpen}
       />
       {/* Main Content */}
-      <div ref={mainContentRef} className="flex flex-1 min-h-0">
+      <div
+        ref={mainContentRef}
+        className={`flex flex-1 min-h-0 ${
+          isWidgetForcedHidden ? "force-hide-find-widget" : ""
+        }`}
+      >
         {/* Sidebar */}
         <Sidebar
           sidebarContainerRef={sidebarContainerRef}
@@ -940,7 +958,6 @@ const App = () => {
           joinState={joinState}
           tabsHaveOverflow={tabsHaveOverflow}
           onTabsOverflowChange={setTabsHaveOverflow}
-          activeIcon={activeIcon}
         />
       </div>
       {/* Status Bar */}
