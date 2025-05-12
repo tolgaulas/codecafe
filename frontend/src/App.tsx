@@ -4,7 +4,7 @@ import axios from "axios";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import { COLORS } from "./constants/colors";
 import { v4 as uuidv4 } from "uuid";
-import { editor } from "monaco-editor";
+import { editor, IDisposable } from "monaco-editor";
 import { RemoteUser } from "./types/props";
 import StatusBar from "./components/StatusBar";
 import {
@@ -34,8 +34,19 @@ import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import MainEditorArea from "./components/MainEditorArea";
 import { useFileStore } from "./store/useFileStore";
-import { IDisposable } from "monaco-editor";
 import { Analytics } from "@vercel/analytics/react";
+
+// Re-define types here if not imported from Sidebar (though it's better to share them)
+interface SearchOptions {
+  matchCase: boolean;
+  wholeWord: boolean;
+  isRegex: boolean;
+}
+
+interface MatchInfo {
+  currentIndex: number | null;
+  totalMatches: number;
+}
 
 const App = () => {
   // REFS
@@ -85,6 +96,16 @@ const App = () => {
   }>({});
 
   const [tabsHaveOverflow, setTabsHaveOverflow] = useState(false);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [replaceValue, setReplaceValue] = useState("");
+  const [searchOptions, setSearchOptions] = useState<SearchOptions>({
+    matchCase: false,
+    wholeWord: false,
+    isRegex: false,
+  });
+  const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
+  const findResultsDecorationIds = useRef<string[]>([]);
 
   // Instantiate Resizable Panels
   const explorerPanelRef = useRef<HTMLDivElement>(null);
@@ -551,6 +572,70 @@ const App = () => {
     }
   };
 
+  // Utility to get the find controller
+  const getFindController = () => {
+    return editorInstanceRef.current?.getContribution(
+      "editor.contrib.findController"
+    ) as any;
+  };
+
+  // Function to update match info from editor state
+  const updateMatchInfoFromController = () => {
+    const controller = getFindController();
+    if (controller) {
+      const state = controller.getState();
+      const matches = editorInstanceRef.current
+        ?.getModel()
+        ?.findMatches(
+          state.searchString,
+          false,
+          state.isRegex,
+          state.matchCase,
+          state.wholeWord ? state.searchString : null,
+          true
+        );
+      setMatchInfo({
+        currentIndex: state.currentIndex + 1, // Monaco is 0-indexed for current match
+        totalMatches: matches?.length || 0,
+      });
+    }
+  };
+
+  // HANDLERS for Search Panel
+  const handleSearchChange = (term: string, currentOpts: SearchOptions) => {
+    setSearchTerm(term);
+    // Options are already in searchOptions state, useEffect will handle search with new term & existing options
+  };
+
+  const handleReplaceChange = (value: string) => {
+    setReplaceValue(value);
+    const controller = getFindController();
+    if (controller) {
+      controller.setReplaceString(value);
+    }
+  };
+
+  const handleToggleSearchOption = (optionKey: keyof SearchOptions) => {
+    setSearchOptions((prev) => ({ ...prev, [optionKey]: !prev[optionKey] }));
+    // The useEffect for [searchTerm, searchOptions] will re-trigger the search
+  };
+
+  const handleFindNext = () => {
+    const controller = getFindController();
+    if (controller) {
+      controller.findNext();
+      updateMatchInfoFromController();
+    }
+  };
+
+  const handleFindPrevious = () => {
+    const controller = getFindController();
+    if (controller) {
+      controller.findPrevious();
+      updateMatchInfoFromController();
+    }
+  };
+
   // Memos
   const htmlFileContent = useMemo(() => {
     return (
@@ -674,9 +759,57 @@ const App = () => {
     // We only want this effect to run when activeIcon or isExplorerCollapsed changes.
   }, [activeIcon, isExplorerCollapsed]);
 
+  // Effect to handle editor search based on searchTerm and searchOptions
+  useEffect(() => {
+    const controller = getFindController();
+    if (!controller) {
+      setMatchInfo(null); // Clear match info if no controller
+      return;
+    }
+
+    if (searchTerm) {
+      // Start search or update search string and options
+      controller.setSearchString(searchTerm);
+      controller.start({
+        searchString: searchTerm,
+        replaceString: replaceValue, // Keep replace string updated
+        isRegex: searchOptions.isRegex,
+        matchCase: searchOptions.matchCase,
+        wholeWord: searchOptions.wholeWord,
+        autoFindInSelection: "never",
+        seedSearchStringFromSelection: "never",
+      });
+      updateMatchInfoFromController();
+    } else {
+      // Clear search if term is empty
+      if (controller.getState().searchString !== "") {
+        controller.closeFindWidget(); // Close the widget if it was somehow opened
+        controller.setSearchString(""); // Clear search string in controller
+      }
+      // Clear our custom decorations
+      if (editorInstanceRef.current) {
+        findResultsDecorationIds.current =
+          editorInstanceRef.current.deltaDecorations(
+            findResultsDecorationIds.current,
+            []
+          );
+      }
+      setMatchInfo(null); // Clear match info display
+    }
+    // Dependency on replaceValue is added because controller.start() uses it.
+  }, [searchTerm, searchOptions, replaceValue]);
+
   // JSX
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
+      {/* CSS rule now conditional based on parent class */}
+      <style>
+        {`
+          .force-hide-find-widget .monaco-editor .find-widget {
+            display: none !important;
+          }
+        `}
+      </style>
       {/* Header */}
       <Header
         isViewMenuOpen={isViewMenuOpen}
@@ -727,6 +860,14 @@ const App = () => {
           isSessionActive={isSessionActive}
           handleOpenFile={(fileId) => openFile(fileId, isSessionActive)}
           mockFiles={MOCK_FILES}
+          onSearchChange={handleSearchChange}
+          onReplaceChange={handleReplaceChange}
+          onFindNext={handleFindNext}
+          onFindPrevious={handleFindPrevious}
+          onToggleSearchOption={handleToggleSearchOption}
+          replaceValue={replaceValue}
+          searchOptions={searchOptions}
+          matchInfo={matchInfo}
         />
         {/* Code and Terminal Area + Optional WebView  */}
         <MainEditorArea
@@ -754,6 +895,7 @@ const App = () => {
           joinState={joinState}
           tabsHaveOverflow={tabsHaveOverflow}
           onTabsOverflowChange={setTabsHaveOverflow}
+          activeIcon={activeIcon}
         />
       </div>
       {/* Status Bar */}
