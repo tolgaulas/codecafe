@@ -51,10 +51,6 @@ export function SortableTab({
         {
           "bg-neutral-900": activeFileId === file.id,
           "bg-stone-700 hover:bg-stone-600": activeFileId !== file.id,
-        },
-        {
-          "opacity-50": isDragging,
-          "opacity-100": !isDragging,
         }
       )}
     >

@@ -18,18 +18,25 @@ import org.springframework.data.redis.core.script.RedisScript;
 @Configuration
 public class RedisConfig {
 
-    @Value("${spring.data.redis.host}")
+    @Value("${spring.redis.host}")
     private String redisHost;
 
-    @Value("${spring.data.redis.port}")
+    @Value("${spring.redis.port}")
     private int redisPort;
+
+    // We might need to inject password here later if AUTH is enabled
+    // @Value("${spring.redis.password}")
+    // private String redisPassword;
 
     @Bean
     public LettuceConnectionFactory lettuceConnectionFactory() {
         RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
         redisStandaloneConfiguration.setHostName(redisHost);
         redisStandaloneConfiguration.setPort(redisPort);
-        // No password set for AWS ElastiCache Serverless
+        // Configure password if/when AUTH is enabled
+        // if (redisPassword != null && !redisPassword.isEmpty()) {
+        //    redisStandaloneConfiguration.setPassword(redisPassword);
+        // }
 
         // Configure Lettuce Client with SSL
         LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()

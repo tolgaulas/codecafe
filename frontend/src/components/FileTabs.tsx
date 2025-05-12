@@ -304,7 +304,7 @@ const FileTabs: React.FC<FileTabsProps> = ({
                   languageColorMap[draggedFile.language] || defaultIconColor;
                 return (
                   <div
-                    className={`pl-2 pr-4 py-1 border border-stone-500 flex items-center flex-shrink-0 relative shadow-lg bg-neutral-900`}
+                    className={`pl-2 pr-4 py-1 border border-stone-500 flex items-center flex-shrink-0 relative shadow-lg bg-neutral-900 opacity-75`}
                   >
                     <IconComponent
                       size={16}

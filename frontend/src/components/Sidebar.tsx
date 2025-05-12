@@ -10,9 +10,6 @@ import {
   VscCaseSensitive,
   VscWholeWord,
   VscRegex,
-  VscArrowDown,
-  VscArrowUp,
-  VscReplace,
   VscReplaceAll,
 } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
@@ -33,6 +30,7 @@ interface SearchOptions {
   matchCase: boolean;
   wholeWord: boolean;
   isRegex: boolean;
+  preserveCase: boolean;
 }
 
 interface MatchInfo {
@@ -77,6 +75,7 @@ interface SidebarProps {
   replaceValue: string;
   searchOptions: SearchOptions;
   matchInfo: MatchInfo | null;
+  onReplaceAll: () => void;
 }
 
 const Sidebar = ({
@@ -109,6 +108,7 @@ const Sidebar = ({
   replaceValue,
   searchOptions,
   matchInfo,
+  onReplaceAll,
 }: SidebarProps) => {
   const [isProjectExpanded, setIsProjectExpanded] = useState(true);
   const [searchValue, setSearchValue] = useState("");
@@ -152,8 +152,10 @@ const Sidebar = ({
     if (!matchInfo || matchInfo.totalMatches === 0) {
       return "No results";
     }
-    const current = matchInfo.currentIndex ?? "-";
-    return `${current} of ${matchInfo.totalMatches}`;
+    if (matchInfo.totalMatches === 1) {
+      return "1 result";
+    }
+    return `${matchInfo.totalMatches} results`;
   };
 
   return (
@@ -357,21 +359,18 @@ const Sidebar = ({
               <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-95 z-10">
                 SEARCH
               </div>
-              {/* Input Container with padding */}
-              <div className="p-2 flex flex-col space-y-2">
-                {/* Search Input Row - Now with embedded buttons */}
+              {/* Input Container - Reverted padding */}
+              <div className="p-2 flex flex-col space-y-1">
+                {/* Search Input Row */}
                 <div className="relative flex items-center">
                   <input
                     type="text"
                     placeholder="Search"
                     value={searchValue}
                     onChange={handleSearchInputChange}
-                    // Increased right padding significantly for buttons
-                    className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-36 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
+                    className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
                   />
-                  {/* Buttons Container - Absolutely positioned inside */}
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
-                    {/* Search Options */}
                     <button
                       title="Match Case"
                       onClick={() => onToggleSearchOption("matchCase")}
@@ -405,41 +404,49 @@ const Sidebar = ({
                     >
                       <VscRegex size={14} />
                     </button>
-                    <div className="border-l border-stone-600 h-4 mx-1"></div>{" "}
-                    {/* Separator */}
-                    {/* Find Buttons */}
-                    <button
-                      title="Previous Match"
-                      onClick={onFindPrevious}
-                      disabled={!matchInfo || matchInfo.totalMatches === 0}
-                      className="p-0.5 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed"
-                    >
-                      <VscArrowUp size={14} />
-                    </button>
-                    <button
-                      title="Next Match"
-                      onClick={onFindNext}
-                      disabled={!matchInfo || matchInfo.totalMatches === 0}
-                      className="p-0.5 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed"
-                    >
-                      <VscArrowDown size={14} />
-                    </button>
                   </div>
                 </div>
 
-                {/* Replace Input Row - Remains the same */}
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    placeholder="Replace"
-                    value={replaceValue}
-                    onChange={handleReplaceInputChange}
-                    className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-16 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
-                  />
+                {/* Replace Input Row with Preserve Case & Replace All */}
+                <div className="flex items-center space-x-1">
+                  <div className="relative flex-grow flex items-center">
+                    <input
+                      type="text"
+                      placeholder="Replace"
+                      value={replaceValue}
+                      onChange={handleReplaceInputChange}
+                      className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
+                    />
+                    {/* Preserve Case Button (Embedded) */}
+                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
+                      <button
+                        title="Preserve Case (Ab)"
+                        onClick={() => onToggleSearchOption("preserveCase")}
+                        className={`p-0.5 rounded ${
+                          searchOptions.preserveCase
+                            ? "bg-blue-500/40 text-stone-100"
+                            : "text-stone-400 hover:bg-stone-700/50"
+                        }`}
+                      >
+                        <VscCaseSensitive size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* Replace All Button (Outside, to the right) */}
+                  <button
+                    title="Replace All"
+                    onClick={onReplaceAll}
+                    disabled={
+                      !matchInfo || matchInfo.totalMatches === 0 || !searchValue
+                    }
+                    className="p-1 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed flex-shrink-0 h-7 w-7 flex items-center justify-center"
+                  >
+                    <VscReplaceAll size={16} />
+                  </button>
                 </div>
 
-                {/* Match Count Display - Now below inputs on the left */}
-                <div className="text-xs text-stone-400 text-left pl-1 h-4">
+                {/* Match Count Display */}
+                <div className="text-xs text-stone-400 text-left pl-1 h-4 pt-1">
                   {formatMatchCount()}
                 </div>
               </div>

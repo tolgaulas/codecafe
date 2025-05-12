@@ -1,7 +1,7 @@
 // Explorer
 export const ICON_BAR_WIDTH = 48; // w-12
-export const DEFAULT_EXPLORER_WIDTH = 192; // w-48
-export const MIN_EXPLORER_WIDTH = 100;
+export const DEFAULT_EXPLORER_WIDTH = 288; // Increased from 240 (w-72)
+export const MIN_EXPLORER_WIDTH = 192; // Increased from 150 (w-48)
 export const MAX_EXPLORER_WIDTH = 500;
 export const EXPLORER_HANDLE_WIDTH = 8; // w-2
 

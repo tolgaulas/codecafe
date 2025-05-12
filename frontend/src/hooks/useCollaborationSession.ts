@@ -152,7 +152,6 @@ export const useCollaborationSession = ({
           userColor: userInfo.color,
         };
         stompClient.send("/app/join", {}, JSON.stringify(joinPayload));
-
         const clientCallbacks: IClientCallbacks = {
           sendOperation: (revision: number, operation: TextOperation) => {
             if (
