@@ -28,14 +28,22 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ userName, userColor }) => {
     },
   ];
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value);
+    // Auto-adjust height
+    e.target.style.height = "auto";
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px`;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // In a real implementation, this would send the message
     setInputMessage("");
+    // Reset textarea height
+    const textarea = document.querySelector("textarea");
+    if (textarea) {
+      textarea.style.height = "auto";
+    }
   };
 
   return (
@@ -60,18 +68,24 @@ const ChatPanel: React.FC<ChatPanelProps> = ({ userName, userColor }) => {
 
       {/* Message Input */}
       <div className="p-4 flex-shrink-0">
-        <form onSubmit={handleSubmit} className="relative">
-          <input
-            type="text"
+        <form onSubmit={handleSubmit} className="relative flex items-center">
+          <textarea
             value={inputMessage}
             onChange={handleInputChange}
             placeholder="Type a message..."
-            className="w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-1.5 text-sm focus:outline-none focus:border-stone-500 transition-colors pr-10"
+            className="w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm focus:outline-none focus:border-stone-500 transition-colors pr-10 resize-none min-h-[36px] max-h-[150px] overflow-y-auto"
+            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit(e);
+              }
+            }}
           />
           <button
             type="submit"
             disabled={!inputMessage.trim()}
-            className={`absolute right-0 top-0 h-full px-3 flex items-center justify-center ${
+            className={`absolute right-0 h-8 flex items-center justify-center px-3 ${
               inputMessage.trim()
                 ? "text-stone-300 hover:text-stone-100"
                 : "text-stone-600 cursor-not-allowed"
