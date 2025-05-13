@@ -12,6 +12,8 @@ import {
   CodeExecutionResponse,
   JoinStateType,
   TerminalHandle,
+  SearchOptions,
+  MatchInfo,
 } from "./types/editor";
 
 import {
@@ -35,19 +37,6 @@ import Sidebar from "./components/Sidebar";
 import MainEditorArea from "./components/MainEditorArea";
 import { useFileStore } from "./store/useFileStore";
 import { Analytics } from "@vercel/analytics/react";
-
-// Re-define types here if not imported from Sidebar (though it's better to share them)
-interface SearchOptions {
-  matchCase: boolean;
-  wholeWord: boolean;
-  isRegex: boolean;
-  preserveCase: boolean;
-}
-
-interface MatchInfo {
-  currentIndex: number | null;
-  totalMatches: number;
-}
 
 const App = () => {
   // REFS
@@ -924,8 +913,6 @@ const App = () => {
           mockFiles={MOCK_FILES}
           onSearchChange={handleSearchChange}
           onReplaceChange={handleReplaceChange}
-          onFindNext={handleFindNext}
-          onFindPrevious={handleFindPrevious}
           onToggleSearchOption={handleToggleSearchOption}
           replaceValue={replaceValue}
           searchOptions={searchOptions}

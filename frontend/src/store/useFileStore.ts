@@ -34,6 +34,7 @@ interface FileState {
   openFiles: OpenFile[];
   activeFileId: string | null;
   fileContents: { [id: string]: string };
+  // Add back dnd-kit specific state
   draggingId: string | null;
   dropIndicator: { tabId: string | null; side: "left" | "right" | null };
 }
@@ -44,6 +45,7 @@ interface FileActions {
   ) => void;
   setActiveFileId: (id: string | null) => void;
   setFileContent: (id: string, content: string) => void;
+  // Add back dnd-kit specific setters
   setDraggingId: (id: string | null) => void;
   setDropIndicator: (indicator: FileState["dropIndicator"]) => void;
   openFile: (fileId: string, isSessionActive: boolean) => void;
@@ -55,6 +57,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   openFiles: initialOpenFilesData,
   activeFileId: initialActiveFileId,
   fileContents: initialFileContents,
+  // Add back dnd-kit specific initial state
   draggingId: null,
   dropIndicator: { tabId: null, side: null },
 
@@ -67,6 +70,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set((state) => ({
       fileContents: { ...state.fileContents, [id]: content },
     })),
+  // Add back dnd-kit specific setters implementations
   setDraggingId: (id) => set({ draggingId: id }),
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 

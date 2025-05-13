@@ -49,3 +49,16 @@ export interface TerminalHandle {
   clear: () => void;
   fit: () => void;
 }
+
+// Search related types
+export interface SearchOptions {
+  matchCase: boolean;
+  wholeWord: boolean;
+  isRegex: boolean;
+  preserveCase: boolean;
+}
+
+export interface MatchInfo {
+  currentIndex: number | null; // e.g., 1 for the first match
+  totalMatches: number;
+}

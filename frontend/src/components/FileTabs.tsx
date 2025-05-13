@@ -92,7 +92,7 @@ const FileTabs: React.FC<FileTabsProps> = ({
   // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 100, tolerance: 5 },
+      activationConstraint: { delay: 100, tolerance: 7 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
@@ -116,48 +116,22 @@ const FileTabs: React.FC<FileTabsProps> = ({
     }
     const pointerX = (event.activatorEvent as PointerEvent).clientX;
 
-    const firstTabEl = tabContainerRef.current?.querySelector(
-      "[data-sortable-id]"
-    ) as HTMLElement | null;
-    const lastTabEl = tabContainerRef.current?.querySelector(
-      "[data-sortable-id]:last-child"
-    ) as HTMLElement | null;
-    let edgeIndicatorSet = false;
-
-    if (firstTabEl && lastTabEl && openFiles.length > 0) {
-      const firstTabRect = firstTabEl.getBoundingClientRect();
-      const lastTabRect = lastTabEl.getBoundingClientRect();
-      const firstTabId = openFiles[0].id;
-      const lastTabId = openFiles[openFiles.length - 1].id;
-
-      if (pointerX < firstTabRect.left + firstTabRect.width * 0.5) {
-        setDropIndicator({ tabId: firstTabId, side: "left" });
-        edgeIndicatorSet = true;
-      } else if (pointerX > lastTabRect.right - lastTabRect.width * 0.5) {
-        setDropIndicator({ tabId: lastTabId, side: "right" });
-        edgeIndicatorSet = true;
+    // Let the main logic handle all cases, including edges
+    if (isValidTabTarget && overId && event.over?.rect) {
+      if (activeId === overId) {
+        setDropIndicator({ tabId: null, side: null });
+        return;
       }
-    }
 
-    if (!edgeIndicatorSet) {
-      if (isValidTabTarget && overId) {
-        if (activeId === overId) {
-          setDropIndicator({ tabId: null, side: null });
-          return;
-        }
-        const overNode = tabContainerRef.current?.querySelector(
-          `[data-sortable-id="${overId}"]`
-        );
-        if (!overNode) {
-          console.warn("Could not find overNode for id:", overId);
-          setDropIndicator({ tabId: null, side: null });
-          return;
-        }
-        const overRect = overNode.getBoundingClientRect();
-        const overMiddleX = overRect.left + overRect.width / 2;
-        const side = pointerX < overMiddleX ? "left" : "right";
+      const overRect = event.over.rect;
+      const overMiddleX = overRect.left + overRect.width / 2;
+      const side = pointerX < overMiddleX ? "left" : "right";
+
+      if (dropIndicator.tabId !== overId || dropIndicator.side !== side) {
         setDropIndicator({ tabId: overId, side });
-      } else {
+      }
+    } else {
+      if (dropIndicator.tabId !== null) {
         setDropIndicator({ tabId: null, side: null });
       }
     }
@@ -193,16 +167,10 @@ const FileTabs: React.FC<FileTabsProps> = ({
       }
     }
 
-    if (newIndex === -1 && over && over.id !== active.id) {
-      const overIndex = openFiles.findIndex((file) => file.id === over.id);
-      if (overIndex !== -1) {
-        newIndex = overIndex;
-        console.log(`Calculated newIndex=${newIndex} based on 'over' element`);
-      }
-    }
-
     if (newIndex === -1) {
-      console.log("DragEnd: No valid newIndex determined.");
+      console.log(
+        "DragEnd: No valid drop indicator target. No move performed."
+      );
       return;
     }
 

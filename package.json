@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@types/sortablejs": "^1.15.8",
+    "sortablejs": "^1.15.6"
+  }
+}
