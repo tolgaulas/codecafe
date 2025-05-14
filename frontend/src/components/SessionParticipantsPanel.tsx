@@ -22,7 +22,11 @@ const SessionParticipantsPanel: React.FC<SessionParticipantsPanelProps> = ({
       <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-95 z-10">
         PARTICIPANTS
       </div>
-      <ul className="overflow-y-auto divide-y divide-stone-700 border-b border-stone-700">
+      <ul
+        className={`overflow-y-auto divide-y divide-stone-700 ${
+          participants.length > 0 ? "border-b border-stone-700" : ""
+        }`}
+      >
         {/* Local User */}
         <li key="local-user" className="flex items-center pl-4 pr-2 py-2.5">
           <div
