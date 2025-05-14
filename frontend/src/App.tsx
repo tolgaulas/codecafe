@@ -49,6 +49,8 @@ const App = () => {
 
   // STATE
   const [activeIcon, setActiveIcon] = useState<string | null>(null);
+  const [hasShownInitialParticipants, setHasShownInitialParticipants] =
+    useState(false);
 
   const { openFiles, activeFileId } = useFileStore();
 
@@ -147,8 +149,9 @@ const App = () => {
       // If joinState was "prompting" (e.g., from a URL-triggered join or an open share panel)
       // and we are now definitively moving to a non-share panel, reset joinState to "idle".
       // This allows the UI to stop showing the join prompt.
-      if (joinState === "prompting") {
+      if (joinState === "prompting" && activeIcon === "share") {
         setJoinState("idle");
+        setHasShownInitialParticipants(false);
       }
       setActiveIcon(iconName);
     }
@@ -157,17 +160,9 @@ const App = () => {
   const handleShareIconClick = () => {
     if (activeIcon === "share") {
       // If the share panel is already open
-      if (joinState === "prompting") {
-        // If prompting, clicking share icon again should close the panel
-        // and reset joinState, effectively cancelling the prompt.
-        setActiveIcon(null); // Close panel
-        setJoinState("idle"); // Reset join state
-      } else {
-        // If share panel is open but not prompting (e.g., showing participants or the "No Active Session" message),
-        // then clicking the share icon again closes it.
-        setActiveIcon(null); // Close panel
-        setJoinState("idle"); // Ensure joinState is reset (e.g. if it was "joined")
-      }
+      setActiveIcon(null); // Close panel
+      setJoinState("idle"); // Reset join state
+      setHasShownInitialParticipants(false);
     } else {
       // Opening share panel (or switching to it from another panel)
       setActiveIcon("share");
@@ -816,7 +811,11 @@ const App = () => {
 
   // Effect to handle UI changes after a session is joined
   useEffect(() => {
-    if (isSessionActive && joinState === "joined") {
+    if (
+      isSessionActive &&
+      joinState === "joined" &&
+      !hasShownInitialParticipants
+    ) {
       // Ensure the explorer panel is open if it was collapsed
       if (isExplorerCollapsed) {
         toggleExplorerPanel();
@@ -827,30 +826,30 @@ const App = () => {
         // after potential switchTab or initial join operations.
         setTimeout(() => {
           setActiveIcon("share");
+          setHasShownInitialParticipants(true);
         }, 150); // This delay can be tuned
       };
 
-      if (activeFileId) {
-        const currentActiveId = activeFileId;
-        // Short delay for switchTab, then trigger showing participants
-        setTimeout(() => {
-          switchTab(currentActiveId);
-          showParticipantsPanel();
-        }, 50); // Delay for switchTab
-      } else {
-        // If no active file, just proceed to show participants after a delay
-        showParticipantsPanel();
-      }
+      // No need to re-trigger switchTab here if activeFileId is already set from store/initial load
+      // The primary goal is to show participants ONCE after join.
+      showParticipantsPanel();
     }
   }, [
     isSessionActive,
     joinState,
     isExplorerCollapsed,
     toggleExplorerPanel,
-    activeFileId,
-    switchTab,
-    setActiveIcon, // Ensure setActiveIcon is in dependencies
+    setActiveIcon,
+    hasShownInitialParticipants,
+    setHasShownInitialParticipants,
   ]);
+
+  // Effect to reset hasShownInitialParticipants when session ends
+  useEffect(() => {
+    if (!isSessionActive) {
+      setHasShownInitialParticipants(false);
+    }
+  }, [isSessionActive]);
 
   useEffect(() => {
     let positionListener: IDisposable | null = null;
