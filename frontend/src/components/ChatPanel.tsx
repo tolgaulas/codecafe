@@ -41,20 +41,16 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [messages]);
 
-  // Initialize textarea height
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "36px";
-    }
-  }, []);
-
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value);
-    // Auto-adjust height without the "auto" reset to prevent the height flicker
+
+    // Only adjust height if content exceeds one line
     const textarea = e.target;
-    const currentHeight = textarea.scrollHeight;
-    textarea.style.height = "36px"; // Reset to base height
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
+    if (textarea.scrollHeight > 36 && textarea.scrollHeight <= 150) {
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    } else if (textarea.scrollHeight <= 36) {
+      textarea.style.height = "36px";
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -116,7 +112,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
               isSessionActive ? "Type a message..." : "Join a session to chat"
             }
             disabled={!isSessionActive}
-            className={`w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm focus:outline-none focus:border-stone-500 pr-10 resize-none h-[36px] max-h-[150px] overflow-y-auto ${
+            style={{ height: "36px" }}
+            className={`w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm leading-4 focus:outline-none focus:border-stone-500 pr-10 resize-none overflow-y-auto box-border ${
               !isSessionActive ? "opacity-50 cursor-not-allowed" : ""
             }`}
             rows={1}

@@ -91,7 +91,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
             placeholder="Search"
             value={searchValue}
             onChange={handleSearchInputChange}
-            className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
+            className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
           />
           <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
             <button
@@ -99,7 +99,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
               onClick={() => onToggleSearchOption("matchCase")}
               className={`p-0.5 rounded ${
                 searchOptions.matchCase
-                  ? "bg-blue-500/40 text-stone-100"
+                  ? "bg-stone-500/40 text-stone-100"
                   : "text-stone-400 hover:bg-stone-700/50"
               }`}
             >
@@ -110,7 +110,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
               onClick={() => onToggleSearchOption("wholeWord")}
               className={`p-0.5 rounded ${
                 searchOptions.wholeWord
-                  ? "bg-blue-500/40 text-stone-100"
+                  ? "bg-stone-500/40 text-stone-100"
                   : "text-stone-400 hover:bg-stone-700/50"
               }`}
             >
@@ -121,7 +121,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
               onClick={() => onToggleSearchOption("isRegex")}
               className={`p-0.5 rounded ${
                 searchOptions.isRegex
-                  ? "bg-blue-500/40 text-stone-100"
+                  ? "bg-stone-500/40 text-stone-100"
                   : "text-stone-400 hover:bg-stone-700/50"
               }`}
             >
@@ -138,7 +138,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
               placeholder="Replace"
               value={replaceValue} // This prop comes from App.tsx via Sidebar
               onChange={handleReplaceInputChange}
-              className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-blue-500 transition-colors h-7"
+              className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
             />
             {/* Preserve Case Button (Embedded) */}
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
@@ -147,7 +147,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
                 onClick={() => onToggleSearchOption("preserveCase")}
                 className={`p-0.5 rounded ${
                   searchOptions.preserveCase
-                    ? "bg-blue-500/40 text-stone-100"
+                    ? "bg-stone-500/40 text-stone-100"
                     : "text-stone-400 hover:bg-stone-700/50"
                 }`}
               >
