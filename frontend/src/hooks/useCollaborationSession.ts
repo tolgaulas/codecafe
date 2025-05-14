@@ -152,6 +152,25 @@ export const useCollaborationSession = ({
           userColor: userInfo.color,
         };
         stompClient.send("/app/join", {}, JSON.stringify(joinPayload));
+
+        // Small delay to allow server to process join before fetching state
+        setTimeout(() => {
+          // Request initial state FOR THE CURRENT ACTIVE FILE and WEBVIEW FILES
+          const filesToRequest = new Set<string>([activeFileId]);
+          webViewFileIds?.forEach((id) => filesToRequest.add(id));
+
+          filesToRequest.forEach((fileId) => {
+            if (stompClientRef.current?.connected) {
+              // Check connection again before sending
+              stompClientRef.current.send(
+                "/app/get-document-state",
+                {},
+                JSON.stringify({ documentId: fileId, sessionId: sessionId })
+              );
+            }
+          });
+        }, 250); // 250ms delay, adjust as needed
+
         const clientCallbacks: IClientCallbacks = {
           sendOperation: (revision: number, operation: TextOperation) => {
             if (
@@ -845,18 +864,6 @@ export const useCollaborationSession = ({
 
         // Store subscriptions
         subscriptionsRef.current = newSubscriptions;
-
-        // Request initial state FOR THE CURRENT ACTIVE FILE and WEBVIEW FILES
-        const filesToRequest = new Set<string>([currentFileId]);
-        webViewFileIds?.forEach((id) => filesToRequest.add(id));
-
-        filesToRequest.forEach((fileId) => {
-          stompClient.send(
-            "/app/get-document-state",
-            {},
-            JSON.stringify({ documentId: fileId, sessionId: sessionId })
-          );
-        });
       }, // End onConnect
       (error: any) => {
         handleError(

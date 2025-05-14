@@ -123,9 +123,56 @@ const App = () => {
     setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
   };
 
-  // Modified function: Only sets the icon
+  // Generic function to set active icon for simple panels (files, search, chat etc.)
   const openPanelWithIcon = (iconName: string) => {
-    setActiveIcon(iconName);
+    // If the share panel is currently active and prompting the user to join,
+    // prevent switching to other panels. The user must interact with the share panel
+    // (e.g., confirm join, or click the share icon again to close/cancel).
+    if (
+      activeIcon === "share" &&
+      joinState === "prompting" &&
+      iconName !== "share"
+    ) {
+      return; // Do nothing, keep the join panel open
+    }
+
+    // If the clicked icon is "share", delegate to its specific handler.
+    if (iconName === "share") {
+      handleShareIconClick();
+    } else {
+      // For any other icon (files, search, etc.):
+      // If joinState was "prompting" (e.g., from a URL-triggered join or an open share panel)
+      // and we are now definitively moving to a non-share panel, reset joinState to "idle".
+      // This allows the UI to stop showing the join prompt.
+      if (joinState === "prompting") {
+        setJoinState("idle");
+      }
+      setActiveIcon(iconName);
+    }
+  };
+
+  const handleShareIconClick = () => {
+    if (activeIcon === "share") {
+      // If the share panel is already open
+      if (joinState === "prompting") {
+        // And we are in the prompting state (user is being asked to enter details),
+        // clicking the share icon again should NOT close the panel.
+        return; // Do nothing, keep the join panel open and in prompting state.
+      } else {
+        // If share panel is open but not prompting (e.g., showing participants),
+        // then clicking the share icon again closes it.
+        setActiveIcon(null); // Close panel
+        setJoinState("idle"); // Reset join state
+      }
+    } else {
+      // Opening share panel (or switching to it)
+      setActiveIcon("share");
+      if (!isSessionActive) {
+        setJoinState("prompting"); // Only set to prompting if not already in an active session
+      }
+      // If isSessionActive is true, joinState remains as is (e.g., "joined" or "idle").
+      // This allows Sidebar to show SessionParticipantsPanel based on isSessionActive.
+    }
   };
 
   const initialMaxTerminalHeight = window.innerHeight * 0.8;
@@ -185,18 +232,16 @@ const App = () => {
     isSessionActive,
     webViewFileIds: ["index.html", "style.css", "script.js"],
     onStateReceived: useCallback(
-      (fileId, content, _revision, participants) => {
+      (fileId, content, _revision, participantsFromHook) => {
         // console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
         setFileContent(fileId, content);
-        const filteredParticipants = participants.filter(
-          (p) => p.id !== userId
-        );
+        // participantsFromHook is already filtered (for self) and has defaults from useCollaborationSession
         setRemoteUsers((prev) => ({
           ...prev,
-          [fileId]: filteredParticipants,
+          [fileId]: participantsFromHook, // Use directly
         }));
       },
-      [activeFileId, userId, setFileContent]
+      [setFileContent] // userId and activeFileId no longer needed for filtering here
     ),
     onOperationReceived: useCallback(
       (fileId, operationData) => {
@@ -543,25 +588,14 @@ const App = () => {
 
   const handleConfirmJoin = () => {
     if (!userName.trim()) {
-      alert("Please enter a display name to join.");
+      alert("Please enter your name.");
       return;
     }
-    // console.log(`User ${userName} confirmed join for session ${sessionId}`);
-    setJoinState("joined"); // Mark as joined
-    setActiveIcon("files");
-
-    // First set the session as active
+    setJoinState("joined");
+    // setIsSessionActive(true) will be the main trigger for the new useEffect.
+    // Other UI side-effects (like opening panel, setting activeIcon)
+    // will be handled by that useEffect.
     setIsSessionActive(true);
-
-    // If there's an active file, force refresh its collaboration connection
-    // by temporarily switching to null and back
-    if (activeFileId) {
-      const currentActiveId = activeFileId;
-      setTimeout(() => {
-        // Switch to a different file and back to trigger a fresh connection
-        switchTab(currentActiveId);
-      }, 100);
-    }
   };
 
   // Utility to get the find controller
@@ -733,6 +767,7 @@ const App = () => {
       // );
       setSessionId(sessionIdFromUrl);
       setJoinState("prompting");
+      setActiveIcon("share"); // Ensure the share panel (join prompt) is active
 
       // Also generate the share link for the joining user
       const shareLink = `${window.location.origin}${window.location.pathname}?session=${sessionIdFromUrl}`;
@@ -755,6 +790,44 @@ const App = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSessionActive, joinState, setExplorerPanelSize]);
+
+  // Effect to handle UI changes after a session is joined
+  useEffect(() => {
+    if (isSessionActive && joinState === "joined") {
+      // Ensure the explorer panel is open if it was collapsed
+      if (isExplorerCollapsed) {
+        toggleExplorerPanel();
+      }
+
+      const showParticipantsPanel = () => {
+        // Delay showing participants to give collaboration hook time
+        // after potential switchTab or initial join operations.
+        setTimeout(() => {
+          setActiveIcon("share");
+        }, 150); // This delay can be tuned
+      };
+
+      if (activeFileId) {
+        const currentActiveId = activeFileId;
+        // Short delay for switchTab, then trigger showing participants
+        setTimeout(() => {
+          switchTab(currentActiveId);
+          showParticipantsPanel();
+        }, 50); // Delay for switchTab
+      } else {
+        // If no active file, just proceed to show participants after a delay
+        showParticipantsPanel();
+      }
+    }
+  }, [
+    isSessionActive,
+    joinState,
+    isExplorerCollapsed,
+    toggleExplorerPanel,
+    activeFileId,
+    switchTab,
+    setActiveIcon, // Ensure setActiveIcon is in dependencies
+  ]);
 
   useEffect(() => {
     let positionListener: IDisposable | null = null;
@@ -899,7 +972,9 @@ const App = () => {
           openPanelWithIcon={openPanelWithIcon}
           activeIcon={activeIcon}
           setActiveIcon={setActiveIcon}
+          handleShareIconClick={handleShareIconClick}
           joinState={joinState}
+          sessionId={sessionId}
           userName={userName}
           userColor={userColor}
           isColorPickerOpen={isColorPickerOpen}
@@ -918,6 +993,10 @@ const App = () => {
           searchOptions={searchOptions}
           matchInfo={matchInfo}
           onReplaceAll={handleReplaceAll}
+          // Props for SessionParticipantsPanel (passed through Sidebar)
+          uniqueRemoteParticipants={uniqueRemoteParticipants}
+          localUserName={userName} // Pass userName as localUserName
+          localUserColor={userColor} // Pass userColor as localUserColor
         />
         {/* Code and Terminal Area + Optional WebView  */}
         <MainEditorArea

@@ -24,6 +24,9 @@ public class RedisConfig {
     @Value("${spring.redis.port}")
     private int redisPort;
 
+    @Value("${spring.redis.ssl.enabled:false}") // Inject SSL property, default to false if not set
+    private boolean redisSslEnabled;
+
     // We might need to inject password here later if AUTH is enabled
     // @Value("${spring.redis.password}")
     // private String redisPassword;
@@ -38,10 +41,16 @@ public class RedisConfig {
         //    redisStandaloneConfiguration.setPassword(redisPassword);
         // }
 
-        // Configure Lettuce Client with SSL
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-                .useSsl() // Enable SSL
-                .build();
+        LettuceClientConfiguration clientConfig;
+        if (redisSslEnabled) {
+            // Configure Lettuce Client with SSL
+            clientConfig = LettuceClientConfiguration.builder()
+                    .useSsl()
+                    .build();
+        } else {
+            // Configure Lettuce Client without SSL for local development
+            clientConfig = LettuceClientConfiguration.defaultConfiguration();
+        }
 
         LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration, clientConfig);
         lettuceConnectionFactory.afterPropertiesSet(); // Ensure initialization

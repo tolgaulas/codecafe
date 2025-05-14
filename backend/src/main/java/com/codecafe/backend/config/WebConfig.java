@@ -11,7 +11,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**") // Configure CORS for all /api endpoints
-                .allowedOrigins("https://codecafe.app") // Allow the specific frontend origin (no www)
+                .allowedOrigins("https://codecafe.app", "http://localhost:5173") // Allow production and local dev frontend
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS") // Allowed HTTP methods
                 .allowedHeaders("*") // Allow all headers
                 .allowCredentials(true) // Allow credentials (e.g., cookies)

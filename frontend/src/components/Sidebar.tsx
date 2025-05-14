@@ -16,6 +16,8 @@ import { GrChatOption, GrShareOption } from "react-icons/gr";
 import JoinSessionPanel from "./JoinSessionPanel";
 import ChatPanel from "./ChatPanel";
 import SearchPanel from "./SearchPanel";
+import SessionParticipantsPanel from "./SessionParticipantsPanel";
+import { RemoteUser } from "../types/props";
 import {
   JoinStateType,
   EditorLanguageKey,
@@ -46,6 +48,7 @@ interface SidebarProps {
   setActiveIcon: React.Dispatch<React.SetStateAction<string | null>>;
 
   joinState: JoinStateType;
+  sessionId: string | null;
   userName: string;
   userColor: string;
   isColorPickerOpen: boolean;
@@ -68,6 +71,13 @@ interface SidebarProps {
   searchOptions: SearchOptions;
   matchInfo: MatchInfo | null;
   onReplaceAll: () => void;
+
+  handleShareIconClick: () => void;
+
+  // Props for SessionParticipantsPanel
+  uniqueRemoteParticipants: RemoteUser[];
+  localUserName: string;
+  localUserColor: string;
 }
 
 const Sidebar = ({
@@ -81,6 +91,7 @@ const Sidebar = ({
   activeIcon,
   setActiveIcon,
   joinState,
+  sessionId,
   userName,
   userColor,
   isColorPickerOpen,
@@ -99,25 +110,26 @@ const Sidebar = ({
   searchOptions,
   matchInfo,
   onReplaceAll,
+  handleShareIconClick,
+  uniqueRemoteParticipants,
+  localUserName,
+  localUserColor,
 }: SidebarProps) => {
   const [isProjectExpanded, setIsProjectExpanded] = useState(true);
 
-  const handleIconClick = (iconName: string | null) => {
-    if (joinState === "prompting" || !iconName) return;
+  const handleGenericIconClick = (iconName: string) => {
+    if (joinState === "prompting" && activeIcon === "share") {
+      openPanelWithIcon(iconName);
+      return;
+    }
 
-    // Case 1: Panel is closed - Set the icon. Effect in App.tsx will open panel.
     if (isExplorerCollapsed) {
       openPanelWithIcon(iconName);
-    }
-    // Case 2: Panel is open.
-    else {
-      // Case 2a: Clicking the *same* icon that is already active - Set icon to null. Effect in App.tsx will close panel.
+    } else {
       if (iconName === activeIcon) {
         setActiveIcon(null);
-      }
-      // Case 2b: Clicking a *different* icon while the panel is open - Just switch the active icon.
-      else {
-        setActiveIcon(iconName);
+      } else {
+        openPanelWithIcon(iconName);
       }
     }
   };
@@ -144,7 +156,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("files")}
+            onClick={() => handleGenericIconClick("files")}
           >
             <VscFiles size={24} />
           </button>
@@ -154,7 +166,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("search")}
+            onClick={() => handleGenericIconClick("search")}
           >
             <VscSearch size={24} />
           </button>
@@ -164,7 +176,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("share")}
+            onClick={handleShareIconClick}
           >
             <GrShareOption size={26} />
           </button>
@@ -174,7 +186,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("chat")}
+            onClick={() => handleGenericIconClick("chat")}
           >
             <GrChatOption size={24} />
           </button>
@@ -187,7 +199,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("account")}
+            onClick={() => handleGenericIconClick("account")}
           >
             <VscAccount size={24} />
           </button>
@@ -197,7 +209,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("settings")}
+            onClick={() => handleGenericIconClick("settings")}
           >
             <VscSettingsGear size={24} />
           </button>
@@ -212,151 +224,146 @@ const Sidebar = ({
         }`}
         style={{ width: `${explorerPanelSize}px` }}
       >
-        {joinState === "prompting" ? (
-          <JoinSessionPanel
-            userName={userName}
-            userColor={userColor}
-            isColorPickerOpen={isColorPickerOpen}
-            colors={COLORS}
-            onNameChange={handleNameChange}
-            onColorSelect={handleColorSelect}
-            onToggleColorPicker={handleToggleColorPicker}
-            onConfirmJoin={() => {
-              handleConfirmJoin();
-              // Set the icon to files. Effect in App.tsx will handle opening if needed.
-              setActiveIcon("files");
-            }}
-          />
-        ) : (
-          <>
-            {/* Always render all panels but only show the active one */}
-            <div
-              className={`flex-1 ${
-                activeIcon === "files" || activeIcon === null ? "" : "hidden"
-              }`}
-            >
-              <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
-                EXPLORER
-              </div>
-              <div className="w-full h-full overflow-y-auto">
-                {/* Project Folder Header */}
-                <button
-                  className="flex items-center text-xs py-1 cursor-pointer w-full hover:bg-stone-700"
-                  onClick={toggleProjectFolder}
+        <>
+          <div
+            className={`flex-1 ${
+              (activeIcon === "files" || activeIcon === null) &&
+              joinState !== "prompting"
+                ? ""
+                : "hidden"
+            }`}
+          >
+            <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
+              EXPLORER
+            </div>
+            <div className="w-full h-full overflow-y-auto">
+              <button
+                className="flex items-center text-xs py-1 cursor-pointer w-full hover:bg-stone-700"
+                onClick={toggleProjectFolder}
+              >
+                <div
+                  className="flex items-center justify-center pl-1 mr-1"
+                  style={{ width: "1rem" }}
                 >
-                  {/* Container for arrow + indent space */}
-                  <div
-                    className="flex items-center justify-center pl-1 mr-1"
-                    style={{ width: "1rem" }}
-                  >
-                    {" "}
-                    {/* Fixed width container for alignment */}
-                    {isProjectExpanded ? (
-                      <VscChevronDown
-                        size={16}
-                        className="flex-shrink-0 text-stone-500"
-                      />
-                    ) : (
-                      <VscChevronRight
-                        size={16}
-                        className="flex-shrink-0 text-stone-500"
-                      />
-                    )}
-                  </div>
-                  <span className="font-medium text-stone-500 truncate">
-                    MY CODECAFE PROJECT
-                  </span>
-                </button>
+                  {" "}
+                  {isProjectExpanded ? (
+                    <VscChevronDown
+                      size={16}
+                      className="flex-shrink-0 text-stone-500"
+                    />
+                  ) : (
+                    <VscChevronRight
+                      size={16}
+                      className="flex-shrink-0 text-stone-500"
+                    />
+                  )}
+                </div>
+                <span className="font-medium text-stone-500 truncate">
+                  MY CODECAFE PROJECT
+                </span>
+              </button>
 
-                {isProjectExpanded && (
-                  <div className="relative">
-                    {/* Vertical Tree Line Element */}
-                    <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
+              {isProjectExpanded && (
+                <div className="relative">
+                  <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
 
-                    {/* File List */}
-                    {Object.entries(mockFiles).map(([id, file]) => {
-                      const IconComponent =
-                        languageIconMap[file.language as EditorLanguageKey] ||
-                        VscFile;
-                      const iconColor =
-                        languageColorMap[file.language as EditorLanguageKey] ||
-                        defaultIconColor;
-                      return (
-                        <div
-                          key={id}
-                          className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-4 z-10 ${
+                  {Object.entries(mockFiles).map(([id, file]) => {
+                    const IconComponent =
+                      languageIconMap[file.language as EditorLanguageKey] ||
+                      VscFile;
+                    const iconColor =
+                      languageColorMap[file.language as EditorLanguageKey] ||
+                      defaultIconColor;
+                    return (
+                      <div
+                        key={id}
+                        className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-4 z-10 ${
+                          activeFileId === id
+                            ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
+                            : "hover:bg-stone-700/50"
+                        }`}
+                        onClick={() => handleOpenFile(id, isSessionActive)}
+                      >
+                        <IconComponent
+                          size={18}
+                          className={`mr-1 flex-shrink-0 ${iconColor}`}
+                        />
+                        <span
+                          className={`w-full truncate ${
                             activeFileId === id
-                              ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
-                              : "hover:bg-stone-700/50"
+                              ? "text-stone-100"
+                              : "text-stone-400"
                           }`}
-                          onClick={() => handleOpenFile(id, isSessionActive)}
                         >
-                          <IconComponent
-                            size={18}
-                            className={`mr-1 flex-shrink-0 ${iconColor}`}
-                          />
-                          <span
-                            className={`w-full truncate ${
-                              activeFileId === id
-                                ? "text-stone-100"
-                                : "text-stone-400"
-                            }`}
-                          >
-                            {file.name}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                          {file.name}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+          </div>
 
-            {/* Chat Panel */}
-            <div className={`flex-1 ${activeIcon === "chat" ? "" : "hidden"}`}>
-              <ChatPanel userName={userName} userColor={userColor} />
-            </div>
+          <div className={`flex-1 ${activeIcon === "chat" ? "" : "hidden"}`}>
+            <ChatPanel userName={userName} userColor={userColor} />
+          </div>
 
-            {/* Search Panel - RENDER THE NEW COMPONENT HERE */}
-            <SearchPanel
-              activeIcon={activeIcon}
-              onSearchChange={onSearchChange}
-              onReplaceChange={onReplaceChange}
-              onToggleSearchOption={onToggleSearchOption}
-              replaceValue={replaceValue}
-              searchOptions={searchOptions}
-              matchInfo={matchInfo}
-              onReplaceAll={onReplaceAll}
-            />
+          <SearchPanel
+            activeIcon={activeIcon}
+            onSearchChange={onSearchChange}
+            onReplaceChange={onReplaceChange}
+            onToggleSearchOption={onToggleSearchOption}
+            replaceValue={replaceValue}
+            searchOptions={searchOptions}
+            matchInfo={matchInfo}
+            onReplaceAll={onReplaceAll}
+          />
 
-            {/* Share Panel */}
-            <div
-              className={`p-4 text-stone-400 ${
-                activeIcon === "share" ? "" : "hidden"
-              }`}
-            >
-              Share Panel (Not Implemented)
-            </div>
+          {/* Share Panel: Shows JoinSessionPanel or SessionParticipantsPanel */}
+          {activeIcon === "share" && (
+            <>
+              {!isSessionActive && joinState === "prompting" && (
+                <JoinSessionPanel
+                  userName={userName}
+                  userColor={userColor}
+                  isColorPickerOpen={isColorPickerOpen}
+                  colors={COLORS}
+                  onNameChange={handleNameChange}
+                  onColorSelect={handleColorSelect}
+                  onToggleColorPicker={handleToggleColorPicker}
+                  onConfirmJoin={handleConfirmJoin}
+                />
+              )}
+              {isSessionActive && (
+                <SessionParticipantsPanel
+                  key={`${sessionId || "no-session"}-${
+                    uniqueRemoteParticipants.length
+                  }`}
+                  activeIcon={activeIcon}
+                  participants={uniqueRemoteParticipants}
+                  localUser={{ name: localUserName, color: localUserColor }}
+                />
+              )}
+            </>
+          )}
 
-            {/* Account Panel */}
-            <div
-              className={`p-4 text-stone-400 ${
-                activeIcon === "account" ? "" : "hidden"
-              }`}
-            >
-              Account Panel (Not Implemented)
-            </div>
+          <div
+            className={`p-4 text-stone-400 ${
+              activeIcon === "account" ? "" : "hidden"
+            }`}
+          >
+            Account Panel (Not Implemented)
+          </div>
 
-            {/* Settings Panel */}
-            <div
-              className={`p-4 text-stone-400 ${
-                activeIcon === "settings" ? "" : "hidden"
-              }`}
-            >
-              Settings Panel (Not Implemented)
-            </div>
-          </>
-        )}
+          <div
+            className={`p-4 text-stone-400 ${
+              activeIcon === "settings" ? "" : "hidden"
+            }`}
+          >
+            Settings Panel (Not Implemented)
+          </div>
+        </>
       </div>
 
       {!isExplorerCollapsed && (
@@ -364,7 +371,6 @@ const Sidebar = ({
           className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
           style={{
             width: `${EXPLORER_HANDLE_WIDTH}px`,
-            // Position based on hook size and ICON_BAR_WIDTH
             left: `${
               ICON_BAR_WIDTH + explorerPanelSize - EXPLORER_HANDLE_WIDTH / 2
             }px`,
