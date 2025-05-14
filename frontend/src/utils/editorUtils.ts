@@ -24,6 +24,9 @@ export const editorOptions: editor.IStandaloneEditorConstructionOptions = {
   parameterHints: { enabled: false },
   codeLens: false,
   hover: { enabled: true, delay: 300 },
+  find: {
+    addExtraSpaceOnTop: false,
+  },
 };
 
 // Decoration Helper Functions
