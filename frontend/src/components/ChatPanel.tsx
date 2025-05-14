@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import ChatMessage from "./ChatMessage";
 import { IoSend } from "react-icons/io5";
 
@@ -32,6 +32,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
 }) => {
   const [inputMessage, setInputMessage] = useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -40,11 +41,20 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     }
   }, [messages]);
 
+  // Initialize textarea height
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "36px";
+    }
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value);
-    // Auto-adjust height
-    e.target.style.height = "auto";
-    e.target.style.height = `${Math.min(e.target.scrollHeight, 150)}px`;
+    // Auto-adjust height without the "auto" reset to prevent the height flicker
+    const textarea = e.target;
+    const currentHeight = textarea.scrollHeight;
+    textarea.style.height = "36px"; // Reset to base height
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -59,9 +69,8 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
     setInputMessage("");
 
     // Reset textarea height
-    const textarea = document.querySelector("textarea");
-    if (textarea) {
-      textarea.style.height = "auto";
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "36px";
     }
   };
 
@@ -100,13 +109,14 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
       <div className="p-4 flex-shrink-0">
         <form onSubmit={handleSubmit} className="relative flex items-center">
           <textarea
+            ref={textareaRef}
             value={inputMessage}
             onChange={handleInputChange}
             placeholder={
               isSessionActive ? "Type a message..." : "Join a session to chat"
             }
             disabled={!isSessionActive}
-            className={`w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm focus:outline-none focus:border-stone-500 transition-colors pr-10 resize-none min-h-[36px] max-h-[150px] overflow-y-auto ${
+            className={`w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm focus:outline-none focus:border-stone-500 pr-10 resize-none h-[36px] max-h-[150px] overflow-y-auto ${
               !isSessionActive ? "opacity-50 cursor-not-allowed" : ""
             }`}
             rows={1}
