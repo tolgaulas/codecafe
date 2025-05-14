@@ -5,7 +5,7 @@ import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
 import { COLORS } from "./constants/colors";
 import { v4 as uuidv4 } from "uuid";
 import { editor, IDisposable } from "monaco-editor";
-import { RemoteUser } from "./types/props";
+import { RemoteUser, ChatMessageType } from "./types/props";
 import StatusBar from "./components/StatusBar";
 import {
   CodeExecutionRequest,
@@ -99,6 +99,9 @@ const App = () => {
   const findResultsDecorationIds = useRef<string[]>([]);
   const [isWidgetForcedHidden, setIsWidgetForcedHidden] = useState(false);
 
+  // New state for chat messages
+  const [chatMessages, setChatMessages] = useState<ChatMessageType[]>([]);
+
   // Instantiate Resizable Panels
   const explorerPanelRef = useRef<HTMLDivElement>(null);
   const {
@@ -155,23 +158,24 @@ const App = () => {
     if (activeIcon === "share") {
       // If the share panel is already open
       if (joinState === "prompting") {
-        // And we are in the prompting state (user is being asked to enter details),
-        // clicking the share icon again should NOT close the panel.
-        return; // Do nothing, keep the join panel open and in prompting state.
-      } else {
-        // If share panel is open but not prompting (e.g., showing participants),
-        // then clicking the share icon again closes it.
+        // If prompting, clicking share icon again should close the panel
+        // and reset joinState, effectively cancelling the prompt.
         setActiveIcon(null); // Close panel
         setJoinState("idle"); // Reset join state
+      } else {
+        // If share panel is open but not prompting (e.g., showing participants or the "No Active Session" message),
+        // then clicking the share icon again closes it.
+        setActiveIcon(null); // Close panel
+        setJoinState("idle"); // Ensure joinState is reset (e.g. if it was "joined")
       }
     } else {
-      // Opening share panel (or switching to it)
+      // Opening share panel (or switching to it from another panel)
       setActiveIcon("share");
-      if (!isSessionActive) {
-        setJoinState("prompting"); // Only set to prompting if not already in an active session
-      }
-      // If isSessionActive is true, joinState remains as is (e.g., "joined" or "idle").
-      // This allows Sidebar to show SessionParticipantsPanel based on isSessionActive.
+      // DO NOT automatically set joinState to "prompting" here.
+      // joinState will be set to "prompting" by:
+      // 1. The useEffect for URL-based joins.
+      // 2. An explicit user action like clicking a "Join Session" button (if added to the placeholder).
+      // If !isSessionActive and joinState is not "prompting", the Sidebar will show the placeholder message.
     }
   };
 
@@ -221,9 +225,7 @@ const App = () => {
       DEFAULT_WEBVIEW_WIDTH_FRACTION,
   });
 
-  const {
-    /* isConnected */
-  } = useCollaborationSession({
+  const { isConnected, sendChatMessage } = useCollaborationSession({
     sessionId,
     userId,
     userInfo: { name: userName, color: userColor },
@@ -372,6 +374,10 @@ const App = () => {
         `Collaboration Error: ${error instanceof Error ? error.message : error}`
       );
       setIsSessionActive(false);
+    }, []),
+    // New callback for chat messages
+    onChatMessageReceived: useCallback((message: ChatMessageType) => {
+      setChatMessages((prevMessages) => [...prevMessages, message]);
     }, []),
   });
 
@@ -746,6 +752,23 @@ const App = () => {
     return Array.from(uniqueUsersMap.values());
   }, [remoteUsers, userId]);
 
+  // Handle sending chat messages
+  const handleSendChatMessage = useCallback(
+    (message: string) => {
+      if (sendChatMessage && message.trim()) {
+        sendChatMessage(message);
+      }
+    },
+    [sendChatMessage]
+  );
+
+  // Reset chat messages when session changes
+  useEffect(() => {
+    if (!isSessionActive) {
+      setChatMessages([]);
+    }
+  }, [isSessionActive]);
+
   // EFFECTS
   useEffect(() => {
     document.addEventListener("pointerup", handleGlobalPointerUp);
@@ -993,10 +1016,12 @@ const App = () => {
           searchOptions={searchOptions}
           matchInfo={matchInfo}
           onReplaceAll={handleReplaceAll}
-          // Props for SessionParticipantsPanel (passed through Sidebar)
           uniqueRemoteParticipants={uniqueRemoteParticipants}
-          localUserName={userName} // Pass userName as localUserName
-          localUserColor={userColor} // Pass userColor as localUserColor
+          localUserName={userName}
+          localUserColor={userColor}
+          onSendMessage={handleSendChatMessage}
+          chatMessages={chatMessages}
+          userId={userId}
         />
         {/* Code and Terminal Area + Optional WebView  */}
         <MainEditorArea

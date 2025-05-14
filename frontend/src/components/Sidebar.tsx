@@ -17,7 +17,7 @@ import JoinSessionPanel from "./JoinSessionPanel";
 import ChatPanel from "./ChatPanel";
 import SearchPanel from "./SearchPanel";
 import SessionParticipantsPanel from "./SessionParticipantsPanel";
-import { RemoteUser } from "../types/props";
+import { RemoteUser, ChatMessageType } from "../types/props";
 import {
   JoinStateType,
   EditorLanguageKey,
@@ -78,6 +78,11 @@ interface SidebarProps {
   uniqueRemoteParticipants: RemoteUser[];
   localUserName: string;
   localUserColor: string;
+
+  // Chat functionality props
+  userId: string;
+  chatMessages: ChatMessageType[];
+  onSendMessage: (message: string) => void;
 }
 
 const Sidebar = ({
@@ -114,6 +119,9 @@ const Sidebar = ({
   uniqueRemoteParticipants,
   localUserName,
   localUserColor,
+  userId,
+  chatMessages,
+  onSendMessage,
 }: SidebarProps) => {
   const [isProjectExpanded, setIsProjectExpanded] = useState(true);
 
@@ -306,7 +314,15 @@ const Sidebar = ({
           </div>
 
           <div className={`flex-1 ${activeIcon === "chat" ? "" : "hidden"}`}>
-            <ChatPanel userName={userName} userColor={userColor} />
+            <ChatPanel
+              userName={userName}
+              userColor={userColor}
+              sessionId={sessionId}
+              isSessionActive={isSessionActive}
+              userId={userId}
+              onSendMessage={onSendMessage}
+              messages={chatMessages}
+            />
           </div>
 
           <SearchPanel
@@ -323,7 +339,7 @@ const Sidebar = ({
           {/* Share Panel: Shows JoinSessionPanel or SessionParticipantsPanel */}
           {activeIcon === "share" && (
             <>
-              {!isSessionActive && joinState === "prompting" && (
+              {joinState === "prompting" ? (
                 <JoinSessionPanel
                   userName={userName}
                   userColor={userColor}
@@ -334,8 +350,7 @@ const Sidebar = ({
                   onToggleColorPicker={handleToggleColorPicker}
                   onConfirmJoin={handleConfirmJoin}
                 />
-              )}
-              {isSessionActive && (
+              ) : isSessionActive ? (
                 <SessionParticipantsPanel
                   key={`${sessionId || "no-session"}-${
                     uniqueRemoteParticipants.length
@@ -344,6 +359,21 @@ const Sidebar = ({
                   participants={uniqueRemoteParticipants}
                   localUser={{ name: localUserName, color: localUserColor }}
                 />
+              ) : (
+                <div className="flex flex-col h-full bg-stone-800 bg-opacity-60">
+                  <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10 flex-shrink-0">
+                    PARTICIPANTS
+                  </div>
+                  <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+                    <VscAccount size={48} className="text-stone-500 mb-3" />
+                    <p className="text-sm text-stone-300 mb-1">
+                      No Active Session
+                    </p>
+                    <p className="text-xs text-stone-400">
+                      Join or start a session to view participants.
+                    </p>
+                  </div>
+                </div>
               )}
             </>
           )}

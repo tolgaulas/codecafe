@@ -13,6 +13,7 @@ import {
   RemoteUser,
   UseCollaborationSessionProps,
   UseCollaborationSessionReturn,
+  ChatMessageType,
 } from "../types/props";
 
 interface CursorMessage {
@@ -27,6 +28,16 @@ interface CursorMessage {
   };
 }
 
+// Add chat message interface
+interface ChatMessagePayload {
+  sessionId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  message: string;
+  timestamp?: string;
+}
+
 export const useCollaborationSession = ({
   sessionId,
   userId,
@@ -39,6 +50,7 @@ export const useCollaborationSession = ({
   onRemoteUsersUpdate,
   onConnectionStatusChange,
   onError,
+  onChatMessageReceived,
   webViewFileIds,
 }: UseCollaborationSessionProps): UseCollaborationSessionReturn => {
   const [isConnected, setIsConnected] = useState(false);
@@ -283,6 +295,25 @@ export const useCollaborationSession = ({
           currentFileId,
           ...(webViewFileIds || []),
         ]);
+
+        // Add chat message subscription
+        if (sessionId) {
+          const chatTopic = `/topic/sessions/${sessionId}/chat`;
+          console.log("[Chat] Subscribing to chat topic:", chatTopic);
+          newSubscriptions.push(
+            stompClient.subscribe(chatTopic, (message: any) => {
+              try {
+                const chatMessage = JSON.parse(message.body);
+                console.log("[Chat] Received chat message:", chatMessage);
+                if (chatMessage && onChatMessageReceived) {
+                  onChatMessageReceived(chatMessage);
+                }
+              } catch (error) {
+                console.error("[Chat] Error processing chat message:", error);
+              }
+            })
+          );
+        }
 
         const handleIncomingState = (message: any) => {
           try {
@@ -905,6 +936,7 @@ export const useCollaborationSession = ({
     onStateReceived,
     onOperationReceived,
     onRemoteUsersUpdate,
+    onChatMessageReceived,
     handleConnectionStatusChange,
     handleError,
     JSON.stringify(webViewFileIds),
@@ -931,5 +963,39 @@ export const useCollaborationSession = ({
     userInfo.color,
   ]);
 
-  return { isConnected };
+  // Add sendChatMessage function before the return statement
+  const sendChatMessage = useCallback(
+    (message: string) => {
+      if (
+        stompClientRef.current?.connected &&
+        sessionId &&
+        userInfo.name.trim() &&
+        message.trim()
+      ) {
+        const chatPayload: ChatMessagePayload = {
+          sessionId: sessionId,
+          userId: userId,
+          userName: userInfo.name,
+          userColor: userInfo.color,
+          message: message.trim(),
+        };
+
+        console.log("[Chat] Sending chat message:", chatPayload);
+        stompClientRef.current.send(
+          "/app/chat",
+          {},
+          JSON.stringify(chatPayload)
+        );
+        return true;
+      }
+      return false;
+    },
+    [sessionId, userId, userInfo.name, userInfo.color]
+  );
+
+  // Update the return value to include sendChatMessage
+  return {
+    isConnected,
+    sendChatMessage,
+  };
 };
