@@ -364,14 +364,10 @@ const Sidebar = ({
                   <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10 flex-shrink-0">
                     PARTICIPANTS
                   </div>
-                  <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-                    <VscAccount size={48} className="text-stone-500 mb-3" />
-                    <p className="text-sm text-stone-300 mb-1">
-                      No Active Session
-                    </p>
-                    <p className="text-xs text-stone-400">
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="text-center py-10 text-stone-500 text-sm">
                       Join or start a session to view participants.
-                    </p>
+                    </div>
                   </div>
                 </div>
               )}
