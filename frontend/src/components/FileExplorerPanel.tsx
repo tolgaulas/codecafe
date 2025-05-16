@@ -1,6 +1,5 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { VscFile, VscChevronDown, VscChevronRight } from "react-icons/vsc";
-import { MOCK_FILES } from "../constants/mockFiles";
 import {
   languageIconMap,
   languageColorMap,
@@ -11,22 +10,22 @@ import { EditorLanguageKey } from "../types/editor";
 
 // Props for FileExplorerPanel - initially minimal, might adjust
 interface FileExplorerPanelProps {
-  isSessionActive: boolean; // Still needed for handleOpenFile
+  isSessionActive: boolean;
+  handleOpenFile: (fileId: string) => void;
+  mockFiles: { [key: string]: any };
+  activeFileId: string | null;
 }
 
-const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
+const FileExplorerPanel = ({
   isSessionActive,
-}) => {
+  handleOpenFile,
+  mockFiles,
+  activeFileId,
+}: FileExplorerPanelProps) => {
   const [isProjectExpanded, setIsProjectExpanded] = useState(true);
-  const activeFileId = useFileStore((state) => state.activeFileId);
-  const openFileInStore = useFileStore((state) => state.openFile); // Renamed to avoid conflict if we pass handleOpenFile prop
 
   const toggleProjectFolder = () => {
     setIsProjectExpanded(!isProjectExpanded);
-  };
-
-  const handleOpenFile = (fileId: string) => {
-    openFileInStore(fileId, isSessionActive);
   };
 
   return (
@@ -41,7 +40,7 @@ const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
         >
           <div
             className="flex items-center justify-center mr-1"
-            style={{ width: "1rem" }} // Keep consistent width for icon
+            style={{ width: "1rem" }}
           >
             {isProjectExpanded ? (
               <VscChevronDown
@@ -62,10 +61,9 @@ const FileExplorerPanel: React.FC<FileExplorerPanelProps> = ({
 
         {isProjectExpanded && (
           <div className="relative">
-            {/* Vertical guide line, adjust left padding if needed */}
             <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
 
-            {Object.entries(MOCK_FILES).map(([id, file]) => {
+            {Object.entries(mockFiles).map(([id, file]) => {
               const IconComponent =
                 languageIconMap[file.language as EditorLanguageKey] || VscFile;
               const iconColor =

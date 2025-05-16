@@ -1,17 +1,8 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import clsx from "clsx";
-import { OpenFile } from "../types/editor";
+import { SortableTabProps } from "../types/editor";
 import { useFileStore } from "../store/useFileStore";
-
-export interface SortableTabProps {
-  file: OpenFile;
-  activeFileId: string | null;
-  draggingId: string | null;
-  dropIndicatorSide: "left" | "right" | null;
-  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
-  iconColor: string;
-}
 
 export function SortableTab({
   file,
@@ -19,6 +10,8 @@ export function SortableTab({
   IconComponent,
   iconColor,
   dropIndicatorSide,
+  onSwitchTab,
+  onCloseTab,
 }: SortableTabProps) {
   const {
     listeners,
@@ -27,24 +20,25 @@ export function SortableTab({
     isDragging,
   } = useSortable({ id: file.id });
 
-  // Get actions from store
-  const switchTab = useFileStore((state) => state.switchTab);
-  const closeFile = useFileStore((state) => state.closeFile);
+  const storeSwitchTab = useFileStore((state) => state.switchTab);
+  const storeCloseFile = useFileStore((state) => state.closeFile);
+
+  // Use provided handlers or fallback to store
+  const handleSwitchTab = onSwitchTab || storeSwitchTab;
+  const handleCloseTab = onCloseTab || storeCloseFile;
 
   // Restore the style object for the indicator lines
-  const style: React.CSSProperties = {
-    zIndex: activeFileId === file.id ? 10 : isDragging ? 20 : "auto", // Ensure dragging tab is above others
-    // @ts-ignore // Ignore TS error for CSS custom properties
+  const style = {
+    zIndex: activeFileId === file.id ? 10 : isDragging ? 20 : "auto",
     "--before-opacity": dropIndicatorSide === "left" ? 1 : 0,
-    // @ts-ignore // Ignore TS error for CSS custom properties
     "--after-opacity": dropIndicatorSide === "right" ? 1 : 0,
-  };
+  } as React.CSSProperties;
 
   return (
     <div
       ref={setNodeRef}
-      style={style} // Apply the style object
-      onClick={() => switchTab(file.id)}
+      style={style}
+      onClick={() => handleSwitchTab(file.id)}
       {...listeners}
       className={clsx(
         "group pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative transition-colors duration-150 ease-out",
@@ -79,7 +73,7 @@ export function SortableTab({
           }`}
           onClick={(e) => {
             e.stopPropagation();
-            closeFile(file.id);
+            handleCloseTab(file.id);
           }}
           onPointerDown={(e) => {
             e.stopPropagation();

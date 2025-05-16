@@ -198,3 +198,10 @@ export interface UseResizablePanelReturn {
   handleMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
   togglePanel: () => void;
 }
+
+// Props for SessionParticipantsPanel component
+export interface SessionParticipantsPanelProps {
+  participants: RemoteUser[];
+  localUser: { name: string; color: string };
+  activeIcon: string | null;
+}

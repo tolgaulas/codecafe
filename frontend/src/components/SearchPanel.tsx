@@ -6,28 +6,14 @@ import {
   VscReplaceAll,
   VscPreserveCase,
 } from "react-icons/vsc";
-import { SearchOptions, MatchInfo } from "../types/editor";
+import { SearchPanelProps } from "../types/editor";
 import { useFileStore } from "../store/useFileStore";
 
-// Define new props for search execution callbacks
-interface SearchPanelProps {
-  activeIcon: string | null;
-  // Props for executing search/replace via editor - to be passed from App.tsx
-  onExecuteSearch: (term: string, options: SearchOptions) => void;
-  onExecuteReplaceAll: (
-    searchTerm: string,
-    replaceTerm: string,
-    options: SearchOptions
-  ) => void;
-  // onFindNext: () => void; // If needed later
-  // onFindPrevious: () => void; // If needed later
-}
-
-const SearchPanel: React.FC<SearchPanelProps> = ({
+const SearchPanel = ({
   activeIcon,
   onExecuteSearch,
   onExecuteReplaceAll,
-}) => {
+}: SearchPanelProps) => {
   // Get state and actions from Zustand store
   const searchTerm = useFileStore((state) => state.searchTerm);
   const setSearchTerm = useFileStore((state) => state.setSearchTerm);
@@ -36,30 +22,23 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
   const searchOptions = useFileStore((state) => state.searchOptions);
   const toggleSearchOption = useFileStore((state) => state.toggleSearchOption);
   const matchInfo = useFileStore((state) => state.matchInfo);
-  const resetSearch = useFileStore((state) => state.resetSearch); // For potential use on panel close
+  const resetSearch = useFileStore((state) => state.resetSearch);
 
-  // Effect to trigger search when searchTerm or searchOptions change
   useEffect(() => {
     if (activeIcon === "search" && searchTerm) {
-      // Only search if panel is active and there's a term
       onExecuteSearch(searchTerm, searchOptions);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, searchOptions, activeIcon]); // onExecuteSearch should be stable
+  }, [searchTerm, searchOptions, activeIcon]);
 
-  // Cleanup search state when panel is hidden or unmounted
   useEffect(() => {
     return () => {
       if (activeIcon !== "search") {
-        // If panel was active and now isn't
-        // resetSearch(); // Optionally reset search terms and results when panel is hidden
       }
     };
   }, [activeIcon, resetSearch]);
 
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
-    // Search is triggered by useEffect above
   };
 
   const handleReplaceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -68,7 +47,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
 
   const handleReplaceAllClick = () => {
     if (searchTerm && matchInfo && matchInfo.totalMatches > 0) {
-      onExecuteReplaceAll(searchTerm, replaceTerm, searchOptions);
+      onExecuteReplaceAll();
     }
   };
 

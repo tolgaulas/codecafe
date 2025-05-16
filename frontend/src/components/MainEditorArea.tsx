@@ -34,6 +34,10 @@ interface MainEditorAreaProps {
   currentRemoteUsers: RemoteUser[];
   localUserId: string;
 
+  // Tab operations
+  handleSwitchTab: (fileId: string) => void;
+  handleCloseTab: (fileId: string) => void;
+
   // Terminal Resizing
   terminalPanelHeight: number;
   isTerminalCollapsed: boolean;
@@ -56,11 +60,14 @@ const MainEditorArea = ({
   editorTerminalAreaRef,
   tabContainerRef,
   terminalRef,
+  editorInstanceRef,
   fileContents,
   handleCodeChange,
   handleEditorDidMount,
   currentRemoteUsers,
   localUserId,
+  handleSwitchTab,
+  handleCloseTab,
   terminalPanelHeight,
   isTerminalCollapsed,
   handleTerminalPanelMouseDown,
@@ -101,6 +108,8 @@ const MainEditorArea = ({
         <FileTabs
           tabContainerRef={tabContainerRef}
           onOverflowChange={onTabsOverflowChange}
+          onSwitchTab={handleSwitchTab}
+          onCloseTab={handleCloseTab}
         />
 
         {/* Breadcrumbs Area */}

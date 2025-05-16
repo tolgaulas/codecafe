@@ -220,7 +220,7 @@ const App = () => {
       DEFAULT_WEBVIEW_WIDTH_FRACTION,
   });
 
-  const { isConnected, sendChatMessage } = useCollaborationSession({
+  const { sendChatMessage } = useCollaborationSession({
     sessionId,
     userId,
     userInfo: { name: userName, color: userColor },

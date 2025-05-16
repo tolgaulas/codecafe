@@ -32,12 +32,16 @@ interface FileTabsProps {
   tabContainerRef: React.RefObject<HTMLDivElement>;
 
   onOverflowChange: (hasOverflow: boolean) => void;
+  onSwitchTab: (fileId: string) => void;
+  onCloseTab: (fileId: string) => void;
 }
 
-const FileTabs: React.FC<FileTabsProps> = ({
+const FileTabs = ({
   tabContainerRef,
   onOverflowChange,
-}) => {
+  onSwitchTab,
+  onCloseTab,
+}: FileTabsProps) => {
   // State & Setters from Store
   const {
     openFiles,
@@ -258,6 +262,8 @@ const FileTabs: React.FC<FileTabsProps> = ({
                 IconComponent={IconComponent}
                 iconColor={iconColor}
                 dropIndicatorSide={indicatorSide}
+                onSwitchTab={onSwitchTab}
+                onCloseTab={onCloseTab}
               />
             );
           })}

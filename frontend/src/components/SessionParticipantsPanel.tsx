@@ -1,11 +1,4 @@
-import React from "react";
-import { RemoteUser } from "../types/props";
-
-interface SessionParticipantsPanelProps {
-  participants: RemoteUser[];
-  localUser: { name: string; color: string };
-  activeIcon: string | null;
-}
+import { SessionParticipantsPanelProps } from "../types/props";
 
 const SessionParticipantsPanel = ({
   participants,

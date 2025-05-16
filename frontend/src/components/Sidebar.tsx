@@ -12,7 +12,7 @@ import SearchPanel from "./SearchPanel";
 import SessionParticipantsPanel from "./SessionParticipantsPanel";
 import FileExplorerPanel from "./FileExplorerPanel";
 import { RemoteUser, ChatMessageType } from "../types/props";
-import { JoinStateType, SearchOptions } from "../types/editor";
+import { JoinStateType, SearchOptions, MatchInfo } from "../types/editor";
 import { ICON_BAR_WIDTH, EXPLORER_HANDLE_WIDTH } from "../constants/layout";
 import { COLORS } from "../constants/colors";
 
@@ -22,6 +22,7 @@ interface SidebarProps {
   isExplorerCollapsed: boolean;
   explorerPanelSize: number;
   handleExplorerPanelMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+  toggleExplorerPanel: () => void;
   openPanelWithIcon: (iconName: string) => void;
   activeIcon: string | null;
   setActiveIcon: React.Dispatch<React.SetStateAction<string | null>>;
@@ -35,12 +36,16 @@ interface SidebarProps {
   handleToggleColorPicker: () => void;
   handleConfirmJoin: () => void;
   isSessionActive: boolean;
-  onExecuteSearch: (term: string, options: SearchOptions) => void;
-  onExecuteReplaceAll: (
-    searchTerm: string,
-    replaceTerm: string,
-    options: SearchOptions
-  ) => void;
+  activeFileId: string | null;
+  handleOpenFile: (fileId: string) => void;
+  mockFiles: { [key: string]: any };
+  onSearchChange: (term: string, options: SearchOptions) => void;
+  onReplaceChange: (value: string) => void;
+  onToggleSearchOption: (optionKey: keyof SearchOptions) => void;
+  replaceValue: string;
+  searchOptions: SearchOptions;
+  matchInfo: MatchInfo | null;
+  onReplaceAll: () => void;
   handleShareIconClick: () => void;
   uniqueRemoteParticipants: RemoteUser[];
   localUserName: string;
@@ -56,6 +61,7 @@ const Sidebar = ({
   isExplorerCollapsed,
   explorerPanelSize,
   handleExplorerPanelMouseDown,
+  toggleExplorerPanel,
   openPanelWithIcon,
   activeIcon,
   setActiveIcon,
@@ -69,8 +75,16 @@ const Sidebar = ({
   handleToggleColorPicker,
   handleConfirmJoin,
   isSessionActive,
-  onExecuteSearch,
-  onExecuteReplaceAll,
+  activeFileId,
+  handleOpenFile,
+  mockFiles,
+  onSearchChange,
+  onReplaceChange,
+  onToggleSearchOption,
+  replaceValue,
+  searchOptions,
+  matchInfo,
+  onReplaceAll,
   handleShareIconClick,
   uniqueRemoteParticipants,
   localUserName,
@@ -192,7 +206,12 @@ const Sidebar = ({
                 : "hidden"
             }`}
           >
-            <FileExplorerPanel isSessionActive={isSessionActive} />
+            <FileExplorerPanel
+              isSessionActive={isSessionActive}
+              handleOpenFile={handleOpenFile}
+              mockFiles={mockFiles}
+              activeFileId={activeFileId}
+            />
           </div>
 
           {/* Chat Panel */}
@@ -215,8 +234,8 @@ const Sidebar = ({
           {/* Search Panel */}
           <SearchPanel
             activeIcon={activeIcon}
-            onExecuteSearch={onExecuteSearch}
-            onExecuteReplaceAll={onExecuteReplaceAll}
+            onExecuteSearch={onSearchChange}
+            onExecuteReplaceAll={onReplaceAll}
           />
 
           {/* Share Panel: Shows JoinSessionPanel or SessionParticipantsPanel */}

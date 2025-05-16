@@ -65,11 +65,18 @@ export interface MatchInfo {
 
 export interface SearchPanelProps {
   activeIcon: string | null;
-  onSearchChange: (term: string, options: SearchOptions) => void;
-  onReplaceChange: (term: string) => void;
-  onToggleSearchOption: (option: keyof SearchOptions) => void;
-  replaceValue: string;
-  searchOptions: SearchOptions;
-  matchInfo: MatchInfo | null;
-  onReplaceAll: () => void;
+  onExecuteSearch: (term: string, options: SearchOptions) => void;
+  onExecuteReplaceAll: () => void;
+}
+
+// Props for the sortable tab component in the editor file tabs
+export interface SortableTabProps {
+  file: OpenFile;
+  activeFileId: string | null;
+  draggingId: string | null;
+  dropIndicatorSide: "left" | "right" | null;
+  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
+  iconColor: string;
+  onSwitchTab?: (fileId: string) => void;
+  onCloseTab?: (fileId: string) => void;
 }
