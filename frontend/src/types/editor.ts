@@ -62,3 +62,14 @@ export interface MatchInfo {
   currentIndex: number | null; // e.g., 1 for the first match
   totalMatches: number;
 }
+
+export interface SearchPanelProps {
+  activeIcon: string | null;
+  onSearchChange: (term: string, options: SearchOptions) => void;
+  onReplaceChange: (term: string) => void;
+  onToggleSearchOption: (option: keyof SearchOptions) => void;
+  replaceValue: string;
+  searchOptions: SearchOptions;
+  matchInfo: MatchInfo | null;
+  onReplaceAll: () => void;
+}

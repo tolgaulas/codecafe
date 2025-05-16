@@ -1,35 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
-import ChatMessage from "./ChatMessage";
+import ChatMessageComponent from "./ChatMessage";
 import { IoSend } from "react-icons/io5";
+import { ChatPanelProps } from "../types/chat";
 
-interface ChatMessage {
-  userId: string;
-  userName: string;
-  userColor: string;
-  message: string;
-  timestamp: string;
-  formattedTimestamp?: string;
-}
-
-interface ChatPanelProps {
-  userName: string;
-  userColor: string;
-  sessionId: string | null;
-  isSessionActive: boolean;
-  userId: string;
-  onSendMessage: (message: string) => void;
-  messages: ChatMessage[];
-}
-
-const ChatPanel: React.FC<ChatPanelProps> = ({
-  userName,
-  userColor,
-  sessionId,
+const ChatPanel = ({
   isSessionActive,
-  userId,
   onSendMessage,
   messages,
-}) => {
+}: ChatPanelProps) => {
   const [inputMessage, setInputMessage] = useState("");
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -81,7 +59,7 @@ const ChatPanel: React.FC<ChatPanelProps> = ({
         {messages.length > 0 ? (
           <>
             {messages.map((msg, index) => (
-              <ChatMessage
+              <ChatMessageComponent
                 key={`${msg.userId}-${index}`}
                 userName={msg.userName}
                 message={msg.message}

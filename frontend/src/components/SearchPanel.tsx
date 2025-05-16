@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect } from "react";
 import {
   VscCaseSensitive,
   VscWholeWord,
@@ -6,58 +6,72 @@ import {
   VscReplaceAll,
   VscPreserveCase,
 } from "react-icons/vsc";
-import { SearchOptions, MatchInfo } from "../types/editor"; // Import from shared types
+import { SearchOptions, MatchInfo } from "../types/editor";
+import { useFileStore } from "../store/useFileStore";
 
-// Define types for search options and match info (consider moving to a shared types file later)
-// export interface SearchOptions {
-//   matchCase: boolean;
-//   wholeWord: boolean;
-//   isRegex: boolean;
-//   preserveCase: boolean;
-// }
-//
-// export interface MatchInfo {
-//   currentIndex: number | null; // e.g., 1 for the first match
-//   totalMatches: number;
-// }
-
+// Define new props for search execution callbacks
 interface SearchPanelProps {
-  activeIcon: string | null; // To control visibility based on the active icon in Sidebar
-  onSearchChange: (term: string, options: SearchOptions) => void;
-  onReplaceChange: (term: string) => void;
-  // onFindNext: () => void; // These might be handled internally or passed if Monaco instance is not directly accessible
-  // onFindPrevious: () => void; // Same as above
-  onToggleSearchOption: (option: keyof SearchOptions) => void;
-  replaceValue: string;
-  searchOptions: SearchOptions;
-  matchInfo: MatchInfo | null;
-  onReplaceAll: () => void;
-  // Add any other props that were passed from App.tsx to Sidebar.tsx for search
+  activeIcon: string | null;
+  // Props for executing search/replace via editor - to be passed from App.tsx
+  onExecuteSearch: (term: string, options: SearchOptions) => void;
+  onExecuteReplaceAll: (
+    searchTerm: string,
+    replaceTerm: string,
+    options: SearchOptions
+  ) => void;
+  // onFindNext: () => void; // If needed later
+  // onFindPrevious: () => void; // If needed later
 }
 
 const SearchPanel: React.FC<SearchPanelProps> = ({
   activeIcon,
-  onSearchChange,
-  onReplaceChange,
-  onToggleSearchOption,
-  replaceValue,
-  searchOptions,
-  matchInfo,
-  onReplaceAll,
+  onExecuteSearch,
+  onExecuteReplaceAll,
 }) => {
-  const [searchValue, setSearchValue] = useState("");
+  // Get state and actions from Zustand store
+  const searchTerm = useFileStore((state) => state.searchTerm);
+  const setSearchTerm = useFileStore((state) => state.setSearchTerm);
+  const replaceTerm = useFileStore((state) => state.replaceTerm);
+  const setReplaceTerm = useFileStore((state) => state.setReplaceTerm);
+  const searchOptions = useFileStore((state) => state.searchOptions);
+  const toggleSearchOption = useFileStore((state) => state.toggleSearchOption);
+  const matchInfo = useFileStore((state) => state.matchInfo);
+  const resetSearch = useFileStore((state) => state.resetSearch); // For potential use on panel close
+
+  // Effect to trigger search when searchTerm or searchOptions change
+  useEffect(() => {
+    if (activeIcon === "search" && searchTerm) {
+      // Only search if panel is active and there's a term
+      onExecuteSearch(searchTerm, searchOptions);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, searchOptions, activeIcon]); // onExecuteSearch should be stable
+
+  // Cleanup search state when panel is hidden or unmounted
+  useEffect(() => {
+    return () => {
+      if (activeIcon !== "search") {
+        // If panel was active and now isn't
+        // resetSearch(); // Optionally reset search terms and results when panel is hidden
+      }
+    };
+  }, [activeIcon, resetSearch]);
 
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const term = e.target.value;
-    setSearchValue(term);
-    onSearchChange(term, searchOptions); // Pass current searchOptions
+    setSearchTerm(e.target.value);
+    // Search is triggered by useEffect above
   };
 
   const handleReplaceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onReplaceChange(e.target.value);
+    setReplaceTerm(e.target.value);
   };
 
-  // Helper to format match count string
+  const handleReplaceAllClick = () => {
+    if (searchTerm && matchInfo && matchInfo.totalMatches > 0) {
+      onExecuteReplaceAll(searchTerm, replaceTerm, searchOptions);
+    }
+  };
+
   const formatMatchCount = (): string => {
     if (!matchInfo || matchInfo.totalMatches === 0) {
       return "No results";
@@ -69,14 +83,14 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
   };
 
   if (activeIcon !== "search") {
-    return null; // Or render with 'hidden' class, depending on desired behavior
+    return null;
   }
 
   return (
     <div
       className={`flex flex-col flex-1 ${
         activeIcon === "search" ? "" : "hidden"
-      }`} // flex-1 to take available space if needed
+      }`}
     >
       {/* Sticky Header */}
       <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-95 z-10">
@@ -89,14 +103,14 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
           <input
             type="text"
             placeholder="Search"
-            value={searchValue}
+            value={searchTerm}
             onChange={handleSearchInputChange}
             className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
           />
           <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
             <button
               title="Match Case"
-              onClick={() => onToggleSearchOption("matchCase")}
+              onClick={() => toggleSearchOption("matchCase")}
               className={`p-0.5 rounded ${
                 searchOptions.matchCase
                   ? "bg-stone-500/40 text-stone-100"
@@ -107,7 +121,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
             </button>
             <button
               title="Match Whole Word"
-              onClick={() => onToggleSearchOption("wholeWord")}
+              onClick={() => toggleSearchOption("wholeWord")}
               className={`p-0.5 rounded ${
                 searchOptions.wholeWord
                   ? "bg-stone-500/40 text-stone-100"
@@ -118,7 +132,7 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
             </button>
             <button
               title="Use Regular Expression"
-              onClick={() => onToggleSearchOption("isRegex")}
+              onClick={() => toggleSearchOption("isRegex")}
               className={`p-0.5 rounded ${
                 searchOptions.isRegex
                   ? "bg-stone-500/40 text-stone-100"
@@ -129,22 +143,20 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
             </button>
           </div>
         </div>
-
-        {/* Replace Input Row with Preserve Case & Replace All */}
         <div className="flex items-center space-x-1">
           <div className="relative flex-grow flex items-center">
             <input
               type="text"
               placeholder="Replace"
-              value={replaceValue} // This prop comes from App.tsx via Sidebar
+              value={replaceTerm}
               onChange={handleReplaceInputChange}
               className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
             />
-            {/* Preserve Case Button (Embedded) */}
+            {/* Preserve Case Button */}
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
               <button
                 title="Preserve Case (Ab)"
-                onClick={() => onToggleSearchOption("preserveCase")}
+                onClick={() => toggleSearchOption("preserveCase")}
                 className={`p-0.5 rounded ${
                   searchOptions.preserveCase
                     ? "bg-stone-500/40 text-stone-100"
@@ -155,20 +167,17 @@ const SearchPanel: React.FC<SearchPanelProps> = ({
               </button>
             </div>
           </div>
-          {/* Replace All Button (Outside, to the right) */}
+          {/* Replace All Button */}
           <button
             title="Replace All"
-            onClick={onReplaceAll} // This prop comes from App.tsx via Sidebar
-            disabled={
-              !matchInfo || matchInfo.totalMatches === 0 || !searchValue
-            }
+            onClick={handleReplaceAllClick}
+            disabled={!searchTerm || !matchInfo || matchInfo.totalMatches === 0}
             className="p-1 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed flex-shrink-0 h-7 w-7 flex items-center justify-center"
           >
             <VscReplaceAll size={16} />
           </button>
         </div>
 
-        {/* Match Count Display */}
         <div className="text-xs text-stone-400 text-left pl-1 h-4 pt-1">
           {formatMatchCount()}
         </div>

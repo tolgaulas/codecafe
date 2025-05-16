@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { OpenFile, EditorLanguageKey } from "../types/editor";
+import {
+  OpenFile,
+  EditorLanguageKey,
+  SearchOptions,
+  MatchInfo,
+} from "../types/editor";
 import { MOCK_FILES } from "../constants/mockFiles";
 // import { arrayMove } from "@dnd-kit/sortable"; // Import arrayMove for use in actions
 
@@ -30,6 +35,14 @@ initialOpenFileIds.forEach((id) => {
 
 const initialActiveFileId = initialOpenFileIds[0] || null;
 
+// Initial state for search options
+const initialSearchOptions: SearchOptions = {
+  matchCase: false,
+  wholeWord: false,
+  isRegex: false,
+  preserveCase: false,
+};
+
 interface FileState {
   openFiles: OpenFile[];
   activeFileId: string | null;
@@ -37,6 +50,12 @@ interface FileState {
   // Add back dnd-kit specific state
   draggingId: string | null;
   dropIndicator: { tabId: string | null; side: "left" | "right" | null };
+
+  // Search State
+  searchTerm: string;
+  replaceTerm: string;
+  searchOptions: SearchOptions;
+  matchInfo: MatchInfo | null;
 }
 
 interface FileActions {
@@ -51,6 +70,13 @@ interface FileActions {
   openFile: (fileId: string, isSessionActive: boolean) => void;
   closeFile: (fileIdToClose: string) => void;
   switchTab: (fileId: string) => void;
+
+  // Search Actions
+  setSearchTerm: (term: string) => void;
+  setReplaceTerm: (term: string) => void;
+  toggleSearchOption: (option: keyof SearchOptions) => void;
+  setMatchInfo: (info: MatchInfo | null) => void;
+  resetSearch: () => void;
 }
 
 export const useFileStore = create<FileState & FileActions>((set, get) => ({
@@ -60,6 +86,12 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   // Add back dnd-kit specific initial state
   draggingId: null,
   dropIndicator: { tabId: null, side: null },
+
+  // Initial Search State
+  searchTerm: "",
+  replaceTerm: "",
+  searchOptions: initialSearchOptions,
+  matchInfo: null,
 
   setOpenFiles: (files) =>
     set((state) => ({
@@ -78,10 +110,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set({ activeFileId: fileId });
   },
 
-  openFile: (
-    fileId
-    //  isSessionActive
-  ) => {
+  openFile: (fileId, isSessionActive) => {
     const fileData = MOCK_FILES[fileId];
     if (!fileData) {
       console.error(`Cannot open file: ${fileId} not found in MOCK_FILES.`);
@@ -151,4 +180,23 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
       activeFileId: nextActiveId,
     });
   },
+
+  // Search Action Implementations
+  setSearchTerm: (term) => set({ searchTerm: term }),
+  setReplaceTerm: (term) => set({ replaceTerm: term }),
+  toggleSearchOption: (option) =>
+    set((state) => ({
+      searchOptions: {
+        ...state.searchOptions,
+        [option]: !state.searchOptions[option],
+      },
+    })),
+  setMatchInfo: (info) => set({ matchInfo: info }),
+  resetSearch: () =>
+    set({
+      searchTerm: "",
+      replaceTerm: "",
+      matchInfo: null,
+      // searchOptions are intentionally not reset here, user might want to keep them
+    }),
 }));

@@ -1,18 +1,17 @@
 import React from "react";
-import { RemoteUser } from "../types/props"; // Assuming RemoteUser is in types/props
-// If RemoteUser is defined elsewhere, adjust the import path.
+import { RemoteUser } from "../types/props";
 
 interface SessionParticipantsPanelProps {
   participants: RemoteUser[];
   localUser: { name: string; color: string };
-  activeIcon: string | null; // To control visibility
+  activeIcon: string | null;
 }
 
-const SessionParticipantsPanel: React.FC<SessionParticipantsPanelProps> = ({
+const SessionParticipantsPanel = ({
   participants,
   localUser,
   activeIcon,
-}) => {
+}: SessionParticipantsPanelProps) => {
   if (activeIcon !== "share") {
     return null;
   }

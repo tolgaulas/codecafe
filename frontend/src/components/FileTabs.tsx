@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -31,16 +31,12 @@ interface FileTabsProps {
   // Refs
   tabContainerRef: React.RefObject<HTMLDivElement>;
 
-  handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea, TODO: inlude this in the store
-  handleCloseTab: (fileIdToClose: string) => void;
-  onOverflowChange: (hasOverflow: boolean) => void; // New prop
+  onOverflowChange: (hasOverflow: boolean) => void;
 }
 
 const FileTabs: React.FC<FileTabsProps> = ({
   tabContainerRef,
-  handleSwitchTab,
-  handleCloseTab,
-  onOverflowChange, // Destructure new prop
+  onOverflowChange,
 }) => {
   // State & Setters from Store
   const {
@@ -54,52 +50,41 @@ const FileTabs: React.FC<FileTabsProps> = ({
     setDropIndicator,
   } = useFileStore();
 
-  // Local state for overflow
-  const [hasOverflow, setHasOverflow] = useState(false);
-  // Ref to track previous overflow state to avoid unnecessary calls
-  const prevHasOverflowRef = useRef(hasOverflow);
-
-  // Effect for overflow detection
+  // Effect to detect and report tab overflow
   useEffect(() => {
-    const container = tabContainerRef.current;
-    if (!container) return;
-
     const checkOverflow = () => {
-      const currentOverflow = container.scrollWidth > container.clientWidth;
-      if (currentOverflow !== prevHasOverflowRef.current) {
-        setHasOverflow(currentOverflow);
-        onOverflowChange(currentOverflow);
-        prevHasOverflowRef.current = currentOverflow;
-        // console.log("Overflow changed:", currentOverflow); // For debugging
+      if (tabContainerRef.current) {
+        const { scrollWidth, clientWidth } = tabContainerRef.current;
+        const hasOverflow = scrollWidth > clientWidth;
+        onOverflowChange(hasOverflow);
       }
     };
 
-    // Check initially and on resize
-    checkOverflow();
-    const resizeObserver = new ResizeObserver(checkOverflow);
-    resizeObserver.observe(container);
+    checkOverflow(); // Initial check
 
-    // Also observe changes to children (like adding/removing tabs)
-    const mutationObserver = new MutationObserver(checkOverflow);
-    mutationObserver.observe(container, { childList: true, subtree: true });
+    const resizeObserver = new ResizeObserver(checkOverflow);
+    if (tabContainerRef.current) {
+      resizeObserver.observe(tabContainerRef.current);
+    }
 
     return () => {
+      if (tabContainerRef.current) {
+        resizeObserver.unobserve(tabContainerRef.current);
+      }
       resizeObserver.disconnect();
-      mutationObserver.disconnect();
     };
-  }, [tabContainerRef, onOverflowChange, openFiles]); // Depend on openFiles to re-check when tabs change
+  }, [openFiles, onOverflowChange, tabContainerRef]);
 
   // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 100, tolerance: 7 },
+      activationConstraint: { delay: 100, tolerance: 5 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   // Drag Handlers
   const handleDragStart = (event: DragStartEvent) => {
-    // console.log("Drag Start:", event);
     setDraggingId(event.active.id as string);
     setDropIndicator({ tabId: null, side: null });
   };
@@ -116,22 +101,48 @@ const FileTabs: React.FC<FileTabsProps> = ({
     }
     const pointerX = (event.activatorEvent as PointerEvent).clientX;
 
-    // Let the main logic handle all cases, including edges
-    if (isValidTabTarget && overId && event.over?.rect) {
-      if (activeId === overId) {
-        setDropIndicator({ tabId: null, side: null });
-        return;
+    const firstTabEl = tabContainerRef.current?.querySelector(
+      "[data-sortable-id]"
+    ) as HTMLElement | null;
+    const lastTabEl = tabContainerRef.current?.querySelector(
+      "[data-sortable-id]:last-child"
+    ) as HTMLElement | null;
+    let edgeIndicatorSet = false;
+
+    if (firstTabEl && lastTabEl && openFiles.length > 0) {
+      const firstTabRect = firstTabEl.getBoundingClientRect();
+      const lastTabRect = lastTabEl.getBoundingClientRect();
+      const firstTabId = openFiles[0].id;
+      const lastTabId = openFiles[openFiles.length - 1].id;
+
+      if (pointerX < firstTabRect.left + firstTabRect.width * 0.5) {
+        setDropIndicator({ tabId: firstTabId, side: "left" });
+        edgeIndicatorSet = true;
+      } else if (pointerX > lastTabRect.right - lastTabRect.width * 0.5) {
+        setDropIndicator({ tabId: lastTabId, side: "right" });
+        edgeIndicatorSet = true;
       }
+    }
 
-      const overRect = event.over.rect;
-      const overMiddleX = overRect.left + overRect.width / 2;
-      const side = pointerX < overMiddleX ? "left" : "right";
-
-      if (dropIndicator.tabId !== overId || dropIndicator.side !== side) {
+    if (!edgeIndicatorSet) {
+      if (isValidTabTarget && overId) {
+        if (activeId === overId) {
+          setDropIndicator({ tabId: null, side: null });
+          return;
+        }
+        const overNode = tabContainerRef.current?.querySelector(
+          `[data-sortable-id="${overId}"]`
+        );
+        if (!overNode) {
+          console.warn("Could not find overNode for id:", overId);
+          setDropIndicator({ tabId: null, side: null });
+          return;
+        }
+        const overRect = overNode.getBoundingClientRect();
+        const overMiddleX = overRect.left + overRect.width / 2;
+        const side = pointerX < overMiddleX ? "left" : "right";
         setDropIndicator({ tabId: overId, side });
-      }
-    } else {
-      if (dropIndicator.tabId !== null) {
+      } else {
         setDropIndicator({ tabId: null, side: null });
       }
     }
@@ -163,14 +174,17 @@ const FileTabs: React.FC<FileTabsProps> = ({
         } else if (finalDropIndicator.side === "right") {
           newIndex = indicatorTargetIndex + 1;
         }
-        console.log(`Calculated newIndex=${newIndex} based on drop indicator`);
+      }
+    }
+
+    if (newIndex === -1 && over && over.id !== active.id) {
+      const overIndex = openFiles.findIndex((file) => file.id === over.id);
+      if (overIndex !== -1) {
+        newIndex = overIndex;
       }
     }
 
     if (newIndex === -1) {
-      console.log(
-        "DragEnd: No valid drop indicator target. No move performed."
-      );
       return;
     }
 
@@ -181,13 +195,9 @@ const FileTabs: React.FC<FileTabsProps> = ({
         oldIndex === openFiles.length - 1 &&
         clampedNewIndex === openFiles.length
       ) {
-        console.log(`DragEnd: No move needed (last item to end slot)`);
         return;
       }
 
-      console.log(
-        `Requesting move: ID ${activeId} from ${oldIndex} to ${clampedNewIndex}`
-      );
       setOpenFiles((currentOpenFiles) => {
         const currentOldIndex = currentOpenFiles.findIndex(
           (f) => f.id === activeId
@@ -206,9 +216,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
         )
           return currentOpenFiles;
 
-        console.log(
-          `   Executing arrayMove: from ${currentOldIndex} to ${currentClampedNewIndex}`
-        );
         const movedFiles = arrayMove(
           currentOpenFiles,
           currentOldIndex,
@@ -217,10 +224,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
         setActiveFileId(activeId);
         return movedFiles;
       });
-    } else {
-      console.log(
-        `DragEnd: No move needed (oldIndex: ${oldIndex}, clampedNewIndex: ${clampedNewIndex})`
-      );
     }
   };
 
@@ -254,8 +257,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
                 draggingId={draggingId}
                 IconComponent={IconComponent}
                 iconColor={iconColor}
-                onSwitchTab={handleSwitchTab}
-                onCloseTab={handleCloseTab}
                 dropIndicatorSide={indicatorSide}
               />
             );
@@ -272,7 +273,7 @@ const FileTabs: React.FC<FileTabsProps> = ({
                   languageColorMap[draggedFile.language] || defaultIconColor;
                 return (
                   <div
-                    className={`pl-2 pr-4 py-1 border border-stone-500 flex items-center flex-shrink-0 relative shadow-lg bg-neutral-900 opacity-75`}
+                    className={`pl-2 pr-4 py-1 border border-stone-500 flex items-center flex-shrink-0 relative shadow-lg bg-neutral-900`}
                   >
                     <IconComponent
                       size={16}

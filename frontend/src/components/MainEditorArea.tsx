@@ -27,10 +27,6 @@ interface MainEditorAreaProps {
   terminalRef: any;
   editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>;
 
-  // Tab Management
-  handleSwitchTab: (fileId: string) => void;
-  handleCloseTab: (fileIdToClose: string) => void;
-
   // Editor
   fileContents: { [id: string]: string };
   handleCodeChange: (newCode: string) => void;
@@ -60,8 +56,6 @@ const MainEditorArea = ({
   editorTerminalAreaRef,
   tabContainerRef,
   terminalRef,
-  handleSwitchTab,
-  handleCloseTab,
   fileContents,
   handleCodeChange,
   handleEditorDidMount,
@@ -81,13 +75,11 @@ const MainEditorArea = ({
   tabsHaveOverflow,
   onTabsOverflowChange,
 }: MainEditorAreaProps) => {
-  // Get state from Zustand Store
   const { openFiles, activeFileId } = useFileStore();
 
   // Find the active file object
   const activeFile = openFiles.find((f) => f.id === activeFileId);
 
-  // Determine icon and color for the active file
   let ActiveIconComponent: React.ComponentType<any> = VscFile; // Default icon
   let activeIconColor = defaultIconColor; // Default color
 
@@ -108,16 +100,13 @@ const MainEditorArea = ({
         {/* Tabs */}
         <FileTabs
           tabContainerRef={tabContainerRef}
-          handleSwitchTab={handleSwitchTab}
-          handleCloseTab={handleCloseTab}
           onOverflowChange={onTabsOverflowChange}
         />
 
-        {/* Breadcrumbs Area - Simplified */}
+        {/* Breadcrumbs Area */}
         <div className="h-6 flex-shrink-0 bg-neutral-900 flex items-center px-2 text-sm text-stone-400 overflow-hidden whitespace-nowrap">
           {activeFile ? (
             <React.Fragment>
-              {/* Removed "Project" span and Chevron */}
               {/* File Icon and Name */}
               <ActiveIconComponent
                 size={16}
@@ -126,13 +115,11 @@ const MainEditorArea = ({
               <span className="text-stone-400">{activeFile.name}</span>
             </React.Fragment>
           ) : (
-            <span>
-              {/* Optionally show something when no file is active */}
-            </span>
+            <span>{/* No file selected */}</span>
           )}
         </div>
 
-        {/* Code Editor Area - Removed pt-4 */}
+        {/* Code Editor Area */}
         <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0">
           {joinState === "prompting" ? (
             <div className="flex items-center justify-center h-full text-stone-500">

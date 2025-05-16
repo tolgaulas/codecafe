@@ -764,6 +764,13 @@ const App = () => {
     }
   }, [isSessionActive]);
 
+  // Debug logger
+  useEffect(() => {
+    console.log(
+      `[DEBUG] State changed - isSessionActive: ${isSessionActive}, joinState: ${joinState}`
+    );
+  }, [isSessionActive, joinState]);
+
   // EFFECTS
   useEffect(() => {
     document.addEventListener("pointerup", handleGlobalPointerUp);

@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import clsx from "clsx";
 import { OpenFile } from "../types/editor";
+import { useFileStore } from "../store/useFileStore";
 
 export interface SortableTabProps {
   file: OpenFile;
@@ -10,8 +11,6 @@ export interface SortableTabProps {
   dropIndicatorSide: "left" | "right" | null;
   IconComponent: React.ComponentType<{ size?: number; className?: string }>;
   iconColor: string;
-  onSwitchTab: (id: string) => void;
-  onCloseTab: (id: string, e: React.MouseEvent) => void;
 }
 
 export function SortableTab({
@@ -19,8 +18,6 @@ export function SortableTab({
   activeFileId,
   IconComponent,
   iconColor,
-  onSwitchTab,
-  onCloseTab,
   dropIndicatorSide,
 }: SortableTabProps) {
   const {
@@ -29,6 +26,10 @@ export function SortableTab({
     transition: _transition,
     isDragging,
   } = useSortable({ id: file.id });
+
+  // Get actions from store
+  const switchTab = useFileStore((state) => state.switchTab);
+  const closeFile = useFileStore((state) => state.closeFile);
 
   // Restore the style object for the indicator lines
   const style: React.CSSProperties = {
@@ -43,7 +44,7 @@ export function SortableTab({
     <div
       ref={setNodeRef}
       style={style} // Apply the style object
-      onClick={() => onSwitchTab(file.id)}
+      onClick={() => switchTab(file.id)}
       {...listeners}
       className={clsx(
         "group pl-2 pr-4 py-1 border-r border-stone-600 flex items-center flex-shrink-0 relative transition-colors duration-150 ease-out",
@@ -78,7 +79,7 @@ export function SortableTab({
           }`}
           onClick={(e) => {
             e.stopPropagation();
-            onCloseTab(file.id, e);
+            closeFile(file.id);
           }}
           onPointerDown={(e) => {
             e.stopPropagation();
