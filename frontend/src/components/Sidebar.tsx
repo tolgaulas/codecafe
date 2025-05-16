@@ -313,7 +313,11 @@ const Sidebar = ({
             </div>
           </div>
 
-          <div className={`flex-1 ${activeIcon === "chat" ? "" : "hidden"}`}>
+          <div
+            className={`flex-1 overflow-hidden ${
+              activeIcon === "chat" ? "" : "hidden"
+            }`}
+          >
             <ChatPanel
               userName={userName}
               userColor={userColor}
