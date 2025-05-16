@@ -79,12 +79,13 @@ const App = () => {
     preserveCase: false,
   });
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
-  const [isWidgetForcedHidden] = useState(false);
+  const findResultsDecorationIds = useRef<string[]>([]);
+  const [isWidgetForcedHidden, setIsWidgetForcedHidden] = useState(false);
 
   // New state for chat messages
   const [chatMessages, setChatMessages] = useState<ChatMessageType[]>([]);
 
-  // User Identity (local to App.tsx, passed to hooks)
+  // User Identity
   const [userId] = useState<string>(() => "user-" + uuidv4());
 
   // Instantiate Resizable Panels
@@ -130,7 +131,6 @@ const App = () => {
     shareMenuView,
     setShareMenuView,
     generatedShareLink,
-    setHasShownInitialParticipants,
     handleStartSession,
     handleCopyShareLink,
     handleConfirmJoin,
@@ -463,6 +463,26 @@ const App = () => {
     setIsColorPickerOpen((prev) => !prev);
   };
 
+  // Utility to get the find controller
+  const getFindController = useCallback(() => {
+    return editorInstanceRef.current?.getContribution(
+      "editor.contrib.findController"
+    ) as any;
+  }, []);
+
+  // Function to update match info from editor state
+  const updateMatchInfoFromController = useCallback(() => {
+    const controller = getFindController();
+    if (controller) {
+      const state = controller.getState();
+      const newMatchInfo = {
+        currentIndex: state.matchesCount > 0 ? state.currentIndex + 1 : null,
+        totalMatches: state.matchesCount || 0,
+      };
+      setMatchInfo(newMatchInfo); // setMatchInfo is stable
+    }
+  }, [getFindController]);
+
   // HANDLERS for Search Panel
   const handleSearchChange = (term: string) => {
     setSearchTerm(term);
@@ -576,6 +596,73 @@ const App = () => {
       `[DEBUG] State changed - isSessionActive: ${isSessionActive}, joinState: ${joinState}`
     );
   }, [isSessionActive, joinState]);
+
+  // Effect to handle editor search AND find widget visibility control
+  useEffect(() => {
+    const controller = getFindController();
+    if (!controller) {
+      setMatchInfo(null);
+      setIsWidgetForcedHidden(false);
+      return;
+    }
+
+    if (activeIcon === "search") {
+      setIsWidgetForcedHidden(true);
+
+      if (searchTerm) {
+        controller.setSearchString(searchTerm);
+        controller.start({
+          searchString: searchTerm,
+          replaceString: replaceValue,
+          isRegex: searchOptions.isRegex,
+          matchCase: searchOptions.matchCase,
+          wholeWord: searchOptions.wholeWord,
+          autoFindInSelection: "never",
+          seedSearchStringFromSelection: "never",
+        });
+        updateMatchInfoFromController();
+      } else {
+        if (controller.getState().searchString !== "") {
+          controller.setSearchString("");
+        }
+        if (editorInstanceRef.current) {
+          findResultsDecorationIds.current =
+            editorInstanceRef.current.deltaDecorations(
+              findResultsDecorationIds.current,
+              []
+            );
+        }
+        setMatchInfo(null);
+      }
+    } else {
+      controller.closeFindWidget();
+      setTimeout(() => {
+        setIsWidgetForcedHidden(false);
+      }, 100); // Delay to allow widget to close before unhiding
+    }
+  }, [
+    searchTerm,
+    searchOptions,
+    replaceValue,
+    activeIcon,
+    getFindController,
+    updateMatchInfoFromController,
+    setIsWidgetForcedHidden,
+  ]);
+
+  // Effect to control explorer panel visibility based on activeIcon
+  useEffect(() => {
+    // Open panel if an icon is active and panel is closed
+    if (activeIcon && isExplorerCollapsed) {
+      toggleExplorerPanel();
+    }
+    // Close panel if no icon is active and panel is open
+    else if (!activeIcon && !isExplorerCollapsed) {
+      toggleExplorerPanel();
+    }
+    // Note: toggleExplorerPanel is stable from useResizablePanel if its dependencies are stable.
+    // We only want this effect to run when activeIcon or isExplorerCollapsed changes.
+  }, [activeIcon, isExplorerCollapsed, toggleExplorerPanel]);
 
   // EFFECTS
   useEffect(() => {

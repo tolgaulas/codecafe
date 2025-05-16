@@ -6,47 +6,53 @@ import {
   VscReplaceAll,
   VscPreserveCase,
 } from "react-icons/vsc";
-import { SearchPanelProps } from "../types/editor";
+import { SearchOptions, MatchInfo } from "../types/editor";
 import { useFileStore } from "../store/useFileStore";
+
+export interface SearchPanelProps {
+  activeIcon: string | null;
+  onExecuteSearch: (term: string, options: SearchOptions) => void;
+  onExecuteReplaceAll: () => void;
+  matchInfo: MatchInfo | null;
+  searchOptions: SearchOptions;
+  onToggleSearchOption: (optionKey: keyof SearchOptions) => void;
+  replaceValue: string;
+  onReplaceChange: (value: string) => void;
+}
 
 const SearchPanel = ({
   activeIcon,
   onExecuteSearch,
   onExecuteReplaceAll,
+  matchInfo,
+  searchOptions,
+  onToggleSearchOption,
+  replaceValue,
+  onReplaceChange,
 }: SearchPanelProps) => {
-  // Get state and actions from Zustand store
-  const searchTerm = useFileStore((state) => state.searchTerm);
-  const setSearchTerm = useFileStore((state) => state.setSearchTerm);
-  const replaceTerm = useFileStore((state) => state.replaceTerm);
-  const setReplaceTerm = useFileStore((state) => state.setReplaceTerm);
-  const searchOptions = useFileStore((state) => state.searchOptions);
-  const toggleSearchOption = useFileStore((state) => state.toggleSearchOption);
-  const matchInfo = useFileStore((state) => state.matchInfo);
-  const resetSearch = useFileStore((state) => state.resetSearch);
+  const localSearchTerm = useFileStore((state) => state.searchTerm);
+  const setLocalSearchTerm = useFileStore((state) => state.setSearchTerm);
 
   useEffect(() => {
-    if (activeIcon === "search" && searchTerm) {
-      onExecuteSearch(searchTerm, searchOptions);
+    if (activeIcon === "search") {
+      onExecuteSearch(localSearchTerm, searchOptions);
     }
-  }, [searchTerm, searchOptions, activeIcon]);
-
-  useEffect(() => {
-    return () => {
-      if (activeIcon !== "search") {
-      }
-    };
-  }, [activeIcon, resetSearch]);
+  }, [localSearchTerm, searchOptions, activeIcon, onExecuteSearch]);
 
   const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
+    setLocalSearchTerm(e.target.value);
   };
 
   const handleReplaceInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setReplaceTerm(e.target.value);
+    onReplaceChange(e.target.value);
+  };
+
+  const handleToggleOptionClick = (optionKey: keyof SearchOptions) => {
+    onToggleSearchOption(optionKey);
   };
 
   const handleReplaceAllClick = () => {
-    if (searchTerm && matchInfo && matchInfo.totalMatches > 0) {
+    if (localSearchTerm && matchInfo && matchInfo.totalMatches > 0) {
       onExecuteReplaceAll();
     }
   };
@@ -82,14 +88,14 @@ const SearchPanel = ({
           <input
             type="text"
             placeholder="Search"
-            value={searchTerm}
+            value={localSearchTerm}
             onChange={handleSearchInputChange}
             className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
           />
           <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
             <button
               title="Match Case"
-              onClick={() => toggleSearchOption("matchCase")}
+              onClick={() => handleToggleOptionClick("matchCase")}
               className={`p-0.5 rounded ${
                 searchOptions.matchCase
                   ? "bg-stone-500/40 text-stone-100"
@@ -100,7 +106,7 @@ const SearchPanel = ({
             </button>
             <button
               title="Match Whole Word"
-              onClick={() => toggleSearchOption("wholeWord")}
+              onClick={() => handleToggleOptionClick("wholeWord")}
               className={`p-0.5 rounded ${
                 searchOptions.wholeWord
                   ? "bg-stone-500/40 text-stone-100"
@@ -111,7 +117,7 @@ const SearchPanel = ({
             </button>
             <button
               title="Use Regular Expression"
-              onClick={() => toggleSearchOption("isRegex")}
+              onClick={() => handleToggleOptionClick("isRegex")}
               className={`p-0.5 rounded ${
                 searchOptions.isRegex
                   ? "bg-stone-500/40 text-stone-100"
@@ -127,7 +133,7 @@ const SearchPanel = ({
             <input
               type="text"
               placeholder="Replace"
-              value={replaceTerm}
+              value={replaceValue}
               onChange={handleReplaceInputChange}
               className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
             />
@@ -135,7 +141,7 @@ const SearchPanel = ({
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
               <button
                 title="Preserve Case (Ab)"
-                onClick={() => toggleSearchOption("preserveCase")}
+                onClick={() => handleToggleOptionClick("preserveCase")}
                 className={`p-0.5 rounded ${
                   searchOptions.preserveCase
                     ? "bg-stone-500/40 text-stone-100"
@@ -150,7 +156,9 @@ const SearchPanel = ({
           <button
             title="Replace All"
             onClick={handleReplaceAllClick}
-            disabled={!searchTerm || !matchInfo || matchInfo.totalMatches === 0}
+            disabled={
+              !localSearchTerm || !matchInfo || matchInfo.totalMatches === 0
+            }
             className="p-1 rounded text-stone-400 hover:bg-stone-700/50 disabled:text-stone-600 disabled:cursor-not-allowed flex-shrink-0 h-7 w-7 flex items-center justify-center"
           >
             <VscReplaceAll size={16} />

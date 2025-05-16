@@ -61,7 +61,6 @@ const Sidebar = ({
   isExplorerCollapsed,
   explorerPanelSize,
   handleExplorerPanelMouseDown,
-  toggleExplorerPanel,
   openPanelWithIcon,
   activeIcon,
   setActiveIcon,
@@ -236,6 +235,11 @@ const Sidebar = ({
             activeIcon={activeIcon}
             onExecuteSearch={onSearchChange}
             onExecuteReplaceAll={onReplaceAll}
+            matchInfo={matchInfo}
+            searchOptions={searchOptions}
+            onToggleSearchOption={onToggleSearchOption}
+            replaceValue={replaceValue}
+            onReplaceChange={onReplaceChange}
           />
 
           {/* Share Panel: Shows JoinSessionPanel or SessionParticipantsPanel */}
