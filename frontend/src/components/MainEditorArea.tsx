@@ -60,7 +60,6 @@ const MainEditorArea = ({
   editorTerminalAreaRef,
   tabContainerRef,
   terminalRef,
-  editorInstanceRef,
   fileContents,
   handleCodeChange,
   handleEditorDidMount,

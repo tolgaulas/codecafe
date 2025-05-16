@@ -6,7 +6,6 @@ import {
   MatchInfo,
 } from "../types/editor";
 import { MOCK_FILES } from "../constants/mockFiles";
-// import { arrayMove } from "@dnd-kit/sortable"; // Import arrayMove for use in actions
 
 const initialOpenFileIds = ["index.html", "style.css", "script.js"];
 
@@ -35,7 +34,6 @@ initialOpenFileIds.forEach((id) => {
 
 const initialActiveFileId = initialOpenFileIds[0] || null;
 
-// Initial state for search options
 const initialSearchOptions: SearchOptions = {
   matchCase: false,
   wholeWord: false,
@@ -47,7 +45,7 @@ interface FileState {
   openFiles: OpenFile[];
   activeFileId: string | null;
   fileContents: { [id: string]: string };
-  // Add back dnd-kit specific state
+
   draggingId: string | null;
   dropIndicator: { tabId: string | null; side: "left" | "right" | null };
 
@@ -64,7 +62,6 @@ interface FileActions {
   ) => void;
   setActiveFileId: (id: string | null) => void;
   setFileContent: (id: string, content: string) => void;
-  // Add back dnd-kit specific setters
   setDraggingId: (id: string | null) => void;
   setDropIndicator: (indicator: FileState["dropIndicator"]) => void;
   openFile: (fileId: string, isSessionActive: boolean) => void;
@@ -83,7 +80,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
   openFiles: initialOpenFilesData,
   activeFileId: initialActiveFileId,
   fileContents: initialFileContents,
-  // Add back dnd-kit specific initial state
   draggingId: null,
   dropIndicator: { tabId: null, side: null },
 
@@ -102,7 +98,6 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set((state) => ({
       fileContents: { ...state.fileContents, [id]: content },
     })),
-  // Add back dnd-kit specific setters implementations
   setDraggingId: (id) => set({ draggingId: id }),
   setDropIndicator: (indicator) => set({ dropIndicator: indicator }),
 
@@ -110,7 +105,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
     set({ activeFileId: fileId });
   },
 
-  openFile: (fileId, isSessionActive) => {
+  openFile: (fileId) => {
     const fileData = MOCK_FILES[fileId];
     if (!fileData) {
       console.error(`Cannot open file: ${fileId} not found in MOCK_FILES.`);
@@ -153,7 +148,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
       (f) => f.id === fileIdToClose
     );
 
-    if (indexToRemove === -1) return; // File not open
+    if (indexToRemove === -1) return;
 
     let nextActiveId: string | null = state.activeFileId;
 
@@ -170,7 +165,7 @@ export const useFileStore = create<FileState & FileActions>((set, get) => ({
           remainingFiles[0]?.id ??
           null;
       } else {
-        nextActiveId = null; // Closing the last tab
+        nextActiveId = null;
       }
     }
 

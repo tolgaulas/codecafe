@@ -2,15 +2,13 @@ import React from "react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
-import { COLORS } from "./constants/colors";
 import { v4 as uuidv4 } from "uuid";
-import { editor, IDisposable } from "monaco-editor";
+import { editor } from "monaco-editor";
 import { RemoteUser, ChatMessageType } from "./types/props";
 import StatusBar from "./components/StatusBar";
 import {
   CodeExecutionRequest,
   CodeExecutionResponse,
-  JoinStateType,
   TerminalHandle,
   SearchOptions,
   MatchInfo,
@@ -21,7 +19,6 @@ import {
   DEFAULT_EXPLORER_WIDTH,
   MIN_EXPLORER_WIDTH,
   MAX_EXPLORER_WIDTH,
-  MIN_JOIN_PANEL_WIDTH,
   DEFAULT_TERMINAL_HEIGHT_FRACTION,
   MIN_TERMINAL_HEIGHT_PX,
   TERMINAL_COLLAPSE_THRESHOLD_PX,
@@ -32,6 +29,7 @@ import { MOCK_FILES } from "./constants/mockFiles";
 import { isExecutableLanguage } from "./utils/languageUtils";
 import { useResizablePanel } from "./hooks/useResizablePanel";
 import { useCollaborationSession } from "./hooks/useCollaborationSession";
+import { useSessionManager } from "./hooks/useSessionManager";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import MainEditorArea from "./components/MainEditorArea";
@@ -49,8 +47,6 @@ const App = () => {
 
   // STATE
   const [activeIcon, setActiveIcon] = useState<string | null>(null);
-  const [hasShownInitialParticipants, setHasShownInitialParticipants] =
-    useState(false);
 
   const { openFiles, activeFileId } = useFileStore();
 
@@ -64,24 +60,9 @@ const App = () => {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
 
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
-  const [userName, setUserName] = useState("");
-  const [userColor, setUserColor] = useState(COLORS[0]);
-  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const [shareMenuView, setShareMenuView] = useState<"initial" | "link">(
-    "initial"
-  );
-  const [generatedShareLink, setGeneratedShareLink] = useState<string | null>(
-    null
-  );
 
-  const [cursorLine, setCursorLine] = useState(1);
-  const [cursorColumn, setCursorColumn] = useState(1);
-
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
-  const [joinState, setJoinState] = useState<JoinStateType>("idle");
-
-  const [userId] = useState<string>(() => "user-" + uuidv4());
+  const [cursorLine] = useState(1);
+  const [cursorColumn] = useState(1);
 
   const [remoteUsers, setRemoteUsers] = useState<{
     [docId: string]: RemoteUser[];
@@ -98,11 +79,13 @@ const App = () => {
     preserveCase: false,
   });
   const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
-  const findResultsDecorationIds = useRef<string[]>([]);
-  const [isWidgetForcedHidden, setIsWidgetForcedHidden] = useState(false);
+  const [isWidgetForcedHidden] = useState(false);
 
   // New state for chat messages
   const [chatMessages, setChatMessages] = useState<ChatMessageType[]>([]);
+
+  // User Identity (local to App.tsx, passed to hooks)
+  const [userId] = useState<string>(() => "user-" + uuidv4());
 
   // Instantiate Resizable Panels
   const explorerPanelRef = useRef<HTMLDivElement>(null);
@@ -124,15 +107,44 @@ const App = () => {
     defaultOpenSize: DEFAULT_EXPLORER_WIDTH,
   });
   const explorerPanelSize = Math.max(0, rawExplorerPanelSize - ICON_BAR_WIDTH);
-  const setExplorerPanelSize = (newSize: number) => {
-    setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
-  };
+  const setExplorerPanelSize = useCallback(
+    (newSize: number) => {
+      setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
+    },
+    [setRawExplorerPanelSize]
+  );
+
+  // Use Session Manager Hook
+  const {
+    sessionId,
+    isSessionActive,
+    setIsSessionActive,
+    joinState,
+    setJoinState,
+    userName,
+    setUserName,
+    userColor,
+    setUserColor,
+    isColorPickerOpen,
+    setIsColorPickerOpen,
+    shareMenuView,
+    setShareMenuView,
+    generatedShareLink,
+    setHasShownInitialParticipants,
+    handleStartSession,
+    handleCopyShareLink,
+    handleConfirmJoin,
+  } = useSessionManager({
+    activeIcon,
+    setActiveIcon,
+    explorerPanelSize,
+    setExplorerPanelSize,
+    isExplorerCollapsed,
+    toggleExplorerPanel,
+  });
 
   // Generic function to set active icon for simple panels (files, search, chat etc.)
   const openPanelWithIcon = (iconName: string) => {
-    // If the share panel is currently active and prompting the user to join,
-    // prevent switching to other panels. The user must interact with the share panel
-    // (e.g., confirm join, or click the share icon again to close/cancel).
     if (
       activeIcon === "share" &&
       joinState === "prompting" &&
@@ -141,17 +153,11 @@ const App = () => {
       return; // Do nothing, keep the join panel open
     }
 
-    // If the clicked icon is "share", delegate to its specific handler.
     if (iconName === "share") {
       handleShareIconClick();
     } else {
-      // For any other icon (files, search, etc.):
-      // If joinState was "prompting" (e.g., from a URL-triggered join or an open share panel)
-      // and we are now definitively moving to a non-share panel, reset joinState to "idle".
-      // This allows the UI to stop showing the join prompt.
       if (joinState === "prompting" && activeIcon === "share") {
         setJoinState("idle");
-        setHasShownInitialParticipants(false);
       }
       setActiveIcon(iconName);
     }
@@ -161,16 +167,12 @@ const App = () => {
     if (activeIcon === "share") {
       // If the share panel is already open
       setActiveIcon(null); // Close panel
-      setJoinState("idle"); // Reset join state
-      setHasShownInitialParticipants(false);
+      if (joinState === "prompting") {
+        setJoinState("idle");
+      }
     } else {
       // Opening share panel (or switching to it from another panel)
       setActiveIcon("share");
-      // DO NOT automatically set joinState to "prompting" here.
-      // joinState will be set to "prompting" by:
-      // 1. The useEffect for URL-based joins.
-      // 2. An explicit user action like clicking a "Join Session" button (if added to the placeholder).
-      // If !isSessionActive and joinState is not "prompting", the Sidebar will show the placeholder message.
     }
   };
 
@@ -230,15 +232,13 @@ const App = () => {
     webViewFileIds: ["index.html", "style.css", "script.js"],
     onStateReceived: useCallback(
       (fileId, content, _revision, participantsFromHook) => {
-        // console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
         setFileContent(fileId, content);
-        // participantsFromHook is already filtered (for self) and has defaults from useCollaborationSession
         setRemoteUsers((prev) => ({
           ...prev,
-          [fileId]: participantsFromHook, // Use directly
+          [fileId]: participantsFromHook,
         }));
       },
-      [setFileContent] // userId and activeFileId no longer needed for filtering here
+      [setFileContent]
     ),
     onOperationReceived: useCallback(
       (fileId, operationData) => {
@@ -251,7 +251,6 @@ const App = () => {
             if (currentEditorContent !== undefined) {
               const currentZustandContent =
                 useFileStore.getState().fileContents[fileId];
-              // Update Zustand only if editor content is different
               if (currentEditorContent !== currentZustandContent) {
                 setFileContent(fileId, currentEditorContent);
               }
@@ -272,7 +271,6 @@ const App = () => {
             try {
               const operation = operationData;
               const newContent = operation.apply(currentZustandContent);
-              // Check if content actually changed before updating state
               if (newContent !== currentZustandContent) {
                 setFileContent(fileId, newContent);
               }
@@ -287,7 +285,6 @@ const App = () => {
             console.warn(
               `[App onOperationReceived] No content found in Zustand for background file ${fileId}. Cannot apply operation.`
             );
-            // Potentially fetch state here
           }
         }
       },
@@ -295,82 +292,64 @@ const App = () => {
     ),
     onRemoteUsersUpdate: useCallback(
       (fileId, updatedUsersInfo: Partial<RemoteUser>[]) => {
-        // console.log(
-        // `[App onRemoteUsersUpdate] Received for ${fileId}:`,
-        // updatedUsersInfo
-        // );
         setRemoteUsers((prevRemoteUsers) => {
-          // Avoid deep cloning if no changes are made for performance
           let changed = false;
           const nextRemoteUsers = { ...prevRemoteUsers };
 
           if (!nextRemoteUsers[fileId]) {
-            // Initialize if fileId is new, but this shouldn't happen often
-            // for updates originating from operations (users should exist from state sync)
             nextRemoteUsers[fileId] = [];
-            // console.warn(`[App onRemoteUsersUpdate] Initialized users for new fileId: ${fileId}`);
           }
 
-          // Make a shallow copy of the specific document's user array to modify it
           const usersForDoc = [...(nextRemoteUsers[fileId] || [])];
 
           updatedUsersInfo.forEach((partialUserUpdate) => {
-            if (!partialUserUpdate || partialUserUpdate.id === userId) return; // Ignore self or invalid updates
+            if (!partialUserUpdate || partialUserUpdate.id === userId) return;
 
             const existingUserIndex = usersForDoc.findIndex(
               (u) => u.id === partialUserUpdate.id
             );
 
             if (existingUserIndex > -1) {
-              // User exists, merge the partial update
               const existingUser = usersForDoc[existingUserIndex];
-              // Merge properties from partialUserUpdate into existingUser
               const mergedUser = { ...existingUser, ...partialUserUpdate };
 
-              // Check if the user object actually changed after merging
               if (JSON.stringify(existingUser) !== JSON.stringify(mergedUser)) {
                 usersForDoc[existingUserIndex] = mergedUser;
                 changed = true;
               }
             } else {
-              // User doesn't exist. This case is less likely for operation-based updates
-              // but handle it defensively. We only have partial info.
-              // A full update should ideally come from onStateReceived.
-              // We could push the partial user, but it might lack name/color.
-              // Let's log a warning for now.
               console.warn(
                 `[App onRemoteUsersUpdate] Received update for non-existent user ${partialUserUpdate.id} in file ${fileId}. Update:`,
                 partialUserUpdate
               );
-              // Optionally push the partial user if needed:
               usersForDoc.push(partialUserUpdate as RemoteUser);
               changed = true;
             }
           });
 
-          // If changes occurred, update the state for this fileId
           if (changed) {
             nextRemoteUsers[fileId] = usersForDoc;
-            return nextRemoteUsers; // Return the updated state object
+            return nextRemoteUsers;
           }
 
-          // If no changes, return the previous state object to prevent re-renders
           return prevRemoteUsers;
         });
       },
       [userId]
     ),
-    onConnectionStatusChange: useCallback((_connected: boolean) => {
-      // console.log(`[App onConnectionStatusChange] Connected: ${connected}`);
-    }, []),
-    onError: useCallback((error: Error | string) => {
-      console.error("[App onError] Collaboration Hook Error:", error);
-      alert(
-        `Collaboration Error: ${error instanceof Error ? error.message : error}`
-      );
-      setIsSessionActive(false);
-    }, []),
-    // New callback for chat messages
+    onConnectionStatusChange: useCallback((_connected: boolean) => {}, []),
+    onError: useCallback(
+      (error: Error | string) => {
+        console.error("[App onError] Collaboration Hook Error:", error);
+        alert(
+          `Collaboration Error: ${
+            error instanceof Error ? error.message : error
+          }`
+        );
+        setIsSessionActive(false);
+      },
+      [setIsSessionActive]
+    ),
     onChatMessageReceived: useCallback((message: ChatMessageType) => {
       setChatMessages((prevMessages) => [...prevMessages, message]);
     }, []),
@@ -380,7 +359,6 @@ const App = () => {
   const handleEditorDidMount = (
     editorInstance: editor.IStandaloneCodeEditor
   ) => {
-    // console.log("Monaco Editor Instance Mounted:", editorInstance);
     editorInstanceRef.current = editorInstance;
   };
 
@@ -428,9 +406,7 @@ const App = () => {
       const executionOutput = response.data.run.stderr
         ? `${response.data.run.stdout}\\nError: ${response.data.run.stderr}`
         : response.data.run.stdout;
-      // Write directly to terminal
       if (executionOutput !== "") {
-        // console.log(executionOutput);
         terminalRef.current?.writeToTerminal(executionOutput);
       }
     } catch (error) {
@@ -448,12 +424,7 @@ const App = () => {
 
   const handleCodeChange = (newCode: string) => {
     if (!isSessionActive && activeFileId) {
-      // console.log("[handleCodeChange] Updating local state (not in session)");
       setFileContent(activeFileId, newCode);
-    } else if (isSessionActive && activeFileId) {
-      // console.log(
-      // "[handleCodeChange] Change detected in session, OT hook will handle state update."
-      // );
     }
   };
 
@@ -469,7 +440,7 @@ const App = () => {
 
   // Share Menu Handlers
   const toggleShareMenu = () => {
-    setIsShareMenuOpen((prev: boolean) => {
+    setIsShareMenuOpen((prev) => {
       const nextOpen = !prev;
       if (nextOpen) {
         if (isSessionActive && generatedShareLink) setShareMenuView("link");
@@ -492,215 +463,51 @@ const App = () => {
     setIsColorPickerOpen((prev) => !prev);
   };
 
-  const handleStartSession = async () => {
-    if (!userName.trim()) return;
-
-    setIsColorPickerOpen(false);
-
-    try {
-      // Create the session
-      // console.log(
-      //   `[handleStartSession] Creating session for user: ${userName.trim()}`
-      // );
-      const createResponse = await axios.post<{ sessionId: string }>(
-        `${import.meta.env.VITE_BACKEND_URL}/api/sessions/create`,
-        {
-          creatorName: userName.trim(),
-        }
-      );
-
-      const newSessionId = createResponse.data.sessionId;
-      // console.log(
-      //   "[handleStartSession] Session created successfully:",
-      //   newSessionId
-      // );
-
-      const currentFileContents = useFileStore.getState().fileContents;
-
-      const keyFiles = ["index.html", "style.css", "script.js"];
-      const initialContentPromises = keyFiles.map((fileId) => {
-        const currentContent = currentFileContents[fileId];
-        if (currentContent !== undefined) {
-          // Only send if content exists locally
-          // console.log(
-          //   `[handleStartSession] Sending initial content for ${fileId} to session ${newSessionId}`
-          // );
-          return axios
-            .post(
-              `${
-                import.meta.env.VITE_BACKEND_URL
-              }/api/sessions/${newSessionId}/set-document`,
-              {
-                documentId: fileId,
-                content: currentContent,
-              }
-            )
-            .catch((err) => {
-              console.error(
-                `[handleStartSession] Failed to set initial content for ${fileId}:`,
-                err
-              );
-              return null;
-            });
-        } else {
-          // console.warn(
-          // `[handleStartSession] No local content found for key file ${fileId}, skipping initial set.`
-          // );
-          return Promise.resolve(null);
-        }
-      });
-
-      await Promise.all(initialContentPromises);
-      // console.log(
-      // "[handleStartSession] Finished attempting to set initial document content."
-      // );
-
-      const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
-      // console.log("[handleStartSession] Share link:", shareLink);
-
-      setSessionId(newSessionId);
-      setGeneratedShareLink(shareLink);
-      setShareMenuView("link");
-
-      // IMPORTANT: Activate session state AFTER setting session ID
-      setIsSessionActive(true);
-    } catch (error) {
-      console.error(
-        "[handleStartSession] Error creating session or setting initial content:",
-        error
-      );
-      alert("Failed to create session. Please try again.");
-      setIsSessionActive(false);
-    }
-  };
-
-  const handleCopyShareLink = () => {
-    if (generatedShareLink) {
-      navigator.clipboard
-        .writeText(generatedShareLink)
-        .then(() => {
-          // console.log("Link copied to clipboard!");
-        })
-        .catch((err) => {
-          console.error("Failed to copy link: ", err);
-        });
-    }
-  };
-
-  const handleConfirmJoin = () => {
-    if (!userName.trim()) {
-      alert("Please enter your name.");
-      return;
-    }
-    setJoinState("joined");
-    // setIsSessionActive(true) will be the main trigger for the new useEffect.
-    // Other UI side-effects (like opening panel, setting activeIcon)
-    // will be handled by that useEffect.
-    setIsSessionActive(true);
-  };
-
-  // Utility to get the find controller
-  const getFindController = () => {
-    return editorInstanceRef.current?.getContribution(
-      "editor.contrib.findController"
-    ) as any;
-  };
-
-  // Function to update match info from editor state
-  const updateMatchInfoFromController = () => {
-    const controller = getFindController();
-    if (controller) {
-      const state = controller.getState();
-      // Use matchesCount and currentIndex directly from the controller state
-      const newMatchInfo = {
-        // Monaco findController state currentIndex is 0-based
-        currentIndex: state.matchesCount > 0 ? state.currentIndex + 1 : null,
-        totalMatches: state.matchesCount || 0,
-      };
-      setMatchInfo(newMatchInfo);
-    }
-  };
-
   // HANDLERS for Search Panel
-  const handleSearchChange = (term: string, currentOpts: SearchOptions) => {
+  const handleSearchChange = (term: string) => {
     setSearchTerm(term);
-    // Options are already in searchOptions state, useEffect will handle search with new term & existing options
   };
 
   const handleReplaceChange = (value: string) => {
     setReplaceValue(value);
-    const controller = getFindController();
-    if (controller) {
-      // controller.setReplaceString(value); // REMOVED: This method doesn't exist
-      // The useEffect hook handles setting the replace string via controller.start()
-    }
   };
 
   const handleToggleSearchOption = (optionKey: keyof SearchOptions) => {
     setSearchOptions((prev) => ({ ...prev, [optionKey]: !prev[optionKey] }));
   };
 
-  const handleFindNext = () => {
-    const controller = getFindController();
-    if (controller) {
-      controller.findNext();
-      updateMatchInfoFromController();
-    }
-  };
-
-  const handleFindPrevious = () => {
-    const controller = getFindController();
-    if (controller) {
-      controller.findPrevious();
-      updateMatchInfoFromController();
-    }
-  };
-
   const handleReplaceAll = () => {
-    const controller = getFindController(); // Still useful for options state
     const editor = editorInstanceRef.current;
     const model = editor?.getModel();
 
     if (editor && model && activeFileId && searchTerm) {
-      const currentSearchOptions = searchOptions; // Capture current options
+      const currentSearchOptions = searchOptions;
 
-      // 1. Find all matches
       const matches = model.findMatches(
         searchTerm,
-        true, // findNextMatch
+        true,
         currentSearchOptions.isRegex,
         currentSearchOptions.matchCase,
         currentSearchOptions.wholeWord ? searchTerm : null,
-        false // captureMatches - we only need ranges
+        false
       );
 
       if (matches.length > 0) {
-        // 2. Create edit operations
         const operations = matches.map((match) => ({
           range: match.range,
-          text: replaceValue, // Replace with the current replaceValue
+          text: replaceValue,
           forceMoveMarkers: true,
         }));
 
-        // 3. Apply edits atomically
         editor.executeEdits("sidebar-replace-all", operations);
 
-        // 4. Get updated content (Optional but good practice)
-        // const newContent = model.getValue(); // executeEdits updates the model
-
-        // 5. Update application state (Zustand store) - Triggered by editor change event anyway
-        // setFileContent(activeFileId, newContent); // Usually handled by onDidChangeContent listener
-
-        // 6. Clear the search state
-        // controller?.setSearchString(""); // Let useEffect handle this based on setSearchTerm
-        setSearchTerm(""); // Clear our search term state, triggering useEffect
-        setMatchInfo(null); // Clear match info
+        setSearchTerm("");
+        setMatchInfo(null);
       } else {
-        // No matches found, maybe just clear search term if needed
         console.log(
           "[Search Debug] handleReplaceAll: No matches found to replace."
         );
-        setSearchTerm(""); // Clear search term even if no matches were replaced
+        setSearchTerm("");
         setMatchInfo(null);
       }
     } else {
@@ -739,7 +546,6 @@ const App = () => {
     const allUsers = Object.values(remoteUsers).flat();
     const uniqueUsersMap = new Map<string, RemoteUser>();
     allUsers.forEach((user) => {
-      // Filter out self if present in the state (hook should ideally filter)
       if (user.id !== userId) {
         uniqueUsersMap.set(user.id, user);
       }
@@ -780,172 +586,6 @@ const App = () => {
       document.removeEventListener("pointercancel", handleGlobalPointerUp);
     };
   }, [handleGlobalPointerUp]);
-
-  // Effect to handle joining via URL parameter
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const sessionIdFromUrl = url.searchParams.get("session");
-
-    if (sessionIdFromUrl && !isSessionActive && joinState === "idle") {
-      // console.log(
-      // `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerPanelSize}`
-      // );
-      setSessionId(sessionIdFromUrl);
-      setJoinState("prompting");
-      setActiveIcon("share"); // Ensure the share panel (join prompt) is active
-
-      // Also generate the share link for the joining user
-      const shareLink = `${window.location.origin}${window.location.pathname}?session=${sessionIdFromUrl}`;
-      setGeneratedShareLink(shareLink);
-
-      let targetWidth = DEFAULT_EXPLORER_WIDTH;
-      if (explorerPanelSize > 0) {
-        targetWidth = Math.max(targetWidth, explorerPanelSize);
-      } else if (explorerPanelSize > MIN_EXPLORER_WIDTH / 2) {
-        targetWidth = Math.max(targetWidth, explorerPanelSize);
-      }
-      targetWidth = Math.max(targetWidth, MIN_JOIN_PANEL_WIDTH);
-
-      setExplorerPanelSize(targetWidth);
-
-      // Clean the URL
-      const updatedUrl = new URL(window.location.href);
-      updatedUrl.searchParams.delete("session");
-      window.history.replaceState({}, "", updatedUrl.toString());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSessionActive, joinState, setExplorerPanelSize]);
-
-  // Effect to handle UI changes after a session is joined
-  useEffect(() => {
-    if (
-      isSessionActive &&
-      joinState === "joined" &&
-      !hasShownInitialParticipants
-    ) {
-      // Ensure the explorer panel is open if it was collapsed
-      if (isExplorerCollapsed) {
-        toggleExplorerPanel();
-      }
-
-      const showParticipantsPanel = () => {
-        // Delay showing participants to give collaboration hook time
-        // after potential switchTab or initial join operations.
-        setTimeout(() => {
-          setActiveIcon("share");
-          setHasShownInitialParticipants(true);
-        }, 150); // This delay can be tuned
-      };
-
-      // No need to re-trigger switchTab here if activeFileId is already set from store/initial load
-      // The primary goal is to show participants ONCE after join.
-      showParticipantsPanel();
-    }
-  }, [
-    isSessionActive,
-    joinState,
-    isExplorerCollapsed,
-    toggleExplorerPanel,
-    setActiveIcon,
-    hasShownInitialParticipants,
-    setHasShownInitialParticipants,
-  ]);
-
-  // Effect to reset hasShownInitialParticipants when session ends
-  useEffect(() => {
-    if (!isSessionActive) {
-      setHasShownInitialParticipants(false);
-    }
-  }, [isSessionActive]);
-
-  useEffect(() => {
-    let positionListener: IDisposable | null = null;
-    const editor = editorInstanceRef.current;
-
-    if (editor) {
-      const currentPosition = editor.getPosition();
-      if (currentPosition) {
-        setCursorLine(currentPosition.lineNumber);
-        setCursorColumn(currentPosition.column);
-      }
-
-      positionListener = editor.onDidChangeCursorPosition((e) => {
-        setCursorLine(e.position.lineNumber);
-        setCursorColumn(e.position.column);
-      });
-    } else {
-      setCursorLine(1);
-      setCursorColumn(1);
-    }
-
-    return () => {
-      positionListener?.dispose();
-    };
-  }, [activeFileId, editorInstanceRef.current]);
-
-  // Effect to control explorer panel visibility based on activeIcon
-  useEffect(() => {
-    // Open panel if an icon is active and panel is closed
-    if (activeIcon && isExplorerCollapsed) {
-      toggleExplorerPanel();
-    }
-    // Close panel if no icon is active and panel is open
-    else if (!activeIcon && !isExplorerCollapsed) {
-      toggleExplorerPanel();
-    }
-    // Note: We intentionally don't list toggleExplorerPanel in dependencies
-    // to avoid loops if the hook's internal state causes re-renders.
-    // We only want this effect to run when activeIcon or isExplorerCollapsed changes.
-  }, [activeIcon, isExplorerCollapsed]);
-
-  // Effect to handle editor search AND find widget visibility control
-  useEffect(() => {
-    const controller = getFindController();
-    if (!controller) {
-      setMatchInfo(null);
-      setIsWidgetForcedHidden(false); // Ensure hidden state is reset if no controller
-      return;
-    }
-
-    if (activeIcon === "search") {
-      // Panel is active: force hide the native widget via CSS
-      setIsWidgetForcedHidden(true);
-
-      // Proceed with search logic based on term/options
-      if (searchTerm) {
-        controller.setSearchString(searchTerm);
-        controller.start({
-          searchString: searchTerm,
-          replaceString: replaceValue,
-          isRegex: searchOptions.isRegex,
-          matchCase: searchOptions.matchCase,
-          wholeWord: searchOptions.wholeWord,
-          autoFindInSelection: "never",
-          seedSearchStringFromSelection: "never",
-        });
-        updateMatchInfoFromController();
-      } else {
-        // Clear search if term is empty
-        if (controller.getState().searchString !== "") {
-          controller.setSearchString("");
-        }
-        if (editorInstanceRef.current) {
-          findResultsDecorationIds.current =
-            editorInstanceRef.current.deltaDecorations(
-              findResultsDecorationIds.current,
-              []
-            );
-        }
-        setMatchInfo(null);
-      }
-    } else {
-      // Panel is NOT active: close widget and unhide *after* a delay
-      controller.closeFindWidget(); // Close immediately
-      setTimeout(() => {
-        setIsWidgetForcedHidden(false); // Remove CSS hiding after delay
-      }, 100); // 100ms delay
-    }
-  }, [searchTerm, searchOptions, replaceValue, activeIcon]); // Dependencies
 
   // JSX
   return (
