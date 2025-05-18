@@ -45,7 +45,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           SPRING_REDIS_HOST: master.codecafe-redis-node.sra8pa.use2.cache.amazonaws.com
           SPRING_REDIS_PORT: 6379
-          SPRING_REDIS_SSL_ENABLED: false
+          SPRING_REDIS_SSL_ENABLED: true
         run: |
           echo "Starting deployment to EC2 instance: $EC2_HOST_DNS"
 
