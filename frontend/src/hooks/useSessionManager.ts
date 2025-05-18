@@ -1,11 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
-// import { v4 as uuidv4 } from "uuid"; // If still needed for user ID generation here, or assume userId is passed in
-import { JoinStateType } from "../types/editor"; // Assuming this type is still relevant
+import { JoinStateType } from "../types/editor";
 import { useFileStore } from "../store/useFileStore";
-import {
-  COLORS, // Assuming COLORS is needed for default color or color picker logic if managed here
-} from "../constants/colors";
+import { COLORS } from "../constants/colors";
 import {
   DEFAULT_EXPLORER_WIDTH,
   MIN_JOIN_PANEL_WIDTH,
@@ -20,7 +17,7 @@ export interface SessionManagerHookProps {
   setExplorerPanelSize: (size: number) => void;
   isExplorerCollapsed: boolean;
   toggleExplorerPanel: () => void;
-  // userId: string; // Pass userId if it's generated outside and needed by the hook
+  // userId: string;
 }
 
 export interface SessionManagerHookResult {
@@ -45,13 +42,11 @@ export interface SessionManagerHookResult {
   handleStartSession: () => Promise<void>;
   handleCopyShareLink: () => void;
   handleConfirmJoin: () => void;
-  // Expose any other functions App.tsx needs, like toggleShareMenu, handleNameChange etc.
 }
 
 export const useSessionManager = ({
   initialUserName = "",
   initialUserColor = COLORS[0],
-  activeIcon,
   setActiveIcon,
   explorerPanelSize,
   setExplorerPanelSize,
@@ -79,28 +74,24 @@ export const useSessionManager = ({
     setIsColorPickerOpen(false);
 
     try {
-      const createResponse = await axios.post<{ sessionId: string }>(
-        `${import.meta.env.VITE_BACKEND_URL}/api/sessions/create`,
-        {
-          creatorName: userName.trim(),
-        }
-      );
+      const apiUrl = `${import.meta.env.VITE_BACKEND_URL}/api/sessions/create`;
+      const createResponse = await axios.post<{ sessionId: string }>(apiUrl, {
+        creatorName: userName.trim(),
+      });
       const newSessionId = createResponse.data.sessionId;
       const currentFileContents = useFileStore.getState().fileContents;
       const keyFiles = ["index.html", "style.css", "script.js"];
       const initialContentPromises = keyFiles.map((fileId) => {
         const currentContent = currentFileContents[fileId];
         if (currentContent !== undefined) {
+          const setDocumentUrl = `${
+            import.meta.env.VITE_BACKEND_URL
+          }/api/sessions/${newSessionId}/set-document`;
           return axios
-            .post(
-              `${
-                import.meta.env.VITE_BACKEND_URL
-              }/api/sessions/${newSessionId}/set-document`,
-              {
-                documentId: fileId,
-                content: currentContent,
-              }
-            )
+            .post(setDocumentUrl, {
+              documentId: fileId,
+              content: currentContent,
+            })
             .catch((err) => {
               console.error(
                 `[useSessionManager] Failed to set initial content for ${fileId}:`,

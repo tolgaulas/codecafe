@@ -6,9 +6,7 @@ A hyper-collaborative, real-time development environment right in your browser. 
 
 ![image](https://github.com/user-attachments/assets/68590a84-a055-4876-8c66-8f446f83c038)
 
-
 [Click here to watch the demo video!](https://youtu.be/FL0qg1Uo-MQ?si=czYlT2vyO6qMIyL1)
-
 
 ## Why CodeCafé?
 
@@ -42,6 +40,7 @@ Operational Transformation is the technology that powers real-time collaborative
 3. Resolving conflicts automatically when users edit the same regions of text
 
 Our implementation handles the complex synchronization challenges of collaborative editing, including:
+
 - Managing concurrent edits from multiple users
 - Resolving edit conflicts deterministically
 - Maintaining document consistency across all connected clients
@@ -51,9 +50,27 @@ This enables truly fluid, Google Docs-like collaboration where everyone can type
 
 ## Quick Start
 
-**Prerequisites:** Git, Java JDK 17+, Maven, Node.js 18+, npm 9+, Redis Server
+### Option 1: Using Docker (Recommended)
+
+The easiest way to get started with CodeCafé is to use Docker:
+
+```bash
+# Clone the repo
+git clone https://github.com/mrktsm/codecafe.git
+cd codecafe
+
+# Start all services using Docker Compose
+docker-compose up
+```
+
+Access the app in your browser at http://localhost:80
+
+### Option 2: Manual Setup
+
+**Prerequisites:** Git, Java JDK 23+, Maven, Node.js 18+, npm 9+, Redis Server
 
 **Setup and Run:**
+
 ```bash
 # Clone the repo
 git clone https://github.com/mrktsm/codecafe.git
@@ -80,6 +97,30 @@ npm run dev
 ```
 
 Access the app in your browser at the URL shown in terminal (typically http://localhost:5173).
+
+## CI/CD Pipeline
+
+CodeCafé uses GitHub Actions for continuous integration and deployment:
+
+- **CI Pipeline:** Automatically runs tests for both frontend and backend on every pull request and push to main/develop branches.
+- **CD Pipeline:** Automatically deploys:
+  - Backend to AWS ECS when pushing to the main branch
+  - Frontend to Vercel when pushing to the main branch
+
+### Setting up CI/CD for your fork:
+
+1. **For AWS deployment:**
+
+   - Add the following secrets to your GitHub repository:
+     - `AWS_ACCESS_KEY_ID`
+     - `AWS_SECRET_ACCESS_KEY`
+     - `AWS_REGION`
+
+2. **For Vercel deployment:**
+   - Add the following secrets to your GitHub repository:
+     - `VERCEL_TOKEN`
+     - `VERCEL_ORG_ID`
+     - `VERCEL_PROJECT_ID`
 
 ## On the Horizon
 

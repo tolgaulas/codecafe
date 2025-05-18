@@ -13,7 +13,6 @@ import {
   RemoteUser,
   UseCollaborationSessionProps,
   UseCollaborationSessionReturn,
-  ChatMessageType,
 } from "../types/props";
 
 interface CursorMessage {

@@ -5,7 +5,6 @@ import {
   languageColorMap,
   defaultIconColor,
 } from "../constants/mappings";
-import { useFileStore } from "../store/useFileStore";
 import { EditorLanguageKey } from "../types/editor";
 
 // Props for FileExplorerPanel - initially minimal, might adjust
@@ -17,7 +16,6 @@ interface FileExplorerPanelProps {
 }
 
 const FileExplorerPanel = ({
-  isSessionActive,
   handleOpenFile,
   mockFiles,
   activeFileId,
