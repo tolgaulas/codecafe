@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy-to-aws:
+  deploy-backend-to-ec2:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -35,36 +35,49 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Update AWS ECS service
-        run: |
-          aws ecs update-service --cluster codecafe-cluster --service codecafe-backend-service --force-new-deployment
-
-      - name: Wait for deployment to complete
-        run: |
-          aws ecs wait services-stable --cluster codecafe-cluster --services codecafe-backend-service
-
-      - name: Verify deployment
-        run: |
-          echo "Backend deployed successfully to AWS ECS"
-
-  deploy-to-vercel:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Deploy Frontend to Vercel
-        working-directory: ./frontend
+      - name: Deploy to EC2
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_HOST_DNS: ${{ secrets.EC2_HOST_DNS }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: codecafe-backend
+          IMAGE_TAG: ${{ github.sha }}
+          SPRING_REDIS_HOST: master.codecafe-redis-node.sra8pa.use2.cache.amazonaws.com
+          SPRING_REDIS_PORT: 6379
         run: |
-          vercel --token ${VERCEL_TOKEN} --prod
+          echo "Starting deployment to EC2 instance: $EC2_HOST_DNS"
+
+          mkdir -p ~/.ssh/
+          echo "$EC2_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$EC2_HOST_DNS" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/id_rsa ec2-user@$EC2_HOST_DNS << EOF
+            echo "Logged into EC2 instance: $EC2_HOST_DNS"
+            
+            echo "Logging into AWS ECR..."
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+            
+            echo "Pulling latest image from ECR..."
+            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
+            
+            echo "Stopping and removing existing container if any..."
+            docker stop codecafe-backend || true 
+            docker rm codecafe-backend || true
+            
+            echo "Attempting to stop old nohup Java process..."
+            ps aux | grep 'java -jar backend-redis-fix-v1.jar' | grep -v grep | awk '{print \$2}' | xargs -r kill -9 || true
+            
+            echo "Running new Docker container..."
+            docker run -d --name codecafe-backend \\
+              -p 80:8080 \\
+              -e SPRING_REDIS_HOST=$SPRING_REDIS_HOST \\
+              -e SPRING_REDIS_PORT=$SPRING_REDIS_PORT \\
+              $ECR_REGISTRY/$ECR_REPOSITORY:latest
+              
+            echo "Listing running Docker containers..."
+            docker ps
+            
+            echo "Deployment script finished."
+          EOF

@@ -5,7 +5,6 @@ FROM amazoncorretto:17-alpine AS builder
 WORKDIR /app
 
 # Copy the Maven wrapper and pom.xml first to leverage Docker cache
-# If these files don't change, Docker won't re-download dependencies
 COPY .mvn/ .mvn
 COPY mvnw pom.xml ./
 

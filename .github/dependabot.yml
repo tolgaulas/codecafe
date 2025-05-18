@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directory: "/" # Location of package manifests
+    directory: "/"
     schedule:
       interval: "daily"
     assignees:
@@ -13,7 +13,7 @@ updates:
     commit-message:
       prefix: "dependabot"
   - package-ecosystem: "maven"
-    directory: "/backend" # Location of pom.xml
+    directory: "/backend"
     schedule:
       interval: "daily"
     assignees:

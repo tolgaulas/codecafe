@@ -11,7 +11,7 @@ services:
     environment:
       - SPRING_REDIS_HOST=redis
       - SPRING_REDIS_PORT=6379
-      # - SPRING_REDIS_PASSWORD=yourpassword # Uncomment and set if needed
+      # - SPRING_REDIS_PASSWORD=yourpassword #
       - SPRING_REDIS_SSL_ENABLED=false
     depends_on:
       - redis
