@@ -90,21 +90,17 @@ public class EditorController {
             sessionRegistryService.userJoined(sessionId, documentId, userInfoDTO);
             log.info("User [{}] registered in session [{}], doc [{}] via /app/join", userId, sessionId, documentId);
 
-            // 2. Track this active document for the user (using Redis Set)
             String trackingKey = getUserTrackingKey(userId);
             String documentEntry = sessionId + ":" + documentId;
             try {
                 setOperations.add(trackingKey, documentEntry);
-                // Set expiry for the tracking key itself using the StringRedisTemplate
                 stringRedisTemplate.expire(trackingKey, USER_TRACKING_EXPIRY_HOURS, TimeUnit.HOURS);
                 log.info("Added entry '{}' to user tracking set '{}' for user [{}]", documentEntry, trackingKey, userId);
             } catch (Exception redisEx) {
                 log.error("Redis error adding entry '{}' to tracking set '{}' for user [{}]: {}",
                           documentEntry, trackingKey, userId, redisEx.getMessage(), redisEx);
-                // Continue without tracking if Redis fails? Or handle differently?
             }
 
-            // 3. Broadcast the updated full state
             broadcastFullDocumentState(sessionId, documentId, userId);
 
         } catch (Exception e) {
@@ -129,7 +125,6 @@ public class EditorController {
         }
         String senderClientId = senderUserInfo.getId();
 
-        // --- Persist state update to Redis --- NEW LOGIC
         try {
             // Convert Position to Map<String, Integer> or null
             Map<String, Integer> cursorPositionMap = null;
@@ -140,7 +135,6 @@ public class EditorController {
                 cursorPositionMap.put("column", cursorPosition.getColumn());
             }
 
-            // Get SelectionInfo (already the correct type)
             SelectionInfo selectionInfo = senderUserInfo.getSelection();
 
             // Call the service layer to update the state in Redis
@@ -151,9 +145,7 @@ public class EditorController {
             // Log error during state update, but still attempt to broadcast
             log.error("[Session: {}] Error persisting selection update for user [{}] in doc [{}]: {}", sessionId, senderClientId, documentId, e.getMessage(), e);
         }
-        // --- End Persist state update ---
 
-        // --- Broadcast the original message to other clients --- (Existing Logic)
         String selectionDestination = String.format("/topic/sessions/%s/selections/document/%s", sessionId, documentId);
 
         log.info("Attempting to broadcast selection for session '{}', doc '{}' from client '{}' to {}", sessionId, documentId, senderClientId, selectionDestination);
@@ -164,7 +156,6 @@ public class EditorController {
             log.error("Error broadcasting selection update to {} for session '{}', doc '{}'", selectionDestination, sessionId, documentId, e);
         }
 
-        // Remove the broadcast of the full state on every selection change (keep this commented out)
         // if (registryUpdated) {
         //    broadcastFullDocumentState(sessionId, documentId, senderClientId);
         // }

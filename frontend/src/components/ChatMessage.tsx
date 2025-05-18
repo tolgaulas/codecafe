@@ -7,7 +7,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   userColor,
   timestamp,
 }) => {
-  // Get the first letter of the username (or '?' if empty)
   const firstLetter = userName ? userName[0].toUpperCase() : "?";
 
   return (

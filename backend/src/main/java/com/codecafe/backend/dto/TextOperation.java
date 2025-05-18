@@ -35,7 +35,7 @@ public class TextOperation {
         return op instanceof Integer && (Integer) op < 0;
     }
 
-    // --- Constructors ---
+    // Constructors 
 
     public TextOperation() {
         this.ops = new ArrayList<>();
@@ -125,7 +125,7 @@ public class TextOperation {
         return this;
     }
 
-    // --- Getters ---
+    // Getters
 
     @JsonValue
     public List<Object> getOps() {
@@ -141,13 +141,13 @@ public class TextOperation {
         return targetLength;
     }
 
-    // --- Utility Methods ---
+    // Utility Methods
 
     public boolean isNoop() {
         return ops.isEmpty() || (ops.size() == 1 && isRetain(ops.get(0)));
     }
 
-    // --- Overrides ---
+    // Overrides
 
     @Override
     public boolean equals(Object o) {
@@ -176,8 +176,7 @@ public class TextOperation {
         }).collect(Collectors.joining(", ", "TextOperation[", "]"));
     }
 
-    // --- Setters (Needed for deserialization frameworks like Jackson) ---
-    // Be cautious using these directly, prefer builder methods.
+    // Setters 
 
     public void setOps(List<Object> ops) {
         // WARNING: This bypasses the length calculations done by builder methods.

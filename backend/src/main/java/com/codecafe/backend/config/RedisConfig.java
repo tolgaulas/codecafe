@@ -11,7 +11,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -27,7 +26,6 @@ public class RedisConfig {
     @Value("${spring.redis.ssl.enabled:false}") // Inject SSL property, default to false if not set
     private boolean redisSslEnabled;
 
-    // We might need to inject password here later if AUTH is enabled
     // @Value("${spring.redis.password}")
     // private String redisPassword;
 
@@ -53,7 +51,7 @@ public class RedisConfig {
         }
 
         LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration, clientConfig);
-        lettuceConnectionFactory.afterPropertiesSet(); // Ensure initialization
+        lettuceConnectionFactory.afterPropertiesSet(); 
         return lettuceConnectionFactory;
     }
 
@@ -62,17 +60,17 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Serializer for regular keys
+
         template.setKeySerializer(new StringRedisSerializer());
-        // Serializer for regular values
+
         template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
 
-        // Serializer for hash keys (usually Strings)
+
         template.setHashKeySerializer(new StringRedisSerializer());
-        // Serializer for hash values (needs to be JSON for UserInfoDTO)
+
         template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
 
-        template.afterPropertiesSet(); // Ensure properties are set
+        template.afterPropertiesSet(); 
         return template;
     }
 
