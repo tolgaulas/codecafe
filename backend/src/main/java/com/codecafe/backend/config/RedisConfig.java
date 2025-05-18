@@ -1,5 +1,7 @@
 package com.codecafe.backend.config;
 
+import org.slf4j.Logger; 
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,9 +15,12 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
+import jakarta.annotation.PostConstruct;
 
 @Configuration
 public class RedisConfig {
+
+    private static final Logger logger = LoggerFactory.getLogger(RedisConfig.class);
 
     @Value("${spring.redis.host}")
     private String redisHost;
@@ -29,8 +34,24 @@ public class RedisConfig {
     // @Value("${spring.redis.password}")
     // private String redisPassword;
 
+    @PostConstruct
+    public void logRedisConfig() {
+        logger.info("--- Custom RedisConfig Initializing --- Valued Properties ---");
+        logger.info("Redis Host from @Value: {}", redisHost);
+        logger.info("Redis Port from @Value: {}", redisPort);
+        logger.info("Redis SSL Enabled from @Value: {}", redisSslEnabled);
+        logger.info("--- End Custom RedisConfig Initializing ---");
+    }
+
     @Bean
     public LettuceConnectionFactory lettuceConnectionFactory() {
+        logger.info("--- Creating LettuceConnectionFactory --- Input Parameters ---");
+        logger.info("Using Redis Host: {}", redisHost);
+        logger.info("Using Redis Port: {}", redisPort);
+        logger.info("Using SSL Enabled: {}", redisSslEnabled);
+        // logger.info("Using Password Set: {}", (redisPassword != null && !redisPassword.isEmpty()));
+        logger.info("--- End LettuceConnectionFactory Input Parameters ---");
+
         RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
         redisStandaloneConfiguration.setHostName(redisHost);
         redisStandaloneConfiguration.setPort(redisPort);
@@ -41,17 +62,18 @@ public class RedisConfig {
 
         LettuceClientConfiguration clientConfig;
         if (redisSslEnabled) {
-            // Configure Lettuce Client with SSL
+            logger.info("LettuceClientConfiguration: SSL ENABLED");
             clientConfig = LettuceClientConfiguration.builder()
                     .useSsl()
                     .build();
         } else {
-            // Configure Lettuce Client without SSL for local development
+            logger.info("LettuceClientConfiguration: SSL DISABLED (default configuration)");
             clientConfig = LettuceClientConfiguration.defaultConfiguration();
         }
 
         LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration, clientConfig);
         lettuceConnectionFactory.afterPropertiesSet(); 
+        logger.info("LettuceConnectionFactory created and properties set.");
         return lettuceConnectionFactory;
     }
 
