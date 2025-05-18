@@ -43,8 +43,9 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: codecafe-backend
           IMAGE_TAG: ${{ github.sha }}
-          SPRING_DATA_REDIS_HOST: master.codecafe-redis-node.sra8pa.use2.cache.amazonaws.com
-          SPRING_DATA_REDIS_PORT: 6379
+          SPRING_REDIS_HOST: master.codecafe-redis-node.sra8pa.use2.cache.amazonaws.com
+          SPRING_REDIS_PORT: 6379
+          SPRING_REDIS_SSL_ENABLED: false
         run: |
           echo "Starting deployment to EC2 instance: $EC2_HOST_DNS"
 
@@ -72,8 +73,9 @@ jobs:
             echo "Running new Docker container..."
             docker run -d --name codecafe-backend \\
               -p 80:8080 \\
-              -e SPRING_DATA_REDIS_HOST=$SPRING_DATA_REDIS_HOST \\
-              -e SPRING_DATA_REDIS_PORT=$SPRING_DATA_REDIS_PORT \\
+              -e SPRING_REDIS_HOST=$SPRING_REDIS_HOST \\
+              -e SPRING_REDIS_PORT=$SPRING_REDIS_PORT \\
+              -e SPRING_REDIS_SSL_ENABLED=$SPRING_REDIS_SSL_ENABLED \\
               $ECR_REGISTRY/$ECR_REPOSITORY:latest
               
             echo "Listing running Docker containers..."
