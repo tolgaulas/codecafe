@@ -2,16 +2,16 @@ import React from "react";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { LANGUAGE_VERSIONS } from "./constants/languageVersions";
-import { COLORS } from "./constants/colors";
 import { v4 as uuidv4 } from "uuid";
 import { editor } from "monaco-editor";
-import { RemoteUser } from "./types/props";
+import { RemoteUser, ChatMessageType } from "./types/props";
 import StatusBar from "./components/StatusBar";
 import {
   CodeExecutionRequest,
   CodeExecutionResponse,
-  JoinStateType,
   TerminalHandle,
+  SearchOptions,
+  MatchInfo,
 } from "./types/editor";
 
 import {
@@ -19,7 +19,6 @@ import {
   DEFAULT_EXPLORER_WIDTH,
   MIN_EXPLORER_WIDTH,
   MAX_EXPLORER_WIDTH,
-  MIN_JOIN_PANEL_WIDTH,
   DEFAULT_TERMINAL_HEIGHT_FRACTION,
   MIN_TERMINAL_HEIGHT_PX,
   TERMINAL_COLLAPSE_THRESHOLD_PX,
@@ -30,11 +29,11 @@ import { MOCK_FILES } from "./constants/mockFiles";
 import { isExecutableLanguage } from "./utils/languageUtils";
 import { useResizablePanel } from "./hooks/useResizablePanel";
 import { useCollaborationSession } from "./hooks/useCollaborationSession";
+import { useSessionManager } from "./hooks/useSessionManager";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import MainEditorArea from "./components/MainEditorArea";
 import { useFileStore } from "./store/useFileStore";
-import { IDisposable } from "monaco-editor";
 import { Analytics } from "@vercel/analytics/react";
 
 const App = () => {
@@ -47,7 +46,7 @@ const App = () => {
   const editorInstanceRef = useRef<editor.IStandaloneCodeEditor | null>(null);
 
   // STATE
-  const [activeIcon, setActiveIcon] = useState<string | null>("files");
+  const [activeIcon, setActiveIcon] = useState<string | null>(null);
 
   const { openFiles, activeFileId } = useFileStore();
 
@@ -61,28 +60,33 @@ const App = () => {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
 
   const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
-  const [userName, setUserName] = useState("");
-  const [userColor, setUserColor] = useState(COLORS[0]);
-  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
-  const [shareMenuView, setShareMenuView] = useState<"initial" | "link">(
-    "initial"
-  );
-  const [generatedShareLink, setGeneratedShareLink] = useState<string | null>(
-    null
-  );
 
-  const [cursorLine, setCursorLine] = useState(1);
-  const [cursorColumn, setCursorColumn] = useState(1);
-
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
-  const [joinState, setJoinState] = useState<JoinStateType>("idle");
-
-  const [userId] = useState<string>(() => "user-" + uuidv4());
+  const [cursorLine] = useState(1);
+  const [cursorColumn] = useState(1);
 
   const [remoteUsers, setRemoteUsers] = useState<{
     [docId: string]: RemoteUser[];
   }>({});
+
+  const [tabsHaveOverflow, setTabsHaveOverflow] = useState(false);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [replaceValue, setReplaceValue] = useState("");
+  const [searchOptions, setSearchOptions] = useState<SearchOptions>({
+    matchCase: false,
+    wholeWord: false,
+    isRegex: false,
+    preserveCase: false,
+  });
+  const [matchInfo, setMatchInfo] = useState<MatchInfo | null>(null);
+  const findResultsDecorationIds = useRef<string[]>([]);
+  const [isWidgetForcedHidden, setIsWidgetForcedHidden] = useState(false);
+
+  // New state for chat messages
+  const [chatMessages, setChatMessages] = useState<ChatMessageType[]>([]);
+
+  // User Identity
+  const [userId] = useState<string>(() => "user-" + uuidv4());
 
   // Instantiate Resizable Panels
   const explorerPanelRef = useRef<HTMLDivElement>(null);
@@ -101,14 +105,75 @@ const App = () => {
     containerRef: sidebarContainerRef,
     panelRef: explorerPanelRef,
     storageKey: "explorerWidth",
-    onToggle: (isOpen) => {
-      setActiveIcon(isOpen ? "files" : null);
-    },
     defaultOpenSize: DEFAULT_EXPLORER_WIDTH,
   });
   const explorerPanelSize = Math.max(0, rawExplorerPanelSize - ICON_BAR_WIDTH);
-  const setExplorerPanelSize = (newSize: number) => {
-    setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
+  const setExplorerPanelSize = useCallback(
+    (newSize: number) => {
+      setRawExplorerPanelSize(newSize + ICON_BAR_WIDTH);
+    },
+    [setRawExplorerPanelSize]
+  );
+
+  // Use Session Manager Hook
+  const {
+    sessionId,
+    isSessionActive,
+    setIsSessionActive,
+    joinState,
+    setJoinState,
+    userName,
+    setUserName,
+    userColor,
+    setUserColor,
+    isColorPickerOpen,
+    setIsColorPickerOpen,
+    shareMenuView,
+    setShareMenuView,
+    generatedShareLink,
+    handleStartSession,
+    handleCopyShareLink,
+    handleConfirmJoin,
+  } = useSessionManager({
+    activeIcon,
+    setActiveIcon,
+    explorerPanelSize,
+    setExplorerPanelSize,
+    isExplorerCollapsed,
+    toggleExplorerPanel,
+  });
+
+  // Generic function to set active icon for simple panels (files, search, chat etc.)
+  const openPanelWithIcon = (iconName: string) => {
+    if (
+      activeIcon === "share" &&
+      joinState === "prompting" &&
+      iconName !== "share"
+    ) {
+      return; // Do nothing, keep the join panel open
+    }
+
+    if (iconName === "share") {
+      handleShareIconClick();
+    } else {
+      if (joinState === "prompting" && activeIcon === "share") {
+        setJoinState("idle");
+      }
+      setActiveIcon(iconName);
+    }
+  };
+
+  const handleShareIconClick = () => {
+    if (activeIcon === "share") {
+      // If the share panel is already open
+      setActiveIcon(null); // Close panel
+      if (joinState === "prompting") {
+        setJoinState("idle");
+      }
+    } else {
+      // Opening share panel (or switching to it from another panel)
+      setActiveIcon("share");
+    }
   };
 
   const initialMaxTerminalHeight = window.innerHeight * 0.8;
@@ -157,9 +222,7 @@ const App = () => {
       DEFAULT_WEBVIEW_WIDTH_FRACTION,
   });
 
-  const {
-    /* isConnected */
-  } = useCollaborationSession({
+  const { sendChatMessage } = useCollaborationSession({
     sessionId,
     userId,
     userInfo: { name: userName, color: userColor },
@@ -168,18 +231,14 @@ const App = () => {
     isSessionActive,
     webViewFileIds: ["index.html", "style.css", "script.js"],
     onStateReceived: useCallback(
-      (fileId, content, _revision, participants) => {
-        // console.log(`[App onStateReceived] File: ${fileId}, Rev: ${revision}`);
+      (fileId, content, _revision, participantsFromHook) => {
         setFileContent(fileId, content);
-        const filteredParticipants = participants.filter(
-          (p) => p.id !== userId
-        );
         setRemoteUsers((prev) => ({
           ...prev,
-          [fileId]: filteredParticipants,
+          [fileId]: participantsFromHook,
         }));
       },
-      [activeFileId, userId, setFileContent]
+      [setFileContent]
     ),
     onOperationReceived: useCallback(
       (fileId, operationData) => {
@@ -192,7 +251,6 @@ const App = () => {
             if (currentEditorContent !== undefined) {
               const currentZustandContent =
                 useFileStore.getState().fileContents[fileId];
-              // Update Zustand only if editor content is different
               if (currentEditorContent !== currentZustandContent) {
                 setFileContent(fileId, currentEditorContent);
               }
@@ -213,7 +271,6 @@ const App = () => {
             try {
               const operation = operationData;
               const newContent = operation.apply(currentZustandContent);
-              // Check if content actually changed before updating state
               if (newContent !== currentZustandContent) {
                 setFileContent(fileId, newContent);
               }
@@ -228,7 +285,6 @@ const App = () => {
             console.warn(
               `[App onOperationReceived] No content found in Zustand for background file ${fileId}. Cannot apply operation.`
             );
-            // Potentially fetch state here
           }
         }
       },
@@ -236,80 +292,66 @@ const App = () => {
     ),
     onRemoteUsersUpdate: useCallback(
       (fileId, updatedUsersInfo: Partial<RemoteUser>[]) => {
-        // console.log(
-        // `[App onRemoteUsersUpdate] Received for ${fileId}:`,
-        // updatedUsersInfo
-        // );
         setRemoteUsers((prevRemoteUsers) => {
-          // Avoid deep cloning if no changes are made for performance
           let changed = false;
           const nextRemoteUsers = { ...prevRemoteUsers };
 
           if (!nextRemoteUsers[fileId]) {
-            // Initialize if fileId is new, but this shouldn't happen often
-            // for updates originating from operations (users should exist from state sync)
             nextRemoteUsers[fileId] = [];
-            // console.warn(`[App onRemoteUsersUpdate] Initialized users for new fileId: ${fileId}`);
           }
 
-          // Make a shallow copy of the specific document's user array to modify it
           const usersForDoc = [...(nextRemoteUsers[fileId] || [])];
 
           updatedUsersInfo.forEach((partialUserUpdate) => {
-            if (!partialUserUpdate || partialUserUpdate.id === userId) return; // Ignore self or invalid updates
+            if (!partialUserUpdate || partialUserUpdate.id === userId) return;
 
             const existingUserIndex = usersForDoc.findIndex(
               (u) => u.id === partialUserUpdate.id
             );
 
             if (existingUserIndex > -1) {
-              // User exists, merge the partial update
               const existingUser = usersForDoc[existingUserIndex];
-              // Merge properties from partialUserUpdate into existingUser
               const mergedUser = { ...existingUser, ...partialUserUpdate };
 
-              // Check if the user object actually changed after merging
               if (JSON.stringify(existingUser) !== JSON.stringify(mergedUser)) {
                 usersForDoc[existingUserIndex] = mergedUser;
                 changed = true;
               }
             } else {
-              // User doesn't exist. This case is less likely for operation-based updates
-              // but handle it defensively. We only have partial info.
-              // A full update should ideally come from onStateReceived.
-              // We could push the partial user, but it might lack name/color.
-              // Let's log a warning for now.
               console.warn(
                 `[App onRemoteUsersUpdate] Received update for non-existent user ${partialUserUpdate.id} in file ${fileId}. Update:`,
                 partialUserUpdate
               );
-              // Optionally push the partial user if needed:
               usersForDoc.push(partialUserUpdate as RemoteUser);
               changed = true;
             }
           });
 
-          // If changes occurred, update the state for this fileId
           if (changed) {
             nextRemoteUsers[fileId] = usersForDoc;
-            return nextRemoteUsers; // Return the updated state object
+            return nextRemoteUsers;
           }
 
-          // If no changes, return the previous state object to prevent re-renders
           return prevRemoteUsers;
         });
       },
       [userId]
     ),
-    onConnectionStatusChange: useCallback((_connected: boolean) => {
-      // console.log(`[App onConnectionStatusChange] Connected: ${connected}`);
-    }, []),
-    onError: useCallback((error: Error | string) => {
-      console.error("[App onError] Collaboration Hook Error:", error);
-      alert(
-        `Collaboration Error: ${error instanceof Error ? error.message : error}`
-      );
-      setIsSessionActive(false);
+    onConnectionStatusChange: useCallback((_connected: boolean) => {}, []),
+    onError: useCallback(
+      (error: Error | string) => {
+        console.error("[App onError] Collaboration Hook Error:", error);
+        alert(
+          `Collaboration Error: ${
+            error instanceof Error ? error.message : error
+          }`
+        );
+        setIsSessionActive(false);
+      },
+      [setIsSessionActive]
+    ),
+    onChatMessageReceived: useCallback((message: ChatMessageType) => {
+      setChatMessages((prevMessages) => [...prevMessages, message]);
     }, []),
   });
 
@@ -317,7 +359,6 @@ const App = () => {
   const handleEditorDidMount = (
     editorInstance: editor.IStandaloneCodeEditor
   ) => {
-    // console.log("Monaco Editor Instance Mounted:", editorInstance);
     editorInstanceRef.current = editorInstance;
   };
 
@@ -365,9 +406,7 @@ const App = () => {
       const executionOutput = response.data.run.stderr
         ? `${response.data.run.stdout}\\nError: ${response.data.run.stderr}`
         : response.data.run.stdout;
-      // Write directly to terminal
       if (executionOutput !== "") {
-        // console.log(executionOutput);
         terminalRef.current?.writeToTerminal(executionOutput);
       }
     } catch (error) {
@@ -385,12 +424,7 @@ const App = () => {
 
   const handleCodeChange = (newCode: string) => {
     if (!isSessionActive && activeFileId) {
-      // console.log("[handleCodeChange] Updating local state (not in session)");
       setFileContent(activeFileId, newCode);
-    } else if (isSessionActive && activeFileId) {
-      // console.log(
-      // "[handleCodeChange] Change detected in session, OT hook will handle state update."
-      // );
     }
   };
 
@@ -406,7 +440,7 @@ const App = () => {
 
   // Share Menu Handlers
   const toggleShareMenu = () => {
-    setIsShareMenuOpen((prev: boolean) => {
+    setIsShareMenuOpen((prev) => {
       const nextOpen = !prev;
       if (nextOpen) {
         if (isSessionActive && generatedShareLink) setShareMenuView("link");
@@ -429,121 +463,75 @@ const App = () => {
     setIsColorPickerOpen((prev) => !prev);
   };
 
-  const handleStartSession = async () => {
-    if (!userName.trim()) return;
+  // Utility to get the find controller
+  const getFindController = useCallback(() => {
+    return editorInstanceRef.current?.getContribution(
+      "editor.contrib.findController"
+    ) as any;
+  }, []);
 
-    setIsColorPickerOpen(false);
-
-    try {
-      // Create the session
-      // console.log(
-      //   `[handleStartSession] Creating session for user: ${userName.trim()}`
-      // );
-      const createResponse = await axios.post<{ sessionId: string }>(
-        `${import.meta.env.VITE_BACKEND_URL}/api/sessions/create`,
-        {
-          creatorName: userName.trim(),
-        }
-      );
-
-      const newSessionId = createResponse.data.sessionId;
-      // console.log(
-      //   "[handleStartSession] Session created successfully:",
-      //   newSessionId
-      // );
-
-      const currentFileContents = useFileStore.getState().fileContents;
-
-      const keyFiles = ["index.html", "style.css", "script.js"];
-      const initialContentPromises = keyFiles.map((fileId) => {
-        const currentContent = currentFileContents[fileId];
-        if (currentContent !== undefined) {
-          // Only send if content exists locally
-          // console.log(
-          //   `[handleStartSession] Sending initial content for ${fileId} to session ${newSessionId}`
-          // );
-          return axios
-            .post(
-              `${
-                import.meta.env.VITE_BACKEND_URL
-              }/api/sessions/${newSessionId}/set-document`,
-              {
-                documentId: fileId,
-                content: currentContent,
-              }
-            )
-            .catch((err) => {
-              console.error(
-                `[handleStartSession] Failed to set initial content for ${fileId}:`,
-                err
-              );
-              return null;
-            });
-        } else {
-          // console.warn(
-          // `[handleStartSession] No local content found for key file ${fileId}, skipping initial set.`
-          // );
-          return Promise.resolve(null);
-        }
-      });
-
-      await Promise.all(initialContentPromises);
-      // console.log(
-      // "[handleStartSession] Finished attempting to set initial document content."
-      // );
-
-      const shareLink = `${window.location.origin}${window.location.pathname}?session=${newSessionId}`;
-      // console.log("[handleStartSession] Share link:", shareLink);
-
-      setSessionId(newSessionId);
-      setGeneratedShareLink(shareLink);
-      setShareMenuView("link");
-
-      // IMPORTANT: Activate session state AFTER setting session ID
-      setIsSessionActive(true);
-    } catch (error) {
-      console.error(
-        "[handleStartSession] Error creating session or setting initial content:",
-        error
-      );
-      alert("Failed to create session. Please try again.");
-      setIsSessionActive(false);
+  // Function to update match info from editor state
+  const updateMatchInfoFromController = useCallback(() => {
+    const controller = getFindController();
+    if (controller) {
+      const state = controller.getState();
+      const newMatchInfo = {
+        currentIndex: state.matchesCount > 0 ? state.currentIndex + 1 : null,
+        totalMatches: state.matchesCount || 0,
+      };
+      setMatchInfo(newMatchInfo); // setMatchInfo is stable
     }
+  }, [getFindController]);
+
+  // HANDLERS for Search Panel
+  const handleSearchChange = (term: string) => {
+    setSearchTerm(term);
   };
 
-  const handleCopyShareLink = () => {
-    if (generatedShareLink) {
-      navigator.clipboard
-        .writeText(generatedShareLink)
-        .then(() => {
-          // console.log("Link copied to clipboard!");
-        })
-        .catch((err) => {
-          console.error("Failed to copy link: ", err);
-        });
-    }
+  const handleReplaceChange = (value: string) => {
+    setReplaceValue(value);
   };
 
-  const handleConfirmJoin = () => {
-    if (!userName.trim()) {
-      alert("Please enter a display name to join.");
-      return;
-    }
-    // console.log(`User ${userName} confirmed join for session ${sessionId}`);
-    setJoinState("joined"); // Mark as joined
-    setActiveIcon("files");
+  const handleToggleSearchOption = (optionKey: keyof SearchOptions) => {
+    setSearchOptions((prev) => ({ ...prev, [optionKey]: !prev[optionKey] }));
+  };
 
-    // First set the session as active
-    setIsSessionActive(true);
+  const handleReplaceAll = () => {
+    const editor = editorInstanceRef.current;
+    const model = editor?.getModel();
 
-    // If there's an active file, force refresh its collaboration connection
-    // by temporarily switching to null and back
-    if (activeFileId) {
-      const currentActiveId = activeFileId;
-      setTimeout(() => {
-        // Switch to a different file and back to trigger a fresh connection
-        switchTab(currentActiveId);
-      }, 100);
+    if (editor && model && activeFileId && searchTerm) {
+      const currentSearchOptions = searchOptions;
+
+      const matches = model.findMatches(
+        searchTerm,
+        true,
+        currentSearchOptions.isRegex,
+        currentSearchOptions.matchCase,
+        currentSearchOptions.wholeWord ? searchTerm : null,
+        false
+      );
+
+      if (matches.length > 0) {
+        const operations = matches.map((match) => ({
+          range: match.range,
+          text: replaceValue,
+          forceMoveMarkers: true,
+        }));
+
+        editor.executeEdits("sidebar-replace-all", operations);
+
+        setSearchTerm("");
+        setMatchInfo(null);
+      } else {
+        console.log(
+          "[Search Debug] handleReplaceAll: No matches found to replace."
+        );
+        setSearchTerm("");
+        setMatchInfo(null);
+      }
+    } else {
+      console.warn("[Search Debug] handleReplaceAll conditions not met.");
     }
   };
 
@@ -578,13 +566,103 @@ const App = () => {
     const allUsers = Object.values(remoteUsers).flat();
     const uniqueUsersMap = new Map<string, RemoteUser>();
     allUsers.forEach((user) => {
-      // Filter out self if present in the state (hook should ideally filter)
       if (user.id !== userId) {
         uniqueUsersMap.set(user.id, user);
       }
     });
     return Array.from(uniqueUsersMap.values());
   }, [remoteUsers, userId]);
+
+  // Handle sending chat messages
+  const handleSendChatMessage = useCallback(
+    (message: string) => {
+      if (sendChatMessage && message.trim()) {
+        sendChatMessage(message);
+      }
+    },
+    [sendChatMessage]
+  );
+
+  // Reset chat messages when session changes
+  useEffect(() => {
+    if (!isSessionActive) {
+      setChatMessages([]);
+    }
+  }, [isSessionActive]);
+
+  // Debug logger
+  useEffect(() => {
+    console.log(
+      `[DEBUG] State changed - isSessionActive: ${isSessionActive}, joinState: ${joinState}`
+    );
+  }, [isSessionActive, joinState]);
+
+  // Effect to handle editor search AND find widget visibility control
+  useEffect(() => {
+    const controller = getFindController();
+    if (!controller) {
+      setMatchInfo(null);
+      setIsWidgetForcedHidden(false);
+      return;
+    }
+
+    if (activeIcon === "search") {
+      setIsWidgetForcedHidden(true);
+
+      if (searchTerm) {
+        controller.setSearchString(searchTerm);
+        controller.start({
+          searchString: searchTerm,
+          replaceString: replaceValue,
+          isRegex: searchOptions.isRegex,
+          matchCase: searchOptions.matchCase,
+          wholeWord: searchOptions.wholeWord,
+          autoFindInSelection: "never",
+          seedSearchStringFromSelection: "never",
+        });
+        updateMatchInfoFromController();
+      } else {
+        if (controller.getState().searchString !== "") {
+          controller.setSearchString("");
+        }
+        if (editorInstanceRef.current) {
+          findResultsDecorationIds.current =
+            editorInstanceRef.current.deltaDecorations(
+              findResultsDecorationIds.current,
+              []
+            );
+        }
+        setMatchInfo(null);
+      }
+    } else {
+      controller.closeFindWidget();
+      setTimeout(() => {
+        setIsWidgetForcedHidden(false);
+      }, 100); // Delay to allow widget to close before unhiding
+    }
+  }, [
+    searchTerm,
+    searchOptions,
+    replaceValue,
+    activeIcon,
+    getFindController,
+    updateMatchInfoFromController,
+    setIsWidgetForcedHidden,
+  ]);
+
+  // Effect to control explorer panel visibility based on activeIcon
+  useEffect(() => {
+    // Open panel if an icon is active and panel is closed
+    if (activeIcon && isExplorerCollapsed) {
+      toggleExplorerPanel();
+    }
+    // Close panel if no icon is active and panel is open
+    else if (!activeIcon && !isExplorerCollapsed) {
+      toggleExplorerPanel();
+    }
+    // Note: toggleExplorerPanel is stable from useResizablePanel if its dependencies are stable.
+    // We only want this effect to run when activeIcon or isExplorerCollapsed changes.
+  }, [activeIcon, isExplorerCollapsed, toggleExplorerPanel]);
 
   // EFFECTS
   useEffect(() => {
@@ -596,68 +674,17 @@ const App = () => {
     };
   }, [handleGlobalPointerUp]);
 
-  // Effect to handle joining via URL parameter
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const sessionIdFromUrl = url.searchParams.get("session");
-
-    if (sessionIdFromUrl && !isSessionActive && joinState === "idle") {
-      // console.log(
-      // `[Join Effect] Conditions met. sessionId: ${sessionIdFromUrl}, isSessionActive: ${isSessionActive}, joinState: ${joinState}, explorerWidth: ${explorerPanelSize}`
-      // );
-      setSessionId(sessionIdFromUrl);
-      setJoinState("prompting");
-
-      // Also generate the share link for the joining user
-      const shareLink = `${window.location.origin}${window.location.pathname}?session=${sessionIdFromUrl}`;
-      setGeneratedShareLink(shareLink);
-
-      let targetWidth = DEFAULT_EXPLORER_WIDTH;
-      if (explorerPanelSize > 0) {
-        targetWidth = Math.max(targetWidth, explorerPanelSize);
-      } else if (explorerPanelSize > MIN_EXPLORER_WIDTH / 2) {
-        targetWidth = Math.max(targetWidth, explorerPanelSize);
-      }
-      targetWidth = Math.max(targetWidth, MIN_JOIN_PANEL_WIDTH);
-
-      setExplorerPanelSize(targetWidth);
-
-      // Clean the URL
-      const updatedUrl = new URL(window.location.href);
-      updatedUrl.searchParams.delete("session");
-      window.history.replaceState({}, "", updatedUrl.toString());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSessionActive, joinState, setExplorerPanelSize]);
-
-  useEffect(() => {
-    let positionListener: IDisposable | null = null;
-    const editor = editorInstanceRef.current;
-
-    if (editor) {
-      const currentPosition = editor.getPosition();
-      if (currentPosition) {
-        setCursorLine(currentPosition.lineNumber);
-        setCursorColumn(currentPosition.column);
-      }
-
-      positionListener = editor.onDidChangeCursorPosition((e) => {
-        setCursorLine(e.position.lineNumber);
-        setCursorColumn(e.position.column);
-      });
-    } else {
-      setCursorLine(1);
-      setCursorColumn(1);
-    }
-
-    return () => {
-      positionListener?.dispose();
-    };
-  }, [activeFileId, editorInstanceRef.current]);
-
   // JSX
   return (
     <div className="flex flex-col h-screen bg-gradient-to-b from-stone-800 to-stone-600 text-stone-300 overflow-hidden">
+      {/* CSS rule now conditional based on parent class */}
+      <style>
+        {`
+          .force-hide-find-widget .monaco-editor .find-widget {
+            display: none !important;
+          }
+        `}
+      </style>
       {/* Header */}
       <Header
         isViewMenuOpen={isViewMenuOpen}
@@ -684,7 +711,12 @@ const App = () => {
         setIsColorPickerOpen={setIsColorPickerOpen}
       />
       {/* Main Content */}
-      <div ref={mainContentRef} className="flex flex-1 min-h-0">
+      <div
+        ref={mainContentRef}
+        className={`flex flex-1 min-h-0 ${
+          isWidgetForcedHidden ? "force-hide-find-widget" : ""
+        }`}
+      >
         {/* Sidebar */}
         <Sidebar
           sidebarContainerRef={sidebarContainerRef}
@@ -693,9 +725,12 @@ const App = () => {
           explorerPanelSize={explorerPanelSize}
           handleExplorerPanelMouseDown={handleExplorerPanelMouseDown}
           toggleExplorerPanel={toggleExplorerPanel}
+          openPanelWithIcon={openPanelWithIcon}
           activeIcon={activeIcon}
           setActiveIcon={setActiveIcon}
+          handleShareIconClick={handleShareIconClick}
           joinState={joinState}
+          sessionId={sessionId}
           userName={userName}
           userColor={userColor}
           isColorPickerOpen={isColorPickerOpen}
@@ -707,6 +742,19 @@ const App = () => {
           isSessionActive={isSessionActive}
           handleOpenFile={(fileId) => openFile(fileId, isSessionActive)}
           mockFiles={MOCK_FILES}
+          onSearchChange={handleSearchChange}
+          onReplaceChange={handleReplaceChange}
+          onToggleSearchOption={handleToggleSearchOption}
+          replaceValue={replaceValue}
+          searchOptions={searchOptions}
+          matchInfo={matchInfo}
+          onReplaceAll={handleReplaceAll}
+          uniqueRemoteParticipants={uniqueRemoteParticipants}
+          localUserName={userName}
+          localUserColor={userColor}
+          onSendMessage={handleSendChatMessage}
+          chatMessages={chatMessages}
+          userId={userId}
         />
         {/* Code and Terminal Area + Optional WebView  */}
         <MainEditorArea
@@ -731,7 +779,9 @@ const App = () => {
           cssFileContent={cssFileContent}
           jsFileContent={jsFileContent}
           toggleWebView={toggleWebView}
-          joinState={joinState} //
+          joinState={joinState}
+          tabsHaveOverflow={tabsHaveOverflow}
+          onTabsOverflowChange={setTabsHaveOverflow}
         />
       </div>
       {/* Status Bar */}

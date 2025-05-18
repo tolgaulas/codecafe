@@ -1,39 +1,33 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   VscFiles,
   VscSearch,
   VscAccount,
   VscSettingsGear,
-  VscFile,
-  VscChevronDown,
-  VscChevronRight,
 } from "react-icons/vsc";
 import { GrChatOption, GrShareOption } from "react-icons/gr";
 import JoinSessionPanel from "./JoinSessionPanel";
-import { JoinStateType, EditorLanguageKey } from "../types/editor";
-import { MOCK_FILES } from "../constants/mockFiles";
-import {
-  languageIconMap,
-  languageColorMap,
-  defaultIconColor,
-} from "../constants/mappings";
+import ChatPanel from "./ChatPanel";
+import SearchPanel from "./SearchPanel";
+import SessionParticipantsPanel from "./SessionParticipantsPanel";
+import FileExplorerPanel from "./FileExplorerPanel";
+import { RemoteUser, ChatMessageType } from "../types/props";
+import { JoinStateType, SearchOptions, MatchInfo } from "../types/editor";
 import { ICON_BAR_WIDTH, EXPLORER_HANDLE_WIDTH } from "../constants/layout";
 import { COLORS } from "../constants/colors";
 
 interface SidebarProps {
-  // Refs for resizable panel hook
   sidebarContainerRef: React.RefObject<HTMLDivElement>;
   explorerPanelRef: React.RefObject<HTMLDivElement>;
-
   isExplorerCollapsed: boolean;
   explorerPanelSize: number;
   handleExplorerPanelMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   toggleExplorerPanel: () => void;
-
+  openPanelWithIcon: (iconName: string) => void;
   activeIcon: string | null;
   setActiveIcon: React.Dispatch<React.SetStateAction<string | null>>;
-
   joinState: JoinStateType;
+  sessionId: string | null;
   userName: string;
   userColor: string;
   isColorPickerOpen: boolean;
@@ -41,12 +35,24 @@ interface SidebarProps {
   handleColorSelect: (color: string) => void;
   handleToggleColorPicker: () => void;
   handleConfirmJoin: () => void;
-
-  // File Explorer Props
-  activeFileId: string | null;
-  handleOpenFile: (fileId: string, isSessionActive: boolean) => void;
-  mockFiles: typeof MOCK_FILES;
   isSessionActive: boolean;
+  activeFileId: string | null;
+  handleOpenFile: (fileId: string) => void;
+  mockFiles: { [key: string]: any };
+  onSearchChange: (term: string, options: SearchOptions) => void;
+  onReplaceChange: (value: string) => void;
+  onToggleSearchOption: (optionKey: keyof SearchOptions) => void;
+  replaceValue: string;
+  searchOptions: SearchOptions;
+  matchInfo: MatchInfo | null;
+  onReplaceAll: () => void;
+  handleShareIconClick: () => void;
+  uniqueRemoteParticipants: RemoteUser[];
+  localUserName: string;
+  localUserColor: string;
+  userId: string;
+  chatMessages: ChatMessageType[];
+  onSendMessage: (message: string) => void;
 }
 
 const Sidebar = ({
@@ -55,10 +61,11 @@ const Sidebar = ({
   isExplorerCollapsed,
   explorerPanelSize,
   handleExplorerPanelMouseDown,
-  toggleExplorerPanel,
+  openPanelWithIcon,
   activeIcon,
   setActiveIcon,
   joinState,
+  sessionId,
   userName,
   userColor,
   isColorPickerOpen,
@@ -66,27 +73,40 @@ const Sidebar = ({
   handleColorSelect,
   handleToggleColorPicker,
   handleConfirmJoin,
+  isSessionActive,
   activeFileId,
   handleOpenFile,
   mockFiles,
-  isSessionActive,
+  onSearchChange,
+  onReplaceChange,
+  onToggleSearchOption,
+  replaceValue,
+  searchOptions,
+  matchInfo,
+  onReplaceAll,
+  handleShareIconClick,
+  uniqueRemoteParticipants,
+  localUserName,
+  localUserColor,
+  userId,
+  chatMessages,
+  onSendMessage,
 }: SidebarProps) => {
-  const [isProjectExpanded, setIsProjectExpanded] = useState(true);
-
-  const handleIconClick = (iconName: string | null) => {
-    if (joinState === "prompting") return;
-    if (iconName === "files") {
-      toggleExplorerPanel();
-    } else {
-      if (!isExplorerCollapsed) {
-        toggleExplorerPanel();
-      }
-      setActiveIcon(iconName);
+  const handleGenericIconClick = (iconName: string) => {
+    if (joinState === "prompting" && activeIcon === "share") {
+      openPanelWithIcon(iconName);
+      return;
     }
-  };
 
-  const toggleProjectFolder = () => {
-    setIsProjectExpanded(!isProjectExpanded);
+    if (isExplorerCollapsed) {
+      openPanelWithIcon(iconName);
+    } else {
+      if (iconName === activeIcon) {
+        setActiveIcon(null);
+      } else {
+        openPanelWithIcon(iconName);
+      }
+    }
   };
 
   return (
@@ -107,7 +127,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("files")}
+            onClick={() => handleGenericIconClick("files")}
           >
             <VscFiles size={24} />
           </button>
@@ -117,7 +137,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("search")}
+            onClick={() => handleGenericIconClick("search")}
           >
             <VscSearch size={24} />
           </button>
@@ -127,7 +147,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("share")}
+            onClick={handleShareIconClick}
           >
             <GrShareOption size={26} />
           </button>
@@ -137,7 +157,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("chat")}
+            onClick={() => handleGenericIconClick("chat")}
           >
             <GrChatOption size={24} />
           </button>
@@ -150,7 +170,7 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("account")}
+            onClick={() => handleGenericIconClick("account")}
           >
             <VscAccount size={24} />
           </button>
@@ -160,14 +180,14 @@ const Sidebar = ({
                 ? "text-stone-100"
                 : "text-stone-500 hover:text-stone-200"
             }`}
-            onClick={() => handleIconClick("settings")}
+            onClick={() => handleGenericIconClick("settings")}
           >
             <VscSettingsGear size={24} />
           </button>
         </div>
       </div>
 
-      {/* File Tree / Join Panel Area */}
+      {/* Main Content Panel Area (Explorer, Search, Chat etc.) */}
       <div
         ref={explorerPanelRef}
         className={`bg-stone-800 bg-opacity-60 overflow-hidden flex flex-col h-full border-r border-stone-600 flex-shrink-0 ${
@@ -175,103 +195,117 @@ const Sidebar = ({
         }`}
         style={{ width: `${explorerPanelSize}px` }}
       >
-        {joinState === "prompting" ? (
-          <JoinSessionPanel
-            userName={userName}
-            userColor={userColor}
-            isColorPickerOpen={isColorPickerOpen}
-            colors={COLORS}
-            onNameChange={handleNameChange}
-            onColorSelect={handleColorSelect}
-            onToggleColorPicker={handleToggleColorPicker}
-            onConfirmJoin={() => {
-              handleConfirmJoin();
-              if (isExplorerCollapsed) {
-                toggleExplorerPanel();
-              }
-            }}
+        <>
+          {/* File Explorer Panel */}
+          <div
+            className={`flex-1 flex flex-col overflow-hidden ${
+              (activeIcon === "files" || activeIcon === null) &&
+              joinState !== "prompting"
+                ? ""
+                : "hidden"
+            }`}
+          >
+            <FileExplorerPanel
+              isSessionActive={isSessionActive}
+              handleOpenFile={handleOpenFile}
+              mockFiles={mockFiles}
+              activeFileId={activeFileId}
+            />
+          </div>
+
+          {/* Chat Panel */}
+          <div
+            className={`flex-1 overflow-hidden ${
+              activeIcon === "chat" ? "" : "hidden"
+            }`}
+          >
+            <ChatPanel
+              userName={userName}
+              userColor={userColor}
+              sessionId={sessionId}
+              isSessionActive={isSessionActive}
+              userId={userId}
+              onSendMessage={onSendMessage}
+              messages={chatMessages}
+            />
+          </div>
+
+          {/* Search Panel */}
+          <SearchPanel
+            activeIcon={activeIcon}
+            onExecuteSearch={onSearchChange}
+            onExecuteReplaceAll={onReplaceAll}
+            matchInfo={matchInfo}
+            searchOptions={searchOptions}
+            onToggleSearchOption={onToggleSearchOption}
+            replaceValue={replaceValue}
+            onReplaceChange={onReplaceChange}
           />
-        ) : (
-          <div className="flex-1 overflow-y-auto h-full">
-            <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10">
-              EXPLORER
-            </div>
-            <div className="w-full">
-              {/* Project Folder Header */}
-              <button
-                className="flex items-center text-sm py-1 cursor-pointer w-full hover:bg-stone-700"
-                onClick={toggleProjectFolder}
-              >
-                {/* Container for arrow + indent space */}
-                <div
-                  className="flex items-center justify-center pl-1 mr-1"
-                  style={{ width: "1.5rem" }}
-                >
-                  {" "}
-                  {/* Fixed width container for alignment */}
-                  {isProjectExpanded ? (
-                    <VscChevronDown size={16} className="flex-shrink-0" />
-                  ) : (
-                    <VscChevronRight size={16} className="flex-shrink-0" />
-                  )}
-                </div>
-                <span className="font-medium text-stone-400 truncate">
-                  My CodeCafé Project
-                </span>
-              </button>
 
-              {isProjectExpanded && (
-                <div className="relative">
-                  {/* Vertical Tree Line Element */}
-                  <div className="absolute top-0 bottom-0 left-[12px] w-px bg-stone-600/50 z-0"></div>
-
-                  {/* File List */}
-                  {Object.entries(mockFiles).map(([id, file]) => {
-                    const IconComponent =
-                      languageIconMap[file.language as EditorLanguageKey] ||
-                      VscFile;
-                    const iconColor =
-                      languageColorMap[file.language as EditorLanguageKey] ||
-                      defaultIconColor;
-                    return (
-                      <div
-                        key={id}
-                        className={`relative flex items-center text-sm py-1 cursor-pointer w-full pl-5 z-10 ${
-                          activeFileId === id
-                            ? "bg-stone-600/50 shadow-[inset_0_1px_0_#78716c,inset_0_-1px_0_#78716c] hover:bg-stone-600/50"
-                            : "hover:bg-stone-700/50"
-                        }`}
-                        onClick={() => handleOpenFile(id, isSessionActive)}
-                      >
-                        <IconComponent
-                          size={18}
-                          className={`mr-1 flex-shrink-0 ${iconColor}`}
-                        />
-                        <span
-                          className={`w-full pl-1 truncate ${
-                            activeFileId === id
-                              ? "text-stone-200"
-                              : "text-stone-400"
-                          }`}
-                        >
-                          {file.name}
-                        </span>
-                      </div>
-                    );
-                  })}
+          {/* Share Panel: Shows JoinSessionPanel or SessionParticipantsPanel */}
+          {activeIcon === "share" && (
+            <>
+              {joinState === "prompting" ? (
+                <JoinSessionPanel
+                  userName={userName}
+                  userColor={userColor}
+                  isColorPickerOpen={isColorPickerOpen}
+                  colors={COLORS}
+                  onNameChange={handleNameChange}
+                  onColorSelect={handleColorSelect}
+                  onToggleColorPicker={handleToggleColorPicker}
+                  onConfirmJoin={handleConfirmJoin}
+                />
+              ) : isSessionActive ? (
+                <SessionParticipantsPanel
+                  key={`${sessionId || "no-session"}-${
+                    uniqueRemoteParticipants.length
+                  }`}
+                  activeIcon={activeIcon}
+                  participants={uniqueRemoteParticipants}
+                  localUser={{ name: localUserName, color: localUserColor }}
+                />
+              ) : (
+                <div className="flex flex-col h-full bg-stone-800 bg-opacity-60">
+                  <div className="pl-4 py-2 text-xs text-stone-400 sticky top-0 bg-stone-800 bg-opacity-60 z-10 flex-shrink-0">
+                    PARTICIPANTS
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <div className="text-center py-10 text-stone-500 text-sm">
+                      Join or start a session to view participants.
+                    </div>
+                  </div>
                 </div>
               )}
-            </div>
+            </>
+          )}
+
+          {/* Account Panel Placeholder */}
+          <div
+            className={`p-4 text-stone-400 ${
+              activeIcon === "account" ? "" : "hidden"
+            }`}
+          >
+            Account Panel (Not Implemented)
           </div>
-        )}
+
+          {/* Settings Panel Placeholder */}
+          <div
+            className={`p-4 text-stone-400 ${
+              activeIcon === "settings" ? "" : "hidden"
+            }`}
+          >
+            Settings Panel (Not Implemented)
+          </div>
+        </>
       </div>
 
+      {/* Resizer Handle */}
       {!isExplorerCollapsed && (
         <div
           className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
           style={{
             width: `${EXPLORER_HANDLE_WIDTH}px`,
-            // Position based on hook size and ICON_BAR_WIDTH
             left: `${
               ICON_BAR_WIDTH + explorerPanelSize - EXPLORER_HANDLE_WIDTH / 2
             }px`,

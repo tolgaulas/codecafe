@@ -1,6 +1,5 @@
 import { LANGUAGE_VERSIONS } from "../constants/languageVersions";
 
-// Define types for code execution
 export interface CodeFile {
   content: string;
 }
@@ -17,14 +16,11 @@ export interface CodeExecutionResponse {
     stderr: string;
   };
 }
-
-// Define the Terminal ref interface
 export interface TerminalRef {
   writeToTerminal: (text: string) => void;
   fit: () => void;
 }
 
-// Define type for language keys
 export type ExecutableLanguageKey = keyof typeof LANGUAGE_VERSIONS; // Languages the backend can run
 export type EditorLanguageKey =
   | ExecutableLanguageKey
@@ -32,9 +28,8 @@ export type EditorLanguageKey =
   | "html"
   | "plaintext"
   | "json"
-  | "markdown"; // Languages the editor supports
+  | "markdown";
 
-// Add new state type for join process
 export type JoinStateType = "idle" | "prompting" | "joined";
 
 export interface OpenFile {
@@ -43,9 +38,37 @@ export interface OpenFile {
   language: EditorLanguageKey;
 }
 
-// Interface for methods exposed by TerminalComponent ref
 export interface TerminalHandle {
   writeToTerminal: (output: string) => void;
   clear: () => void;
   fit: () => void;
+}
+
+export interface SearchOptions {
+  matchCase: boolean;
+  wholeWord: boolean;
+  isRegex: boolean;
+  preserveCase: boolean;
+}
+
+export interface MatchInfo {
+  currentIndex: number | null;
+  totalMatches: number;
+}
+
+export interface SearchPanelProps {
+  activeIcon: string | null;
+  onExecuteSearch: (term: string, options: SearchOptions) => void;
+  onExecuteReplaceAll: () => void;
+}
+
+export interface SortableTabProps {
+  file: OpenFile;
+  activeFileId: string | null;
+  draggingId: string | null;
+  dropIndicatorSide: "left" | "right" | null;
+  IconComponent: React.ComponentType<{ size?: number; className?: string }>;
+  iconColor: string;
+  onSwitchTab?: (fileId: string) => void;
+  onCloseTab?: (fileId: string) => void;
 }

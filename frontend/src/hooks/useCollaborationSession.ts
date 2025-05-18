@@ -27,6 +27,16 @@ interface CursorMessage {
   };
 }
 
+// Add chat message interface
+interface ChatMessagePayload {
+  sessionId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  message: string;
+  timestamp?: string;
+}
+
 export const useCollaborationSession = ({
   sessionId,
   userId,
@@ -39,6 +49,7 @@ export const useCollaborationSession = ({
   onRemoteUsersUpdate,
   onConnectionStatusChange,
   onError,
+  onChatMessageReceived,
   webViewFileIds,
 }: UseCollaborationSessionProps): UseCollaborationSessionReturn => {
   const [isConnected, setIsConnected] = useState(false);
@@ -153,6 +164,24 @@ export const useCollaborationSession = ({
         };
         stompClient.send("/app/join", {}, JSON.stringify(joinPayload));
 
+        // Small delay to allow server to process join before fetching state
+        setTimeout(() => {
+          // Request initial state FOR THE CURRENT ACTIVE FILE and WEBVIEW FILES
+          const filesToRequest = new Set<string>([activeFileId]);
+          webViewFileIds?.forEach((id) => filesToRequest.add(id));
+
+          filesToRequest.forEach((fileId) => {
+            if (stompClientRef.current?.connected) {
+              // Check connection again before sending
+              stompClientRef.current.send(
+                "/app/get-document-state",
+                {},
+                JSON.stringify({ documentId: fileId, sessionId: sessionId })
+              );
+            }
+          });
+        }, 250); // 250ms delay, adjust as needed
+
         const clientCallbacks: IClientCallbacks = {
           sendOperation: (revision: number, operation: TextOperation) => {
             if (
@@ -265,6 +294,25 @@ export const useCollaborationSession = ({
           currentFileId,
           ...(webViewFileIds || []),
         ]);
+
+        // Add chat message subscription
+        if (sessionId) {
+          const chatTopic = `/topic/sessions/${sessionId}/chat`;
+          console.log("[Chat] Subscribing to chat topic:", chatTopic);
+          newSubscriptions.push(
+            stompClient.subscribe(chatTopic, (message: any) => {
+              try {
+                const chatMessage = JSON.parse(message.body);
+                console.log("[Chat] Received chat message:", chatMessage);
+                if (chatMessage && onChatMessageReceived) {
+                  onChatMessageReceived(chatMessage);
+                }
+              } catch (error) {
+                console.error("[Chat] Error processing chat message:", error);
+              }
+            })
+          );
+        }
 
         const handleIncomingState = (message: any) => {
           try {
@@ -846,18 +894,6 @@ export const useCollaborationSession = ({
 
         // Store subscriptions
         subscriptionsRef.current = newSubscriptions;
-
-        // Request initial state FOR THE CURRENT ACTIVE FILE and WEBVIEW FILES
-        const filesToRequest = new Set<string>([currentFileId]);
-        webViewFileIds?.forEach((id) => filesToRequest.add(id));
-
-        filesToRequest.forEach((fileId) => {
-          stompClient.send(
-            "/app/get-document-state",
-            {},
-            JSON.stringify({ documentId: fileId, sessionId: sessionId })
-          );
-        });
       }, // End onConnect
       (error: any) => {
         handleError(
@@ -899,6 +935,7 @@ export const useCollaborationSession = ({
     onStateReceived,
     onOperationReceived,
     onRemoteUsersUpdate,
+    onChatMessageReceived,
     handleConnectionStatusChange,
     handleError,
     JSON.stringify(webViewFileIds),
@@ -925,5 +962,39 @@ export const useCollaborationSession = ({
     userInfo.color,
   ]);
 
-  return { isConnected };
+  // Add sendChatMessage function before the return statement
+  const sendChatMessage = useCallback(
+    (message: string) => {
+      if (
+        stompClientRef.current?.connected &&
+        sessionId &&
+        userInfo.name.trim() &&
+        message.trim()
+      ) {
+        const chatPayload: ChatMessagePayload = {
+          sessionId: sessionId,
+          userId: userId,
+          userName: userInfo.name,
+          userColor: userInfo.color,
+          message: message.trim(),
+        };
+
+        console.log("[Chat] Sending chat message:", chatPayload);
+        stompClientRef.current.send(
+          "/app/chat",
+          {},
+          JSON.stringify(chatPayload)
+        );
+        return true;
+      }
+      return false;
+    },
+    [sessionId, userId, userInfo.name, userInfo.color]
+  );
+
+  // Update the return value to include sendChatMessage
+  return {
+    isConnected,
+    sendChatMessage,
+  };
 };

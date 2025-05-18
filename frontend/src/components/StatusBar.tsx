@@ -36,24 +36,36 @@ const StatusBar = ({
   };
 
   return (
-    <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-center px-4 py-1 text-xs border-t border-stone-600 flex-shrink-0">
-      <div className="flex items-center space-x-4">
-        {/* Connection Status Indicator */}
+    <div className="bg-stone-800 bg-opacity-80 text-stone-500 flex justify-between items-stretch h-6 text-xs border-t border-stone-600 flex-shrink-0">
+      {/* Left Group - Remove padding/spacing */}
+      <div className="flex items-stretch">
+        {/* Connection Status Indicator - Apply item styling */}
         {connectionStatus && (
-          <span className="flex items-center">
+          <div className="flex items-center px-3 cursor-default select-none hover:bg-stone-700 hover:text-stone-200">
             {getStatusIndicator(connectionStatus)}
             {connectionStatus.charAt(0).toUpperCase() +
               connectionStatus.slice(1)}
-          </span>
+          </div>
         )}
-        <span>{language}</span>
-        <span>UTF-8</span>
+        {/* Language - Apply item styling */}
+        <div className="flex items-center px-3 cursor-default select-none hover:bg-stone-700 hover:text-stone-200">
+          {language}
+        </div>
+        {/* Encoding - Apply item styling */}
+        <div className="flex items-center px-3 cursor-default select-none hover:bg-stone-700 hover:text-stone-200">
+          UTF-8
+        </div>
       </div>
-      <div className="flex items-center space-x-4">
-        <span>
+      {/* Right Group - Remove padding/spacing */}
+      <div className="flex items-stretch">
+        {/* Line/Col - Apply item styling */}
+        <div className="flex items-center px-3 cursor-default select-none hover:bg-stone-700 hover:text-stone-200">
           Ln {line}, Col {column}
-        </span>
-        <span>Spaces: 2</span> {/* TODO: Make spaces dynamic? */}
+        </div>
+        {/* Spaces - Apply item styling */}
+        <div className="flex items-center px-3 cursor-default select-none hover:bg-stone-700 hover:text-stone-200">
+          Spaces: 2 {/* TODO: Make spaces dynamic? */}
+        </div>
       </div>
     </div>
   );

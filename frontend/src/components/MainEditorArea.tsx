@@ -27,16 +27,16 @@ interface MainEditorAreaProps {
   terminalRef: any;
   editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>;
 
-  // Tab Management
-  handleSwitchTab: (fileId: string) => void;
-  handleCloseTab: (fileIdToClose: string) => void;
-
   // Editor
   fileContents: { [id: string]: string };
   handleCodeChange: (newCode: string) => void;
   handleEditorDidMount: (editorInstance: editor.IStandaloneCodeEditor) => void;
   currentRemoteUsers: RemoteUser[];
   localUserId: string;
+
+  // Tab operations
+  handleSwitchTab: (fileId: string) => void;
+  handleCloseTab: (fileId: string) => void;
 
   // Terminal Resizing
   terminalPanelHeight: number;
@@ -52,19 +52,21 @@ interface MainEditorAreaProps {
   toggleWebView: () => void;
   isSessionActive: boolean;
   joinState: JoinStateType;
+  tabsHaveOverflow: boolean;
+  onTabsOverflowChange: (hasOverflow: boolean) => void;
 }
 
 const MainEditorArea = ({
   editorTerminalAreaRef,
   tabContainerRef,
   terminalRef,
-  handleSwitchTab,
-  handleCloseTab,
   fileContents,
   handleCodeChange,
   handleEditorDidMount,
   currentRemoteUsers,
   localUserId,
+  handleSwitchTab,
+  handleCloseTab,
   terminalPanelHeight,
   isTerminalCollapsed,
   handleTerminalPanelMouseDown,
@@ -76,14 +78,14 @@ const MainEditorArea = ({
   toggleWebView,
   isSessionActive,
   joinState,
+  tabsHaveOverflow,
+  onTabsOverflowChange,
 }: MainEditorAreaProps) => {
-  // Get state from Zustand Store
   const { openFiles, activeFileId } = useFileStore();
 
   // Find the active file object
   const activeFile = openFiles.find((f) => f.id === activeFileId);
 
-  // Determine icon and color for the active file
   let ActiveIconComponent: React.ComponentType<any> = VscFile; // Default icon
   let activeIconColor = defaultIconColor; // Default color
 
@@ -96,7 +98,7 @@ const MainEditorArea = ({
   }
 
   return (
-    <div className="flex flex-1 min-w-0 relative">
+    <div className={`flex flex-1 min-w-0 relative`}>
       <div
         ref={editorTerminalAreaRef}
         className="flex-1 flex flex-col relative overflow-x-hidden min-w-0"
@@ -104,15 +106,15 @@ const MainEditorArea = ({
         {/* Tabs */}
         <FileTabs
           tabContainerRef={tabContainerRef}
-          handleSwitchTab={handleSwitchTab}
-          handleCloseTab={handleCloseTab}
+          onOverflowChange={onTabsOverflowChange}
+          onSwitchTab={handleSwitchTab}
+          onCloseTab={handleCloseTab}
         />
 
-        {/* Breadcrumbs Area - Simplified */}
+        {/* Breadcrumbs Area */}
         <div className="h-6 flex-shrink-0 bg-neutral-900 flex items-center px-2 text-sm text-stone-400 overflow-hidden whitespace-nowrap">
           {activeFile ? (
             <React.Fragment>
-              {/* Removed "Project" span and Chevron */}
               {/* File Icon and Name */}
               <ActiveIconComponent
                 size={16}
@@ -121,13 +123,11 @@ const MainEditorArea = ({
               <span className="text-stone-400">{activeFile.name}</span>
             </React.Fragment>
           ) : (
-            <span>
-              {/* Optionally show something when no file is active */}
-            </span>
+            <span>{/* No file selected */}</span>
           )}
         </div>
 
-        {/* Code Editor Area - Removed pt-4 */}
+        {/* Code Editor Area */}
         <div className="flex-1 overflow-auto font-mono text-sm relative bg-neutral-900 min-h-0">
           {joinState === "prompting" ? (
             <div className="flex items-center justify-center h-full text-stone-500">
@@ -187,12 +187,14 @@ const MainEditorArea = ({
       {/* Invisible WebView Resizer Handle */}
       {webViewPanelWidth > 0 && (
         <div
-          className="absolute top-0 h-full cursor-col-resize bg-transparent z-20"
+          className="absolute cursor-col-resize bg-transparent z-20"
           style={{
             width: `${WEBVIEW_HANDLE_GRAB_WIDTH}px`,
             left: `calc(100% - ${webViewPanelWidth}px - ${
               WEBVIEW_HANDLE_GRAB_WIDTH / 2
             }px)`,
+            top: tabsHaveOverflow ? "0px" : "33px",
+            height: `calc(100% - ${tabsHaveOverflow ? "0px" : "33px"}`,
           }}
           onMouseDown={handleWebViewPanelMouseDown}
         />
@@ -201,7 +203,11 @@ const MainEditorArea = ({
       {/* WebView Panel */}
       {webViewPanelWidth > 0 && (
         <div
-          className="flex-shrink-0 border-l border-stone-600 overflow-hidden"
+          className={`flex-shrink-0 overflow-hidden bg-stone-800 relative 
+                     before:content-[''] before:absolute before:left-0 before:bottom-0 before:w-px before:bg-stone-600
+                     ${
+                       tabsHaveOverflow ? "before:top-0" : "before:top-[33px]"
+                     }`}
           style={{ width: `${webViewPanelWidth}px` }}
         >
           <WebViewPanel

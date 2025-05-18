@@ -91,6 +91,13 @@ const WebViewPanel = ({
               ×
             </a>
           </li>
+          {/* Add button element - No longer wrapped in <li> */}
+          <a
+            href="#"
+            className="add"
+            onClick={(e) => e.preventDefault()}
+            title="Add Tab (Placeholder)"
+          />
         </ul>
         <div className="bar clear">
           <ul>
@@ -132,6 +139,34 @@ const WebViewPanel = ({
             </li>
           </ul>
           <input placeholder="http://example.com/" readOnly type="text" />
+          <a
+            className="menu-button"
+            href="#"
+            title="Menu"
+            onClick={(e) => e.preventDefault()}
+            style={{
+              float: "right",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "26px",
+              height: "26px",
+              borderRadius: "4px",
+              margin: "0 2px",
+            }}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              style={{
+                width: "18px",
+                height: "18px",
+                display: "block",
+                fill: "currentColor",
+              }}
+            >
+              <path d="M1 2h14v2H1z M1 7h14v2H1z M1 12h14v2H1z" />
+            </svg>
+          </a>
         </div>
       </div>
 

@@ -132,6 +132,17 @@ export interface StatusBarProps {
   column?: number;
 }
 
+// Chat Message Type
+export interface ChatMessageType {
+  sessionId: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  message: string;
+  timestamp: string;
+  formattedTimestamp?: string;
+}
+
 // Props for useCollaborationSession hook
 export interface UseCollaborationSessionProps {
   sessionId: string | null;
@@ -150,12 +161,14 @@ export interface UseCollaborationSessionProps {
   onRemoteUsersUpdate: (fileId: string, users: RemoteUser[]) => void;
   onConnectionStatusChange?: (isConnected: boolean) => void;
   onError?: (error: Error | string) => void;
+  onChatMessageReceived?: (message: ChatMessageType) => void;
   webViewFileIds?: string[];
 }
 
 // Return type for useCollaborationSession hook
 export interface UseCollaborationSessionReturn {
   isConnected: boolean;
+  sendChatMessage?: (message: string) => boolean;
 }
 
 // Props for useResizablePanel hook
@@ -184,4 +197,11 @@ export interface UseResizablePanelReturn {
   isCollapsed: boolean;
   handleMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
   togglePanel: () => void;
+}
+
+// Props for SessionParticipantsPanel component
+export interface SessionParticipantsPanelProps {
+  participants: RemoteUser[];
+  localUser: { name: string; color: string };
+  activeIcon: string | null;
 }

@@ -11,33 +11,47 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 
 @Configuration
 public class RedisConfig {
 
-    @Value("${spring.data.redis.host}")
+    @Value("${spring.redis.host}")
     private String redisHost;
 
-    @Value("${spring.data.redis.port}")
+    @Value("${spring.redis.port}")
     private int redisPort;
+
+    @Value("${spring.redis.ssl.enabled:false}") // Inject SSL property, default to false if not set
+    private boolean redisSslEnabled;
+
+    // @Value("${spring.redis.password}")
+    // private String redisPassword;
 
     @Bean
     public LettuceConnectionFactory lettuceConnectionFactory() {
         RedisStandaloneConfiguration redisStandaloneConfiguration = new RedisStandaloneConfiguration();
         redisStandaloneConfiguration.setHostName(redisHost);
         redisStandaloneConfiguration.setPort(redisPort);
-        // No password set for AWS ElastiCache Serverless
+        // Configure password if/when AUTH is enabled
+        // if (redisPassword != null && !redisPassword.isEmpty()) {
+        //    redisStandaloneConfiguration.setPassword(redisPassword);
+        // }
 
-        // Configure Lettuce Client with SSL
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-                .useSsl() // Enable SSL
-                .build();
+        LettuceClientConfiguration clientConfig;
+        if (redisSslEnabled) {
+            // Configure Lettuce Client with SSL
+            clientConfig = LettuceClientConfiguration.builder()
+                    .useSsl()
+                    .build();
+        } else {
+            // Configure Lettuce Client without SSL for local development
+            clientConfig = LettuceClientConfiguration.defaultConfiguration();
+        }
 
         LettuceConnectionFactory lettuceConnectionFactory = new LettuceConnectionFactory(redisStandaloneConfiguration, clientConfig);
-        lettuceConnectionFactory.afterPropertiesSet(); // Ensure initialization
+        lettuceConnectionFactory.afterPropertiesSet(); 
         return lettuceConnectionFactory;
     }
 
@@ -46,17 +60,17 @@ public class RedisConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Serializer for regular keys
+
         template.setKeySerializer(new StringRedisSerializer());
-        // Serializer for regular values
+
         template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
 
-        // Serializer for hash keys (usually Strings)
+
         template.setHashKeySerializer(new StringRedisSerializer());
-        // Serializer for hash values (needs to be JSON for UserInfoDTO)
+
         template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
 
-        template.afterPropertiesSet(); // Ensure properties are set
+        template.afterPropertiesSet(); 
         return template;
     }
 

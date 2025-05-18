@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -31,15 +31,17 @@ interface FileTabsProps {
   // Refs
   tabContainerRef: React.RefObject<HTMLDivElement>;
 
-  handleSwitchTab: (fileId: string) => void; // Still passed from App via MainEditorArea, TODO: inlude this in the store
-  handleCloseTab: (fileIdToClose: string) => void;
+  onOverflowChange: (hasOverflow: boolean) => void;
+  onSwitchTab: (fileId: string) => void;
+  onCloseTab: (fileId: string) => void;
 }
 
-const FileTabs: React.FC<FileTabsProps> = ({
+const FileTabs = ({
   tabContainerRef,
-  handleSwitchTab,
-  handleCloseTab,
-}) => {
+  onOverflowChange,
+  onSwitchTab,
+  onCloseTab,
+}: FileTabsProps) => {
   // State & Setters from Store
   const {
     openFiles,
@@ -52,6 +54,31 @@ const FileTabs: React.FC<FileTabsProps> = ({
     setDropIndicator,
   } = useFileStore();
 
+  // Effect to detect and report tab overflow
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (tabContainerRef.current) {
+        const { scrollWidth, clientWidth } = tabContainerRef.current;
+        const hasOverflow = scrollWidth > clientWidth;
+        onOverflowChange(hasOverflow);
+      }
+    };
+
+    checkOverflow(); // Initial check
+
+    const resizeObserver = new ResizeObserver(checkOverflow);
+    if (tabContainerRef.current) {
+      resizeObserver.observe(tabContainerRef.current);
+    }
+
+    return () => {
+      if (tabContainerRef.current) {
+        resizeObserver.unobserve(tabContainerRef.current);
+      }
+      resizeObserver.disconnect();
+    };
+  }, [openFiles, onOverflowChange, tabContainerRef]);
+
   // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -62,7 +89,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
 
   // Drag Handlers
   const handleDragStart = (event: DragStartEvent) => {
-    // console.log("Drag Start:", event);
     setDraggingId(event.active.id as string);
     setDropIndicator({ tabId: null, side: null });
   };
@@ -152,7 +178,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
         } else if (finalDropIndicator.side === "right") {
           newIndex = indicatorTargetIndex + 1;
         }
-        console.log(`Calculated newIndex=${newIndex} based on drop indicator`);
       }
     }
 
@@ -160,12 +185,10 @@ const FileTabs: React.FC<FileTabsProps> = ({
       const overIndex = openFiles.findIndex((file) => file.id === over.id);
       if (overIndex !== -1) {
         newIndex = overIndex;
-        console.log(`Calculated newIndex=${newIndex} based on 'over' element`);
       }
     }
 
     if (newIndex === -1) {
-      console.log("DragEnd: No valid newIndex determined.");
       return;
     }
 
@@ -176,13 +199,9 @@ const FileTabs: React.FC<FileTabsProps> = ({
         oldIndex === openFiles.length - 1 &&
         clampedNewIndex === openFiles.length
       ) {
-        console.log(`DragEnd: No move needed (last item to end slot)`);
         return;
       }
 
-      console.log(
-        `Requesting move: ID ${activeId} from ${oldIndex} to ${clampedNewIndex}`
-      );
       setOpenFiles((currentOpenFiles) => {
         const currentOldIndex = currentOpenFiles.findIndex(
           (f) => f.id === activeId
@@ -201,9 +220,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
         )
           return currentOpenFiles;
 
-        console.log(
-          `   Executing arrayMove: from ${currentOldIndex} to ${currentClampedNewIndex}`
-        );
         const movedFiles = arrayMove(
           currentOpenFiles,
           currentOldIndex,
@@ -212,10 +228,6 @@ const FileTabs: React.FC<FileTabsProps> = ({
         setActiveFileId(activeId);
         return movedFiles;
       });
-    } else {
-      console.log(
-        `DragEnd: No move needed (oldIndex: ${oldIndex}, clampedNewIndex: ${clampedNewIndex})`
-      );
     }
   };
 
@@ -249,9 +261,9 @@ const FileTabs: React.FC<FileTabsProps> = ({
                 draggingId={draggingId}
                 IconComponent={IconComponent}
                 iconColor={iconColor}
-                onSwitchTab={handleSwitchTab}
-                onCloseTab={handleCloseTab}
                 dropIndicatorSide={indicatorSide}
+                onSwitchTab={onSwitchTab}
+                onCloseTab={onCloseTab}
               />
             );
           })}
