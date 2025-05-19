@@ -72,6 +72,7 @@ jobs:
             
             echo "Running new Docker container..."
             docker run -d --name codecafe-backend \
+              -p 127.0.0.1:8080:8080 \
               -e SPRING_REDIS_HOST=$SPRING_REDIS_HOST \
               -e SPRING_REDIS_PORT=$SPRING_REDIS_PORT \
               -e SPRING_REDIS_SSL_ENABLED=$SPRING_REDIS_SSL_ENABLED \
