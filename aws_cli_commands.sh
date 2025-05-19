@@ -1,2 +1,0 @@
-aws ec2 authorize-security-group-ingress --group-id sg-0b3ae861f94b00a51 --protocol tcp --port 80 --cidr 0.0.0.0/0
-aws ec2 revoke-security-group-ingress --group-id sg-0b3ae861f94b00a51 --protocol tcp --port 8080 --cidr 0.0.0.0/0 
