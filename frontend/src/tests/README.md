@@ -4,47 +4,59 @@ This directory contains tests for the TextOperationSystem module, which handles 
 
 ## Test Files
 
-1. **TextOperationTransformation.test.ts**
+1. **TextOperationSystem.test.ts**
 
-   - Tests the basic structure and functionality of the VersionVector and TextOperation classes
-   - Verifies correct transformation behavior for simple cases
+   - Comprehensively tests all aspects of the operational transformation system
+   - Includes tests for TextOperation, OTSelection, MonacoAdapter, and Client classes
+   - Verifies correct behavior for basic operations, compose, transform, selection handling, and client state management
 
-2. **TransformCursorPositionTests.test.ts**
+## Running Tests
 
-   - Focuses specifically on cursor position transformations
-   - Tests how the cursor position is adjusted based on different types of operations
-
-3. **CursorPositionHandling.test.ts** and **RapidTypingScenarios.test.ts**
-   - Additional tests that require proper mock setup for Monaco Editor
-   - Currently disabled due to Monaco mocking complexity
-
-## Common Issues and Solutions
-
-### Cursor Position Calculation
-
-The most significant issue fixed in the test development was ensuring consistent cursor position calculations:
-
-1. When a user inserts text at exactly the same position as another user's cursor, the behavior depends on the lexicographical comparison of user IDs.
-2. To ensure cross-platform consistency, all `localeCompare` calls in the code now use the "en" locale explicitly.
-3. This guarantees that cursor position calculations behave identically on all platforms and match the backend implementation.
-
-### Running Tests
-
-Run all working tests:
+Run the OT system tests:
 
 ```bash
-npm test -- src/tests/__tests__/TextOperationTransformation.test.ts src/tests/__tests__/TransformCursorPositionTests.test.ts
+npm test -- src/tests/__tests__/TextOperationSystem.test.ts
 ```
 
-Run a specific test file:
+Run all tests:
 
 ```bash
-npm test -- src/tests/__tests__/TransformCursorPositionTests.test.ts
+npm test
 ```
+
+## Key Testing Areas
+
+The test suite covers these key aspects of the OT system:
+
+1. **Basic Operations**
+
+   - Create, retain, insert, delete operations
+   - Combining consecutive operations
+   - Applying operations to text
+
+2. **Transformation Properties**
+
+   - Compose: Merging consecutive operations
+   - Transform: Ensuring concurrent operations can be correctly applied
+   - Invert: Creating inverse operations
+
+3. **Selection Handling**
+
+   - Cursor position tracking
+   - Selection range transformations
+
+4. **Client State Management**
+
+   - Synchronized, AwaitingConfirm, and AwaitingWithBuffer states
+   - Handling of server operations and acknowledgments
+
+5. **Monaco Integration**
+   - Converting Monaco editor changes to operations
+   - Applying operations back to the editor
 
 ## Manual Testing Scenarios
 
-For manual testing of cursor positioning, try these scenarios:
+For manual testing of collaborative editing, try these scenarios:
 
 1. **User A and User B editing at the same position**
 
