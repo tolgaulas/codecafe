@@ -3,28 +3,12 @@ import {
   Client,
   OTSelection,
   MonacoAdapter,
-  positionToOffset,
-  offsetToPosition,
   IClientCallbacks,
 } from "../../ot/TextOperationSystem";
-import {
-  Selection,
-  MockEditor,
-  MockTextModel,
-} from "../mocks/monaco-editor.mock";
+import { MockEditor } from "../mocks/monaco-editor.mock";
 import "@testing-library/jest-dom";
 import { describe, test, expect, jest, beforeEach } from "@jest/globals";
-
-// Helper for comparing TextOperation objects
-const expectOpsEqual = (
-  actual: TextOperation,
-  expected: TextOperation,
-  message: string
-) => {
-  expect(actual.ops).toEqual(expected.ops);
-  expect(actual.baseLength).toEqual(expected.baseLength);
-  expect(actual.targetLength).toEqual(expected.targetLength);
-};
+import { editor } from "monaco-editor";
 
 describe("TextOperation", () => {
   describe("Basic Operations", () => {
@@ -310,32 +294,35 @@ class EnhancedMockEditor extends MockEditor {
 }
 
 describe("MonacoAdapter", () => {
-  let editor: EnhancedMockEditor;
+  let editorInstance: EnhancedMockEditor;
   let adapter: MonacoAdapter;
 
   beforeEach(() => {
-    editor = new EnhancedMockEditor("hello world");
-    adapter = new MonacoAdapter(editor as any);
+    editorInstance = new EnhancedMockEditor("hello world");
+    adapter = new MonacoAdapter(
+      editorInstance as unknown as editor.IStandaloneCodeEditor
+    );
   });
 
   test("should register callbacks", () => {
+    const mockChangeCallback = jest.fn();
     const callbacks = {
-      change: jest.fn(),
+      change: mockChangeCallback,
       selectionChange: jest.fn(),
       blur: jest.fn(),
       focus: jest.fn(),
     };
 
     adapter.registerCallbacks(callbacks);
-    expect(adapter["callbacks"]).toEqual(callbacks);
+    expect((adapter as any).callbacks).toEqual(callbacks);
   });
 
   test("should trigger callbacks", () => {
-    const callback = jest.fn();
-    adapter.registerCallbacks({ test: callback });
+    const mockTestCallback = jest.fn();
+    adapter.registerCallbacks({ test: mockTestCallback });
 
     adapter.trigger("test", "arg1", "arg2");
-    expect(callback).toHaveBeenCalledWith("arg1", "arg2");
+    expect(mockTestCallback).toHaveBeenCalledWith("arg1", "arg2");
   });
 
   test("should convert Monaco changes to operations", () => {

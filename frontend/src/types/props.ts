@@ -43,9 +43,7 @@ export interface UserInfo {
   selection: OTSelection | null;
 }
 
-// Define the structure for remote user data extending UserInfo
-// Includes Monaco-specific selection object expected by the CodeEditor
-export interface RemoteUser extends UserInfo {}
+export type RemoteUser = UserInfo;
 
 // Define the props for the CodeEditor component
 export interface CodeEditorProps {

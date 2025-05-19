@@ -519,7 +519,7 @@ export class MonacoAdapter {
   public ignoreNextChange: boolean = false;
   private changeInProgress: boolean = false;
   private selectionChanged: boolean = false;
-  private callbacks: { [key: string]: Function } = {};
+  private callbacks: { [key: string]: (...args: any[]) => void } = {};
   private lastValue: string = ""; // Restore lastValue
   private contentChangeListener: IDisposable | null = null;
   private cursorChangeListener: IDisposable | null = null;
@@ -701,14 +701,13 @@ export class MonacoAdapter {
     // ignoreNextChange is reset in the change handler
   }
 
-  registerCallbacks(cb: { [key: string]: Function }): void {
-    this.callbacks = cb;
+  registerCallbacks(cb: { [key: string]: (...args: any[]) => void }): void {
+    this.callbacks = { ...this.callbacks, ...cb };
   }
 
   trigger(event: string, ...args: any[]): void {
-    const action = this.callbacks && this.callbacks[event];
-    if (action) {
-      action.apply(null, args);
+    if (this.callbacks[event]) {
+      this.callbacks[event](...args);
     }
   }
 
@@ -909,44 +908,33 @@ export class OTSelection {
 
     private transformIndex(index: number, operation: TextOperation): number {
       let newIndex = index;
-      let currentOffset = 0;
-      for (const op of operation.ops) {
+      for (let i = 0; i < operation.ops.length; i++) {
+        const op = operation.ops[i];
         if (TextOperation.isRetain(op)) {
-          if (index <= currentOffset + op) {
-            return newIndex;
-          }
-          currentOffset += op;
+          // No change
         } else if (TextOperation.isInsert(op)) {
-          if (currentOffset <= index) {
-            newIndex += op.length;
+          const insertText = op as string;
+          if (index > 0) {
+            newIndex += insertText.length;
           }
-        } else if (TextOperation.isDelete(op)) {
-          const deleteCount = -op;
-          if (index <= currentOffset) {
-            /* Before delete */
-          } else if (index <= currentOffset + deleteCount) {
-            return currentOffset; /* Within delete */
-          } else {
-            newIndex -= deleteCount; /* After delete */
-          }
-          currentOffset += deleteCount;
         } else {
-          throw new Error("Invalid op type during selection index transform");
+          const deleteLength = -(op as number);
+          if (index > deleteLength) {
+            newIndex -= deleteLength;
+          } else {
+            newIndex = 0;
+          }
         }
       }
       return newIndex;
     }
 
     transform(operation: TextOperation): SelectionRange {
-      // Renamed Range to SelectionRange
       const newAnchor = this.transformIndex(this.anchor, operation);
-      const newHead =
-        this.anchor === this.head
-          ? newAnchor
-          : this.transformIndex(this.head, operation);
-      return new SelectionRange(newAnchor, newHead); // Renamed Range to SelectionRange
+      const newHead = this.transformIndex(this.head, operation);
+      return new SelectionRange(newAnchor, newHead);
     }
-  }; // End of static SelectionRange class definition
+  };
 
   ranges: InstanceType<typeof OTSelection.SelectionRange>[];
 
@@ -1025,16 +1013,16 @@ interface IClientState {
 }
 
 class Synchronized implements IClientState {
-  applyClient(_client: Client, operation: TextOperation): IClientState {
-    _client.callbacks.sendOperation(_client.revision, operation);
+  applyClient(client: Client, operation: TextOperation): IClientState {
+    client.callbacks.sendOperation(client.revision, operation);
     return new AwaitingConfirm(operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
     client.callbacks.applyOperation(operation);
-    return this;
+    return synchronized_;
   }
   serverAck(_client: Client): IClientState {
-    return this;
+    return synchronized_;
   }
   transformSelection(selection: OTSelection): OTSelection {
     return selection;
@@ -1049,27 +1037,28 @@ class AwaitingConfirm implements IClientState {
   }
 
   applyClient(_client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] AwaitingConfirm -> Buffering Op`);
-    return new AwaitingWithBuffer(this.outstanding, operation);
-  }
-  applyServer(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] AwaitingConfirm -> Applying Server Op & Transforming Outstanding`);
-    const [newOutstanding, transformedOperation] = TextOperation.transform(
+    const [_, transformedOperation] = TextOperation.transform(
       this.outstanding,
       operation
     );
-    client.callbacks.applyOperation(transformedOperation);
+    return new AwaitingWithBuffer(this.outstanding, transformedOperation);
+  }
+  applyServer(client: Client, operation: TextOperation): IClientState {
+    const [newOutstanding, transformedServerOp] = TextOperation.transform(
+      this.outstanding,
+      operation
+    );
+    client.callbacks.applyOperation(transformedServerOp);
     return new AwaitingConfirm(newOutstanding);
   }
-  serverAck(_client: Client): IClientState {
-    // console.log(`[${client.userId}] AwaitingConfirm -> ACK received -> Synchronized`);
+  serverAck(client: Client): IClientState {
+    client.revision++;
     return synchronized_;
   }
   transformSelection(selection: OTSelection): OTSelection {
     return selection.transform(this.outstanding);
   }
   resend(client: Client): void {
-    // console.log(`[${client.userId}] AwaitingConfirm -> Resending Outstanding Op (rev ${client.revision})`);
     client.callbacks.sendOperation(client.revision, this.outstanding);
   }
 }
@@ -1083,64 +1072,19 @@ class AwaitingWithBuffer implements IClientState {
   }
 
   applyClient(_client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] AwaitingWithBuffer -> Composing Buffer`);
-    // console.log("[AWB ApplyClient] Before Compose:", {
-    // buffer_ops: this.buffer.toJSON(),
-    // buffer_base: this.buffer.baseLength,
-    // buffer_target: this.buffer.targetLength,
-    // operation_ops: operation.toJSON(),
-    // operation_base: operation.baseLength,
-    // operation_target: operation.targetLength,
-    // });
-    try {
-      const newBuffer = this.buffer.compose(operation);
-      return new AwaitingWithBuffer(this.outstanding, newBuffer);
-    } catch (e) {
-      console.error("[AWB ApplyClient] Compose Error:", e, {
-        buffer: this.buffer,
-        operation: operation,
-      });
-      throw e; // Rethrow
-    }
+    const newBuffer = this.buffer.compose(operation);
+    return new AwaitingWithBuffer(this.outstanding, newBuffer);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[AWB ApplyServer] State Before Transform:`, {
-    // outstanding_ops: this.outstanding.toJSON(),
-    // outstanding_base: this.outstanding.baseLength,
-    // outstanding_target: this.outstanding.targetLength,
-    // buffer_ops: this.buffer.toJSON(),
-    // buffer_base: this.buffer.baseLength,
-    // buffer_target: this.buffer.targetLength,
-    // server_op_ops: operation.toJSON(),
-    // server_op_base: operation.baseLength,
-    // server_op_target: operation.targetLength,
-    // // Log full objects for deeper inspection
-    // outstanding_obj: this.outstanding,
-    // buffer_obj: this.buffer,
-    // server_op_obj: operation,
-    // client_revision: client.revision,
-    // });
-
-    // console.log(`[${client.userId}] AwaitingWithBuffer -> Applying Server Op & Transforming Outstanding/Buffer`);
-    const [newOutstanding, transformedOperation1] = TextOperation.transform(
+    const [newOutstanding, transformedPrime] = TextOperation.transform(
       this.outstanding,
       operation
     );
-    const [newBuffer, transformedOperation2] = TextOperation.transform(
+    const [newBuffer, transformedServerOp] = TextOperation.transform(
       this.buffer,
-      transformedOperation1
+      transformedPrime
     );
-    // console.log(`[AWB ApplyServer] State After Transforms:`, {
-    // newOutstanding_ops: newOutstanding.toJSON(),
-    // newOutstanding_base: newOutstanding.baseLength,
-    // transformedOp1_ops: transformedOperation1.toJSON(),
-    // transformedOp1_base: transformedOperation1.baseLength,
-    // newBuffer_ops: newBuffer.toJSON(),
-    // newBuffer_base: newBuffer.baseLength,
-    // transformedOp2_ops: transformedOperation2.toJSON(),
-    // transformedOp2_base: transformedOperation2.baseLength,
-    // });
-    client.callbacks.applyOperation(transformedOperation2);
+    client.callbacks.applyOperation(transformedServerOp);
     return new AwaitingWithBuffer(newOutstanding, newBuffer);
   }
   serverAck(client: Client): IClientState {
@@ -1151,7 +1095,6 @@ class AwaitingWithBuffer implements IClientState {
     return selection.transform(this.outstanding).transform(this.buffer);
   }
   resend(client: Client): void {
-    // console.log(`[${client.userId}] AwaitingWithBuffer -> Resending Outstanding Op (rev ${client.revision})`);
     client.callbacks.sendOperation(client.revision, this.outstanding);
   }
 }
@@ -1167,52 +1110,23 @@ export class Client {
     this.userId = userId;
     this.callbacks = callbacks;
     this.state = synchronized_;
-    // console.log(
-    // `[${this.userId}] Client initialized with revision ${revision}`
-    // );
   }
 
   setState(newState: IClientState): void {
-    const oldStateName = this.state.constructor.name;
-    const newStateName = newState.constructor.name;
-
-    // Add specific logging for AWB -> AWB transitions
-    if (
-      oldStateName === "AwaitingWithBuffer" &&
-      newStateName === "AwaitingWithBuffer"
-    ) {
-      // Type assertion needed to access state-specific properties
-      // const oldOutstandingBase = (this.state as AwaitingWithBuffer).outstanding
-      // ?.baseLength;
-      // const newOutstandingBase = (newState as AwaitingWithBuffer).outstanding
-      //   ?.baseLength;
-      // console.log(
-      // `[AWB->AWB setState] Updating outstanding. Base length: ${oldOutstandingBase} -> ${newOutstandingBase}`
-      // );
-    }
-
-    // console.log(
-    // `[${this.userId}] State transition: ${oldStateName} -> ${newStateName}`
-    // );
     this.state = newState;
   }
 
   applyClient(operation: TextOperation): void {
     if (operation.isNoop()) return;
-    // console.log(`[${this.userId}] applyClient called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
     this.setState(this.state.applyClient(this, operation));
   }
 
   applyServer(operation: TextOperation): void {
     if (operation.isNoop()) return;
-    // console.log(`[${this.userId}] applyServer called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
-    this.revision++;
     this.setState(this.state.applyServer(this, operation));
   }
 
   serverAck(): void {
-    // console.log(`[${this.userId}] serverAck called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
-    this.revision++;
     this.setState(this.state.serverAck(this));
     if (
       this.state instanceof Synchronized ||
@@ -1225,9 +1139,6 @@ export class Client {
   }
 
   serverReconnect(): void {
-    // console.log(
-    // `[${this.userId}] serverReconnect called (State: ${this.state.constructor.name}, rev: ${this.revision})`
-    // );
     if (typeof this.state.resend === "function") {
       this.state.resend(this);
     }
@@ -1253,13 +1164,8 @@ export class Client {
       this.state instanceof AwaitingConfirm
     ) {
       if (this.callbacks.sendSelection) {
-        // console.log(`[${this.userId}] Sending selection (State: ${this.state.constructor.name}):`, selection?.toJSON());
         this.callbacks.sendSelection(selection);
-      } else {
-        // console.warn(`[${this.userId}] sendSelection callback not provided.`);
       }
-    } else {
-      // console.log(`[${this.userId}] Selection change suppressed in AwaitingWithBuffer state.`);
     }
   }
 }
