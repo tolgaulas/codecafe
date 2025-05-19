@@ -300,7 +300,7 @@ export class MockEditor {
   private cursorStateListeners: ((
     e: editor.ICursorPositionChangedEvent
   ) => void)[] = [];
-  private listeners: { [key: string]: ((...args: any[]) => void)[] } = {
+  private listeners: { [key: string]: ((...args: unknown[]) => void)[] } = {
     onDidChangeCursorPosition: [],
   };
 
@@ -452,7 +452,7 @@ export class MockEditor {
   }
   addCommand(
     _command: string,
-    _handler: (...args: any[]) => void,
+    _handler: (...args: unknown[]) => void,
     _keybinding?: string
   ): string | null {
     return null;
