@@ -23,17 +23,17 @@ export class TextOperation {
   }
 
   // Helper to check if an op is retain.
-  static isRetain(op: string | number | undefined): op is number {
+  static isRetain(op: any): op is number {
     return typeof op === "number" && op > 0;
   }
 
   // Helper to check if an op is insert.
-  static isInsert(op: string | number | undefined): op is string {
+  static isInsert(op: any): op is string {
     return typeof op === "string";
   }
 
   // Helper to check if an op is delete.
-  static isDelete(op: string | number | undefined): op is number {
+  static isDelete(op: any): op is number {
     return typeof op === "number" && op < 0;
   }
 
@@ -45,7 +45,7 @@ export class TextOperation {
     if (n === 0) return this;
     this.baseLength += n;
     this.targetLength += n;
-    const lastOp = this.ops[this.ops.length - 1];
+    let lastOp = this.ops[this.ops.length - 1];
     if (TextOperation.isRetain(lastOp)) {
       // Combine consecutive retains.
       this.ops[this.ops.length - 1] = lastOp + n;
@@ -62,9 +62,9 @@ export class TextOperation {
     }
     if (str === "") return this;
     this.targetLength += str.length;
-    const ops = this.ops;
-    const lastOp = ops[ops.length - 1];
-    const secondLastOp = ops[ops.length - 2];
+    let ops = this.ops;
+    let lastOp = ops[ops.length - 1];
+    let secondLastOp = ops[ops.length - 2];
 
     if (TextOperation.isInsert(lastOp)) {
       // Combine consecutive inserts.
@@ -99,7 +99,7 @@ export class TextOperation {
       length = -length;
     }
     this.baseLength -= length; // baseLength increases
-    const lastOp = this.ops[this.ops.length - 1];
+    let lastOp = this.ops[this.ops.length - 1];
     if (TextOperation.isDelete(lastOp)) {
       this.ops[this.ops.length - 1] = lastOp + length;
     } else {
@@ -123,9 +123,9 @@ export class TextOperation {
 
   // Creates an operation from a JSON representation.
   static fromJSON(ops: (string | number)[]): TextOperation {
-    const o = new TextOperation();
+    let o = new TextOperation();
     for (let i = 0; i < ops.length; i++) {
-      const op = ops[i];
+      let op = ops[i];
       if (TextOperation.isRetain(op)) {
         o.retain(op as number);
       } else if (TextOperation.isInsert(op)) {
@@ -141,10 +141,10 @@ export class TextOperation {
 
   // Apply the operation to a string, returning a new string.
   apply(str: string): string {
-    const newStr = [];
+    let newStr = [];
     let strIndex = 0;
     for (let i = 0; i < this.ops.length; i++) {
-      const op = this.ops[i];
+      let op = this.ops[i];
       if (TextOperation.isRetain(op)) {
         if (strIndex + op > str.length) {
           throw new Error(
@@ -169,10 +169,10 @@ export class TextOperation {
 
   // Computes the inverse of an operation.
   invert(str: string): TextOperation {
-    const inverse = new TextOperation();
+    let inverse = new TextOperation();
     let strIndex = 0;
     for (let i = 0; i < this.ops.length; i++) {
-      const op = this.ops[i];
+      let op = this.ops[i];
       if (TextOperation.isRetain(op)) {
         inverse.retain(op);
         strIndex += op;
@@ -198,15 +198,16 @@ export class TextOperation {
 
   // Compose merges two consecutive operations into one.
   compose(operation2: TextOperation): TextOperation {
-    if (this.targetLength !== operation2.baseLength) {
+    let operation1 = this;
+    if (operation1.targetLength !== operation2.baseLength) {
       throw new Error(
         "The base length of the second operation has to be the target length of the first operation"
       );
     }
 
-    const operation = new TextOperation(); // the combined operation
-    const ops1 = this.ops;
-    const ops2 = operation2.ops;
+    let operation = new TextOperation(); // the combined operation
+    let ops1 = operation1.ops;
+    let ops2 = operation2.ops;
     let i1 = 0,
       i2 = 0; // current index into ops1/ops2
     let op1 = ops1[i1++];
@@ -241,8 +242,8 @@ export class TextOperation {
       }
 
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
-        const op1Retain = op1 as number;
-        const op2Retain = op2 as number;
+        let op1Retain = op1 as number;
+        let op2Retain = op2 as number;
         if (op1Retain > op2Retain) {
           operation.retain(op2Retain);
           op1 = op1Retain - op2Retain;
@@ -257,12 +258,12 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isInsert(op1) && TextOperation.isDelete(op2)) {
-        const op1Insert = op1 as string;
-        const op2Delete = -(op2 as number);
-        if (op1Insert.length > op2Delete) {
+        let op1Insert = op1 as string;
+        let op2Delete = op2 as number;
+        if (op1Insert.length > -op2Delete) {
           op1 = op1Insert.slice(0, op1Insert.length + op2Delete);
           op2 = ops2[i2++];
-        } else if (op1Insert.length === op2Delete) {
+        } else if (op1Insert.length === -op2Delete) {
           op1 = ops1[i1++];
           op2 = ops2[i2++];
         } else {
@@ -270,8 +271,8 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isInsert(op1) && TextOperation.isRetain(op2)) {
-        const op1Insert = op1 as string;
-        const op2Retain = op2 as number;
+        let op1Insert = op1 as string;
+        let op2Retain = op2 as number;
         if (op1Insert.length > op2Retain) {
           operation.insert(op1Insert.slice(0, op2Retain));
           op1 = op1Insert.slice(op2Retain);
@@ -286,9 +287,9 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isRetain(op1) && TextOperation.isDelete(op2)) {
-        const op1Retain = op1 as number;
-        const op2Delete = -(op2 as number);
-        if (op1Retain > op2Delete) {
+        let op1Retain = op1 as number;
+        let op2Delete = op2 as number;
+        if (op1Retain > -op2Delete) {
           operation.delete(op2Delete);
           op1 = op1Retain + op2Delete;
           op2 = ops2[i2++];
@@ -333,10 +334,10 @@ export class TextOperation {
     // }
     // );
 
-    const operation1prime = new TextOperation();
-    const operation2prime = new TextOperation();
-    const ops1 = operation1.ops;
-    const ops2 = operation2.ops;
+    let operation1prime = new TextOperation();
+    let operation2prime = new TextOperation();
+    let ops1 = operation1.ops;
+    let ops2 = operation2.ops;
     let i1 = 0,
       i2 = 0;
     let op1 = ops1[i1++];
@@ -380,8 +381,8 @@ export class TextOperation {
       let minLength;
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
         // Simple case: retain/retain
-        const op1Retain = op1 as number;
-        const op2Retain = op2 as number;
+        let op1Retain = op1 as number;
+        let op2Retain = op2 as number;
         if (op1Retain > op2Retain) {
           minLength = op2Retain;
           op1 = op1Retain - op2Retain;
@@ -399,8 +400,8 @@ export class TextOperation {
         operation2prime.retain(minLength);
       } else if (TextOperation.isDelete(op1) && TextOperation.isDelete(op2)) {
         // Both operations delete the same string
-        const op1Delete = -(op1 as number);
-        const op2Delete = -(op2 as number);
+        let op1Delete = op1 as number;
+        let op2Delete = op2 as number;
         if (-op1Delete > -op2Delete) {
           op1 = op1Delete - op2Delete;
           op2 = ops2[i2++];
@@ -412,8 +413,8 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isDelete(op1) && TextOperation.isRetain(op2)) {
-        const op1Delete = -(op1 as number);
-        const op2Retain = op2 as number;
+        let op1Delete = op1 as number;
+        let op2Retain = op2 as number;
         if (-op1Delete > op2Retain) {
           minLength = op2Retain;
           op1 = op1Delete + op2Retain;
@@ -429,8 +430,8 @@ export class TextOperation {
         }
         operation1prime.delete(minLength);
       } else if (TextOperation.isRetain(op1) && TextOperation.isDelete(op2)) {
-        const op1Retain = op1 as number;
-        const op2Delete = -(op2 as number);
+        let op1Retain = op1 as number;
+        let op2Delete = op2 as number;
         if (op1Retain > -op2Delete) {
           minLength = -op2Delete;
           op1 = op1Retain + op2Delete;
@@ -518,7 +519,7 @@ export class MonacoAdapter {
   public ignoreNextChange: boolean = false;
   private changeInProgress: boolean = false;
   private selectionChanged: boolean = false;
-  private callbacks: { [key: string]: (...args: unknown[]) => void } = {};
+  private callbacks: { [key: string]: Function } = {};
   private lastValue: string = ""; // Restore lastValue
   private contentChangeListener: IDisposable | null = null;
   private cursorChangeListener: IDisposable | null = null;
@@ -700,13 +701,14 @@ export class MonacoAdapter {
     // ignoreNextChange is reset in the change handler
   }
 
-  registerCallbacks(cb: { [key: string]: (...args: unknown[]) => void }): void {
-    this.callbacks = { ...this.callbacks, ...cb };
+  registerCallbacks(cb: { [key: string]: Function }): void {
+    this.callbacks = cb;
   }
 
-  trigger(event: string, ...args: unknown[]): void {
-    if (this.callbacks[event]) {
-      this.callbacks[event](...args);
+  trigger(event: string, ...args: any[]): void {
+    const action = this.callbacks && this.callbacks[event];
+    if (action) {
+      action.apply(null, args);
     }
   }
 
@@ -812,17 +814,14 @@ export class MonacoAdapter {
 
     try {
       const ranges = selections.map((sel) => {
-        const selectionActualStartPosition =
-          "getStartPosition" in sel ? sel.getStartPosition() : sel;
-        const selectionActualEndPosition =
-          "getEndPosition" in sel ? sel.getEndPosition() : sel;
-
-        const anchor = positionToOffset(model, selectionActualStartPosition);
-        const head = positionToOffset(model, selectionActualEndPosition);
-
-        // Assuming no reassignment of anchor/head happens after this, as per linter.
-        // If RTL swap logic exists, it must have been different when linter ran or linter is mistaken.
-
+        const startOffset = positionToOffset(model, sel.getStartPosition());
+        const endOffset = positionToOffset(model, sel.getEndPosition());
+        let anchor = sel.getSelectionStart().equals(sel.getStartPosition())
+          ? startOffset
+          : endOffset;
+        let head = sel.getSelectionStart().equals(sel.getStartPosition())
+          ? endOffset
+          : startOffset;
         return new OTSelection.SelectionRange(anchor, head);
       });
       return new OTSelection(ranges);
@@ -910,33 +909,44 @@ export class OTSelection {
 
     private transformIndex(index: number, operation: TextOperation): number {
       let newIndex = index;
-      for (let i = 0; i < operation.ops.length; i++) {
-        const op = operation.ops[i];
+      let currentOffset = 0;
+      for (const op of operation.ops) {
         if (TextOperation.isRetain(op)) {
-          // No change
+          if (index <= currentOffset + op) {
+            return newIndex;
+          }
+          currentOffset += op;
         } else if (TextOperation.isInsert(op)) {
-          const insertText = op as string;
-          if (index > 0) {
-            newIndex += insertText.length;
+          if (currentOffset <= index) {
+            newIndex += op.length;
           }
-        } else {
-          const deleteLength = -(op as number);
-          if (index > deleteLength) {
-            newIndex -= deleteLength;
+        } else if (TextOperation.isDelete(op)) {
+          const deleteCount = -op;
+          if (index <= currentOffset) {
+            /* Before delete */
+          } else if (index <= currentOffset + deleteCount) {
+            return currentOffset; /* Within delete */
           } else {
-            newIndex = 0;
+            newIndex -= deleteCount; /* After delete */
           }
+          currentOffset += deleteCount;
+        } else {
+          throw new Error("Invalid op type during selection index transform");
         }
       }
       return newIndex;
     }
 
     transform(operation: TextOperation): SelectionRange {
+      // Renamed Range to SelectionRange
       const newAnchor = this.transformIndex(this.anchor, operation);
-      const newHead = this.transformIndex(this.head, operation);
-      return new SelectionRange(newAnchor, newHead);
+      const newHead =
+        this.anchor === this.head
+          ? newAnchor
+          : this.transformIndex(this.head, operation);
+      return new SelectionRange(newAnchor, newHead); // Renamed Range to SelectionRange
     }
-  };
+  }; // End of static SelectionRange class definition
 
   ranges: InstanceType<typeof OTSelection.SelectionRange>[];
 
@@ -1015,16 +1025,16 @@ interface IClientState {
 }
 
 class Synchronized implements IClientState {
-  applyClient(client: Client, operation: TextOperation): IClientState {
-    client.callbacks.sendOperation(client.revision, operation);
+  applyClient(_client: Client, operation: TextOperation): IClientState {
+    _client.callbacks.sendOperation(_client.revision, operation);
     return new AwaitingConfirm(operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
     client.callbacks.applyOperation(operation);
-    return synchronized_;
+    return this;
   }
   serverAck(_client: Client): IClientState {
-    return synchronized_;
+    return this;
   }
   transformSelection(selection: OTSelection): OTSelection {
     return selection;
@@ -1039,28 +1049,27 @@ class AwaitingConfirm implements IClientState {
   }
 
   applyClient(_client: Client, operation: TextOperation): IClientState {
-    const [_, transformedOperation] = TextOperation.transform(
-      this.outstanding,
-      operation
-    );
-    return new AwaitingWithBuffer(this.outstanding, transformedOperation);
+    // console.log(`[${client.userId}] AwaitingConfirm -> Buffering Op`);
+    return new AwaitingWithBuffer(this.outstanding, operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    const [newOutstanding, transformedServerOp] = TextOperation.transform(
+    // console.log(`[${client.userId}] AwaitingConfirm -> Applying Server Op & Transforming Outstanding`);
+    const [newOutstanding, transformedOperation] = TextOperation.transform(
       this.outstanding,
       operation
     );
-    client.callbacks.applyOperation(transformedServerOp);
+    client.callbacks.applyOperation(transformedOperation);
     return new AwaitingConfirm(newOutstanding);
   }
-  serverAck(client: Client): IClientState {
-    client.revision++;
+  serverAck(_client: Client): IClientState {
+    // console.log(`[${client.userId}] AwaitingConfirm -> ACK received -> Synchronized`);
     return synchronized_;
   }
   transformSelection(selection: OTSelection): OTSelection {
     return selection.transform(this.outstanding);
   }
   resend(client: Client): void {
+    // console.log(`[${client.userId}] AwaitingConfirm -> Resending Outstanding Op (rev ${client.revision})`);
     client.callbacks.sendOperation(client.revision, this.outstanding);
   }
 }
@@ -1074,19 +1083,64 @@ class AwaitingWithBuffer implements IClientState {
   }
 
   applyClient(_client: Client, operation: TextOperation): IClientState {
-    const newBuffer = this.buffer.compose(operation);
-    return new AwaitingWithBuffer(this.outstanding, newBuffer);
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> Composing Buffer`);
+    // console.log("[AWB ApplyClient] Before Compose:", {
+    // buffer_ops: this.buffer.toJSON(),
+    // buffer_base: this.buffer.baseLength,
+    // buffer_target: this.buffer.targetLength,
+    // operation_ops: operation.toJSON(),
+    // operation_base: operation.baseLength,
+    // operation_target: operation.targetLength,
+    // });
+    try {
+      const newBuffer = this.buffer.compose(operation);
+      return new AwaitingWithBuffer(this.outstanding, newBuffer);
+    } catch (e) {
+      console.error("[AWB ApplyClient] Compose Error:", e, {
+        buffer: this.buffer,
+        operation: operation,
+      });
+      throw e; // Rethrow
+    }
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    const [newOutstanding, transformedPrime] = TextOperation.transform(
+    // console.log(`[AWB ApplyServer] State Before Transform:`, {
+    // outstanding_ops: this.outstanding.toJSON(),
+    // outstanding_base: this.outstanding.baseLength,
+    // outstanding_target: this.outstanding.targetLength,
+    // buffer_ops: this.buffer.toJSON(),
+    // buffer_base: this.buffer.baseLength,
+    // buffer_target: this.buffer.targetLength,
+    // server_op_ops: operation.toJSON(),
+    // server_op_base: operation.baseLength,
+    // server_op_target: operation.targetLength,
+    // // Log full objects for deeper inspection
+    // outstanding_obj: this.outstanding,
+    // buffer_obj: this.buffer,
+    // server_op_obj: operation,
+    // client_revision: client.revision,
+    // });
+
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> Applying Server Op & Transforming Outstanding/Buffer`);
+    const [newOutstanding, transformedOperation1] = TextOperation.transform(
       this.outstanding,
       operation
     );
-    const [newBuffer, transformedServerOp] = TextOperation.transform(
+    const [newBuffer, transformedOperation2] = TextOperation.transform(
       this.buffer,
-      transformedPrime
+      transformedOperation1
     );
-    client.callbacks.applyOperation(transformedServerOp);
+    // console.log(`[AWB ApplyServer] State After Transforms:`, {
+    // newOutstanding_ops: newOutstanding.toJSON(),
+    // newOutstanding_base: newOutstanding.baseLength,
+    // transformedOp1_ops: transformedOperation1.toJSON(),
+    // transformedOp1_base: transformedOperation1.baseLength,
+    // newBuffer_ops: newBuffer.toJSON(),
+    // newBuffer_base: newBuffer.baseLength,
+    // transformedOp2_ops: transformedOperation2.toJSON(),
+    // transformedOp2_base: transformedOperation2.baseLength,
+    // });
+    client.callbacks.applyOperation(transformedOperation2);
     return new AwaitingWithBuffer(newOutstanding, newBuffer);
   }
   serverAck(client: Client): IClientState {
@@ -1097,6 +1151,7 @@ class AwaitingWithBuffer implements IClientState {
     return selection.transform(this.outstanding).transform(this.buffer);
   }
   resend(client: Client): void {
+    // console.log(`[${client.userId}] AwaitingWithBuffer -> Resending Outstanding Op (rev ${client.revision})`);
     client.callbacks.sendOperation(client.revision, this.outstanding);
   }
 }
@@ -1112,23 +1167,52 @@ export class Client {
     this.userId = userId;
     this.callbacks = callbacks;
     this.state = synchronized_;
+    // console.log(
+    // `[${this.userId}] Client initialized with revision ${revision}`
+    // );
   }
 
   setState(newState: IClientState): void {
+    const oldStateName = this.state.constructor.name;
+    const newStateName = newState.constructor.name;
+
+    // Add specific logging for AWB -> AWB transitions
+    if (
+      oldStateName === "AwaitingWithBuffer" &&
+      newStateName === "AwaitingWithBuffer"
+    ) {
+      // Type assertion needed to access state-specific properties
+      // const oldOutstandingBase = (this.state as AwaitingWithBuffer).outstanding
+      // ?.baseLength;
+      // const newOutstandingBase = (newState as AwaitingWithBuffer).outstanding
+      //   ?.baseLength;
+      // console.log(
+      // `[AWB->AWB setState] Updating outstanding. Base length: ${oldOutstandingBase} -> ${newOutstandingBase}`
+      // );
+    }
+
+    // console.log(
+    // `[${this.userId}] State transition: ${oldStateName} -> ${newStateName}`
+    // );
     this.state = newState;
   }
 
   applyClient(operation: TextOperation): void {
     if (operation.isNoop()) return;
+    // console.log(`[${this.userId}] applyClient called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
     this.setState(this.state.applyClient(this, operation));
   }
 
   applyServer(operation: TextOperation): void {
     if (operation.isNoop()) return;
+    // console.log(`[${this.userId}] applyServer called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
+    this.revision++;
     this.setState(this.state.applyServer(this, operation));
   }
 
   serverAck(): void {
+    // console.log(`[${this.userId}] serverAck called (State: ${this.state.constructor.name}, rev: ${this.revision})`);
+    this.revision++;
     this.setState(this.state.serverAck(this));
     if (
       this.state instanceof Synchronized ||
@@ -1141,6 +1225,9 @@ export class Client {
   }
 
   serverReconnect(): void {
+    // console.log(
+    // `[${this.userId}] serverReconnect called (State: ${this.state.constructor.name}, rev: ${this.revision})`
+    // );
     if (typeof this.state.resend === "function") {
       this.state.resend(this);
     }
@@ -1166,8 +1253,13 @@ export class Client {
       this.state instanceof AwaitingConfirm
     ) {
       if (this.callbacks.sendSelection) {
+        // console.log(`[${this.userId}] Sending selection (State: ${this.state.constructor.name}):`, selection?.toJSON());
         this.callbacks.sendSelection(selection);
+      } else {
+        // console.warn(`[${this.userId}] sendSelection callback not provided.`);
       }
+    } else {
+      // console.log(`[${this.userId}] Selection change suppressed in AwaitingWithBuffer state.`);
     }
   }
 }

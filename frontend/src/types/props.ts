@@ -43,7 +43,7 @@ export interface UserInfo {
   selection: OTSelection | null;
 }
 
-export type RemoteUser = UserInfo;
+export interface RemoteUser extends UserInfo {}
 
 // Define the props for the CodeEditor component
 export interface CodeEditorProps {

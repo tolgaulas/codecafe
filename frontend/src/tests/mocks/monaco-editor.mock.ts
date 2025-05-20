@@ -1,10 +1,4 @@
-import {
-  editor,
-  IDisposable,
-  Position,
-  Range as MonacoRangeImport,
-  Selection as MonacoSelection,
-} from "monaco-editor";
+import { editor } from "monaco-editor";
 import * as monaco from "monaco-editor"; // Keep this for other types if needed
 
 export class Selection {
@@ -15,59 +9,11 @@ export class Selection {
     public endColumn: number
   ) {}
 
-  public getPosition(): Position {
-    return new Position(this.startLineNumber, this.startColumn);
-  }
-
-  public getStartPosition(): Position {
-    return new Position(this.startLineNumber, this.startColumn);
-  }
-
-  public getEndPosition(): Position {
-    return new Position(this.endLineNumber, this.endColumn);
-  }
-
-  public equals(other: Selection | MonacoSelection): boolean {
-    const otherStart =
-      other instanceof Selection
-        ? other.getStartPosition()
-        : monaco.Position.lift(other.getStartPosition());
-    const otherEnd =
-      other instanceof Selection
-        ? other.getEndPosition()
-        : monaco.Position.lift(other.getEndPosition());
-    return (
-      this.getStartPosition().equals(otherStart) &&
-      this.getEndPosition().equals(otherEnd)
-    );
-  }
-
-  public isEmpty(): boolean {
-    return (
-      this.startLineNumber === this.endLineNumber &&
-      this.startColumn === this.endColumn
-    );
-  }
-
-  public getDirection(): monaco.SelectionDirection {
-    return monaco.SelectionDirection.LTR;
-  }
-
-  public setDirection(_direction: monaco.SelectionDirection): void {}
-
-  public setEndPosition(_endLineNumber: number, _endColumn: number): Selection {
-    return this;
-  }
-
-  public setPosition(_position: monaco.IPosition): Selection {
-    return this;
-  }
-
-  public setSelectionStart(
-    _startLineNumber: number,
-    _startColumn: number
-  ): Selection {
-    return this;
+  public getPosition() {
+    return {
+      lineNumber: this.startLineNumber,
+      column: this.startColumn,
+    };
   }
 }
 
@@ -80,15 +26,13 @@ export interface IRange {
 
 export class MockTextModel {
   private value: string;
-  private listeners: ((e: editor.IModelContentChangedEvent) => void)[] = [];
+  private listeners: ((e: any) => void)[] = [];
 
   constructor(initialValue: string = "") {
     this.value = initialValue;
   }
 
-  onDidChangeContent(
-    listener: (e: editor.IModelContentChangedEvent) => void
-  ): IDisposable {
+  onDidChangeContent(listener: (e: any) => void): { dispose: () => void } {
     this.listeners.push(listener);
     return {
       dispose: () => {
@@ -109,12 +53,13 @@ export class MockTextModel {
   }
 
   setValue(newValue: string): void {
+    const oldValue = this.value;
     this.value = newValue;
     this.triggerContentChange({
       changes: [
         {
           range: this.createFullModelRange(),
-          rangeLength: this.value.length,
+          rangeLength: oldValue.length,
           text: newValue,
           rangeOffset: 0,
         },
@@ -123,8 +68,6 @@ export class MockTextModel {
       versionId: 1,
       isUndoing: false,
       isRedoing: false,
-      isFlush: false,
-      isEolChange: false,
     });
   }
 
@@ -203,7 +146,7 @@ export class MockTextModel {
     };
   }
 
-  applyEdits(edits: editor.IIdentifiedSingleEditOperation[]): void {
+  applyEdits(edits: any[]): void {
     let newText = this.value;
     // Apply edits in reverse order to avoid offset issues
     const sortedEdits = [...edits].sort((a, b) => {
@@ -232,15 +175,11 @@ export class MockTextModel {
     }
 
     if (newText !== this.value) {
+      const oldValue = this.value;
       this.value = newText;
-      const mockChangeEvent: editor.IModelContentChangedEvent = {
+      this.triggerContentChange({
         changes: edits.map((edit) => ({
-          range: new MonacoRangeImport(
-            edit.range.startLineNumber,
-            edit.range.startColumn,
-            edit.range.endLineNumber,
-            edit.range.endColumn
-          ),
+          range: edit.range,
           rangeLength:
             this.getOffsetAt({
               lineNumber: edit.range.endLineNumber,
@@ -257,18 +196,17 @@ export class MockTextModel {
           }),
         })),
         eol: "\n",
-        versionId: (this.getVersionId ? this.getVersionId() : 0) + 1,
+        versionId: 1,
         isUndoing: false,
         isRedoing: false,
-        isFlush: true,
-        isEolChange: false,
-      };
-      this.triggerContentChange(mockChangeEvent);
+      });
     }
   }
 
-  private triggerContentChange(event: editor.IModelContentChangedEvent): void {
-    this.listeners.forEach((listener) => listener(event));
+  private triggerContentChange(event: any): void {
+    for (const listener of this.listeners) {
+      listener(event);
+    }
   }
 
   // Simplified methods for testing
@@ -297,10 +235,8 @@ export class MockEditor {
   private decorations: string[] = [];
   private selections: Selection[] = [new Selection(1, 1, 1, 1)];
   private model: MockTextModel = new MockTextModel("");
-  private cursorStateListeners: ((
-    e: editor.ICursorPositionChangedEvent
-  ) => void)[] = [];
-  private listeners: { [key: string]: ((...args: unknown[]) => void)[] } = {
+  private cursorStateListeners: ((e: any) => void)[] = [];
+  private listeners: { [key: string]: Function[] } = {
     onDidChangeCursorPosition: [],
   };
 
@@ -327,17 +263,17 @@ export class MockEditor {
     this.notifyCursorPositionChanged();
   }
 
-  saveViewState(): unknown {
-    return null;
+  saveViewState(): any {
+    return { cursorState: this.selections };
   }
 
-  restoreViewState(_state: unknown): void {
-    // Mock implementation
+  restoreViewState(state: any): void {
+    if (state && state.cursorState) {
+      this.selections = state.cursorState;
+    }
   }
 
-  onDidChangeCursorPosition(
-    listener: (e: editor.ICursorPositionChangedEvent) => void
-  ): {
+  onDidChangeCursorPosition(listener: (e: any) => void): {
     dispose: () => void;
   } {
     this.cursorStateListeners.push(listener);
@@ -352,24 +288,19 @@ export class MockEditor {
   }
 
   private notifyCursorPositionChanged(): void {
-    const position = this.getPosition();
-    if (position) {
-      const mockEvent: editor.ICursorPositionChangedEvent = {
-        position: position,
-        secondaryPositions: [],
-        reason: monaco.editor.CursorChangeReason.NotSet,
-        source: "mock",
-      };
-      this.cursorStateListeners.forEach((listener) => listener(mockEvent));
+    for (const listener of this.cursorStateListeners) {
+      listener({ position: this.selections[0].getPosition() });
     }
   }
 
   pushEditOperations(
     _selection: Selection | null,
-    editOperations: editor.IIdentifiedSingleEditOperation[],
+    editOperations: monaco.editor.IIdentifiedSingleEditOperation[],
     _beforeCursorState: Selection[] | null
   ): null {
-    this.model.applyEdits(editOperations);
+    editOperations.forEach((op) => {
+      this.model.applyEdits([op]);
+    });
     return null;
   }
 
@@ -395,11 +326,11 @@ export class MockEditor {
     return this.model.onDidChangeContent(listener);
   }
   updateOptions(): void {}
-  getOptions(): editor.IEditorOptions {
-    return {} as editor.IEditorOptions;
+  getOptions(): any {
+    return {};
   }
-  getConfiguration(): editor.IEditorOptions {
-    return {} as editor.IEditorOptions;
+  getConfiguration(): any {
+    return {};
   }
   getContentHeight(): number {
     return 0;
@@ -419,7 +350,7 @@ export class MockEditor {
   setScrollLeft(): void {}
   setScrollTop(): void {}
   setScrollPosition(): void {}
-  getAction(_id: string): editor.IEditorAction | null {
+  getAction(): any {
     return null;
   }
   executeCommand(): void {}
@@ -433,31 +364,16 @@ export class MockEditor {
   getDomNode(): HTMLElement | null {
     return document.createElement("div");
   }
-  addAction(_action: editor.IActionDescriptor): IDisposable | undefined {
-    return undefined;
+  addAction(): any {
+    return { dispose: () => {} };
   }
-  createContextKey<
-    T extends monaco.editor.ContextKeyValue = monaco.editor.ContextKeyValue
-  >(_key: string, defaultValue: T | undefined): editor.IContextKey<T> {
-    let _value = defaultValue;
-    return {
-      set: (value: T) => {
-        _value = value;
-      },
-      reset: () => {
-        _value = defaultValue;
-      },
-      get: () => _value,
-    } as editor.IContextKey<T>;
+  createContextKey(): any {
+    return { set: () => {} };
   }
-  addCommand(
-    _command: string,
-    _handler: (...args: unknown[]) => void,
-    _keybinding?: string
-  ): string | null {
-    return null;
+  addCommand(): any {
+    return { dispose: () => {} };
   }
-  addEditorAction(_action: editor.IActionDescriptor): IDisposable {
+  addEditorAction(): any {
     return { dispose: () => {} };
   }
   hasTextFocus(): boolean {
@@ -469,10 +385,7 @@ export class MockEditor {
   getId(): string {
     return "mock-editor";
   }
-  getPosition(): Position | null {
-    if (this.selections.length > 0 && this.selections[0]) {
-      return this.selections[0].getPosition();
-    }
+  getPosition(): any {
     return null;
   }
   revealLine(): void {}
@@ -483,15 +396,13 @@ export class MockEditor {
   revealPositionInCenter(): void {}
   revealPositionInCenterIfOutsideViewport(): void {}
   revealPositionNearTop(): void {}
-  getVisibleRanges(): MonacoRangeImport[] {
+  getVisibleRanges(): any[] {
     return [];
   }
   hasPendingActions(): boolean {
     return false;
   }
-  getScrolledVisiblePosition(
-    _position: monaco.IPosition
-  ): { top: number; left: number; height: number } | null {
+  getScrolledVisiblePosition(): any {
     return null;
   }
   applyFontInfo(): void {}
