@@ -59,21 +59,24 @@ const FileTabs = ({
     const checkOverflow = () => {
       if (tabContainerRef.current) {
         const { scrollWidth, clientWidth } = tabContainerRef.current;
-        const hasOverflow = scrollWidth > clientWidth;
-        onOverflowChange(hasOverflow);
+        onOverflowChange(scrollWidth > clientWidth);
+      } else {
+        onOverflowChange(false);
       }
     };
 
-    checkOverflow(); // Initial check
+    checkOverflow();
 
+    const currentTabContainer = tabContainerRef.current;
     const resizeObserver = new ResizeObserver(checkOverflow);
-    if (tabContainerRef.current) {
-      resizeObserver.observe(tabContainerRef.current);
+
+    if (currentTabContainer) {
+      resizeObserver.observe(currentTabContainer);
     }
 
     return () => {
-      if (tabContainerRef.current) {
-        resizeObserver.unobserve(tabContainerRef.current);
+      if (currentTabContainer) {
+        resizeObserver.unobserve(currentTabContainer);
       }
       resizeObserver.disconnect();
     };

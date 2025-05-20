@@ -2,7 +2,11 @@ import React from "react";
 import { editor } from "monaco-editor";
 import { VscFile } from "react-icons/vsc";
 
-import { JoinStateType, EditorLanguageKey } from "../types/editor";
+import {
+  JoinStateType,
+  EditorLanguageKey,
+  TerminalHandle,
+} from "../types/editor";
 import { RemoteUser } from "../types/props";
 import CodeEditor from "./CodeEditor";
 import TerminalComponent from "./TerminalComponent";
@@ -24,7 +28,7 @@ interface MainEditorAreaProps {
   // Refs
   editorTerminalAreaRef: React.RefObject<HTMLDivElement>;
   tabContainerRef: React.RefObject<HTMLDivElement>;
-  terminalRef: any;
+  terminalRef: React.RefObject<TerminalHandle>;
   editorInstanceRef: React.MutableRefObject<editor.IStandaloneCodeEditor | null>;
 
   // Editor
@@ -56,6 +60,11 @@ interface MainEditorAreaProps {
   onTabsOverflowChange: (hasOverflow: boolean) => void;
 }
 
+type IconPropsForMappings = {
+  size?: number;
+  className?: string;
+};
+
 const MainEditorArea = ({
   editorTerminalAreaRef,
   tabContainerRef,
@@ -86,8 +95,8 @@ const MainEditorArea = ({
   // Find the active file object
   const activeFile = openFiles.find((f) => f.id === activeFileId);
 
-  let ActiveIconComponent: React.ComponentType<any> = VscFile; // Default icon
-  let activeIconColor = defaultIconColor; // Default color
+  let ActiveIconComponent: React.ComponentType<IconPropsForMappings> = VscFile;
+  let activeIconColor = defaultIconColor;
 
   if (activeFile) {
     ActiveIconComponent =

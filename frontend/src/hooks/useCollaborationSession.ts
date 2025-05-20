@@ -37,6 +37,14 @@ interface ChatMessagePayload {
   timestamp?: string;
 }
 
+interface RawParticipantData {
+  id: string;
+  name?: string;
+  color?: string;
+  cursorPosition?: { lineNumber: number; column: number } | null;
+  selection?: { ranges?: { anchor: number; head: number }[] } | null;
+}
+
 export const useCollaborationSession = ({
   sessionId,
   userId,
@@ -110,7 +118,9 @@ export const useCollaborationSession = ({
     subscriptionsRef.current.forEach((sub) => {
       try {
         sub.unsubscribe();
-      } catch (e) {}
+      } catch (_e) {
+        // Intentional: ignore unsubscribe errors, already disconnected or failed
+      }
     });
     subscriptionsRef.current = [];
 
@@ -152,7 +162,7 @@ export const useCollaborationSession = ({
 
     stompClient.connect(
       {},
-      (_frame: any) => {
+      (_?: Stomp.Frame | undefined) => {
         handleConnectionStatusChange(true);
 
         const joinPayload = {
@@ -220,6 +230,7 @@ export const useCollaborationSession = ({
                 JSON.stringify(payload)
               );
             } else {
+              // Conditions to send operation not met, do nothing.
             }
           },
           // Re-enable sendSelection for explicit selection changes
@@ -300,7 +311,7 @@ export const useCollaborationSession = ({
           const chatTopic = `/topic/sessions/${sessionId}/chat`;
           console.log("[Chat] Subscribing to chat topic:", chatTopic);
           newSubscriptions.push(
-            stompClient.subscribe(chatTopic, (message: any) => {
+            stompClient.subscribe(chatTopic, (message: Stomp.Frame) => {
               try {
                 const chatMessage = JSON.parse(message.body);
                 console.log("[Chat] Received chat message:", chatMessage);
@@ -314,7 +325,7 @@ export const useCollaborationSession = ({
           );
         }
 
-        const handleIncomingState = (message: any) => {
+        const handleIncomingState = (message: Stomp.Frame) => {
           try {
             const state = JSON.parse(message.body);
             const docId = state.documentId;
@@ -331,7 +342,7 @@ export const useCollaborationSession = ({
             let processedParticipants: RemoteUser[] = [];
             if (state.participants && Array.isArray(state.participants)) {
               processedParticipants = state.participants
-                .map((p: any): RemoteUser | null => {
+                .map((p: RawParticipantData): RemoteUser | null => {
                   if (!p || typeof p.id !== "string") return null;
                   return {
                     id: p.id,
@@ -435,7 +446,7 @@ export const useCollaborationSession = ({
           );
         });
 
-        const handleIncomingOperation = (message: any) => {
+        const handleIncomingOperation = (message: Stomp.Frame) => {
           console.log("[Op Handler] Received message:", message.body);
           try {
             const payload = JSON.parse(message.body);
@@ -716,10 +727,10 @@ export const useCollaborationSession = ({
         // Selections Handling (Only for Active File) - Re-enable this handler
         const selectionTopic = `/topic/sessions/${sessionId}/selections/document/${currentFileId}`;
         newSubscriptions.push(
-          stompClient.subscribe(selectionTopic, (message: any) => {
+          stompClient.subscribe(selectionTopic, (message: Stomp.Frame) => {
             console.log("[Selection Handler] Received message:", message.body);
             try {
-              const payload = JSON.parse(message.body) as CursorMessage; // Use CursorMessage type
+              const payload = JSON.parse(message.body) as CursorMessage;
               console.log("[Selection Handler] Parsed payload:", payload);
               if (
                 !payload ||
@@ -884,10 +895,11 @@ export const useCollaborationSession = ({
         // ACK Handling
         const ackTopic = `/topic/ack/${userId}`;
         newSubscriptions.push(
-          stompClient.subscribe(ackTopic, (message: any) => {
+          stompClient.subscribe(ackTopic, (message: Stomp.Frame) => {
             if (message.body === "ack") {
               clientRef.current?.serverAck();
             } else {
+              // Non-ack message received on ack topic, ignore.
             }
           })
         );
@@ -895,7 +907,7 @@ export const useCollaborationSession = ({
         // Store subscriptions
         subscriptionsRef.current = newSubscriptions;
       }, // End onConnect
-      (error: any) => {
+      (error: string | Stomp.Frame) => {
         handleError(
           `[STOMP Error] Connection Failed for ${sessionId}/${activeFileId}: ${error}`
         );
@@ -907,7 +919,9 @@ export const useCollaborationSession = ({
       subscriptionsRef.current.forEach((sub) => {
         try {
           sub.unsubscribe();
-        } catch (e) {}
+        } catch (_e) {
+          // Intentional: ignore unsubscribe errors, already disconnected or failed
+        }
       });
       subscriptionsRef.current = [];
 

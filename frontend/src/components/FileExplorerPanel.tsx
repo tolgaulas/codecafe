@@ -6,12 +6,13 @@ import {
   defaultIconColor,
 } from "../constants/mappings";
 import { EditorLanguageKey } from "../types/editor";
+import { MockFile } from "../constants/mockFiles";
 
 // Props for FileExplorerPanel - initially minimal, might adjust
 interface FileExplorerPanelProps {
   isSessionActive: boolean;
   handleOpenFile: (fileId: string) => void;
-  mockFiles: { [key: string]: any };
+  mockFiles: { [key: string]: MockFile };
   activeFileId: string | null;
 }
 

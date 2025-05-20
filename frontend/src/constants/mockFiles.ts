@@ -1,6 +1,6 @@
 import { EditorLanguageKey } from "../types/editor";
 
-interface MockFile {
+export interface MockFile {
   name: string;
   language: EditorLanguageKey;
   content: string;

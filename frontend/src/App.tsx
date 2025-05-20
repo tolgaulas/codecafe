@@ -38,7 +38,7 @@ import { Analytics } from "@vercel/analytics/react";
 
 const App = () => {
   // REFS
-  const terminalRef = useRef<TerminalHandle>();
+  const terminalRef = useRef<TerminalHandle | null>(null);
   const sidebarContainerRef = useRef<HTMLDivElement>(null);
   const editorTerminalAreaRef = useRef<HTMLDivElement>(null);
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -82,7 +82,6 @@ const App = () => {
   const findResultsDecorationIds = useRef<string[]>([]);
   const [isWidgetForcedHidden, setIsWidgetForcedHidden] = useState(false);
 
-  // New state for chat messages
   const [chatMessages, setChatMessages] = useState<ChatMessageType[]>([]);
 
   // User Identity
@@ -337,7 +336,7 @@ const App = () => {
       },
       [userId]
     ),
-    onConnectionStatusChange: useCallback((_connected: boolean) => {}, []),
+    onConnectionStatusChange: useCallback(() => {}, []),
     onError: useCallback(
       (error: Error | string) => {
         console.error("[App onError] Collaboration Hook Error:", error);
@@ -417,10 +416,7 @@ const App = () => {
     }
   };
 
-  const handleGlobalPointerUp = useCallback(
-    (_: PointerEvent) => {},
-    [isWebViewPanelResizing, isTerminalPanelResizing, isExplorerPanelResizing]
-  );
+  const handleGlobalPointerUp = useCallback(() => {}, []);
 
   const handleCodeChange = (newCode: string) => {
     if (!isSessionActive && activeFileId) {
@@ -465,6 +461,7 @@ const App = () => {
 
   // Utility to get the find controller
   const getFindController = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return editorInstanceRef.current?.getContribution(
       "editor.contrib.findController"
     ) as any;

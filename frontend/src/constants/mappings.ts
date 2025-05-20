@@ -9,7 +9,7 @@ export const editorLanguageMap: { [key in EditorLanguageKey]: string } = {
   python: "python",
   java: "java",
   c: "c",
-  cplusplus: "cpp", 
+  cplusplus: "cpp",
   go: "go",
   rust: "rust",
   ruby: "ruby",
@@ -41,4 +41,4 @@ export const languageColorMap: { [key in EditorLanguageKey]?: string } = {
   // will add more colors as more more languages are added
 };
 
-export const defaultIconColor = "text-stone-400"; 
+export const defaultIconColor = "text-stone-400";
