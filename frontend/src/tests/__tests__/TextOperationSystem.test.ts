@@ -283,12 +283,10 @@ describe("OTSelection", () => {
 });
 
 class EnhancedMockEditor extends MockEditor {
-   
   onDidFocusEditorText(_callback: () => void) {
     return { dispose: () => {} };
   }
 
-   
   onDidBlurEditorText(_callback: () => void) {
     return { dispose: () => {} };
   }
