@@ -8,10 +8,11 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**") // Apply to all endpoints in the backend
-            .allowedOrigins("http://localhost") // Allow requests from your frontend origin
-            .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS") // Common HTTP methods
-            .allowedHeaders("*") // Allow all headers
-            .allowCredentials(true); // Important if your frontend sends credentials (e.g., cookies, auth headers)
+        registry.addMapping("/api/**") 
+                .allowedOrigins("https://codecafe.app", "http://localhost:5173", "http://localhost") 
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS") 
+                .allowedHeaders("*")  
+                .allowCredentials(true) // Allow credentials (e.g., cookies)
+                .maxAge(3600); // Cache preflight response for 1 hour
     }
 }

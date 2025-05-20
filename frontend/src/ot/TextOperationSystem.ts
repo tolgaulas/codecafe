@@ -242,8 +242,8 @@ export class TextOperation {
       }
 
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
-        let op1Retain = op1 as number;
-        let op2Retain = op2 as number;
+        const op1Retain = op1 as number;
+        const op2Retain = op2 as number;
         if (op1Retain > op2Retain) {
           operation.retain(op2Retain);
           op1 = op1Retain - op2Retain;
@@ -287,8 +287,8 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isRetain(op1) && TextOperation.isDelete(op2)) {
-        let op1Retain = op1 as number;
-        let op2Delete = op2 as number;
+        const op1Retain = op1 as number;
+        const op2Delete = op2 as number;
         if (op1Retain > -op2Delete) {
           operation.delete(op2Delete);
           op1 = op1Retain + op2Delete;
@@ -381,8 +381,8 @@ export class TextOperation {
       let minLength;
       if (TextOperation.isRetain(op1) && TextOperation.isRetain(op2)) {
         // Simple case: retain/retain
-        let op1Retain = op1 as number;
-        let op2Retain = op2 as number;
+        const op1Retain = op1 as number;
+        const op2Retain = op2 as number;
         if (op1Retain > op2Retain) {
           minLength = op2Retain;
           op1 = op1Retain - op2Retain;
@@ -400,8 +400,8 @@ export class TextOperation {
         operation2prime.retain(minLength);
       } else if (TextOperation.isDelete(op1) && TextOperation.isDelete(op2)) {
         // Both operations delete the same string
-        let op1Delete = op1 as number;
-        let op2Delete = op2 as number;
+        const op1Delete = op1 as number;
+        const op2Delete = op2 as number;
         if (-op1Delete > -op2Delete) {
           op1 = op1Delete - op2Delete;
           op2 = ops2[i2++];
@@ -413,8 +413,8 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isDelete(op1) && TextOperation.isRetain(op2)) {
-        let op1Delete = op1 as number;
-        let op2Retain = op2 as number;
+        const op1Delete = op1 as number;
+        const op2Retain = op2 as number;
         if (-op1Delete > op2Retain) {
           minLength = op2Retain;
           op1 = op1Delete + op2Retain;
@@ -513,13 +513,20 @@ function getModelLength(model: editor.ITextModel): number {
   return model.getOffsetAt(new Position(lastLine, lastCol));
 }
 
+interface MonacoAdapterEvents {
+  change?: (operation: TextOperation, inverse: TextOperation) => void;
+  selectionChange?: () => void;
+  blur?: () => void;
+  focus?: () => void;
+}
+
 export class MonacoAdapter {
   private editor: editor.IStandaloneCodeEditor;
   private model: editor.ITextModel;
   public ignoreNextChange: boolean = false;
   private changeInProgress: boolean = false;
   private selectionChanged: boolean = false;
-  private callbacks: { [key: string]: Function } = {};
+  private callbacks: MonacoAdapterEvents = {};
   private lastValue: string = ""; // Restore lastValue
   private contentChangeListener: IDisposable | null = null;
   private cursorChangeListener: IDisposable | null = null;
@@ -701,18 +708,20 @@ export class MonacoAdapter {
     // ignoreNextChange is reset in the change handler
   }
 
-  registerCallbacks(cb: { [key: string]: Function }): void {
+  registerCallbacks(cb: MonacoAdapterEvents): void {
     this.callbacks = cb;
   }
 
-  trigger(event: string, ...args: any[]): void {
-    const action = this.callbacks && this.callbacks[event];
+  trigger(event: keyof MonacoAdapterEvents, ...args: any[]): void {
+    const action = this.callbacks[event];
     if (action) {
-      action.apply(null, args);
+      (action as (...a: any[]) => void).apply(null, args);
     }
   }
 
-  private onDidContentChange(e: editor.IModelContentChangedEvent): void {
+  private onDidContentChange({
+    changes,
+  }: editor.IModelContentChangedEvent): void {
     const currentValue = this.model.getValue(); // Get value AFTER the change
 
     if (this.ignoreNextChange) {
@@ -741,7 +750,7 @@ export class MonacoAdapter {
     try {
       // Use the reliable previous value
       const [operation, inverse] = MonacoAdapter.operationFromMonacoChanges(
-        e.changes,
+        changes, // Use destructured 'changes'
         // currentLength, // Not needed
         valueBeforeChange // Pass the value *before* this change
       );
@@ -762,7 +771,7 @@ export class MonacoAdapter {
       console.error(
         "Error creating operation from Monaco changes:",
         err,
-        e.changes
+        changes // Use destructured 'changes'
       );
     }
 
@@ -816,10 +825,11 @@ export class MonacoAdapter {
       const ranges = selections.map((sel) => {
         const startOffset = positionToOffset(model, sel.getStartPosition());
         const endOffset = positionToOffset(model, sel.getEndPosition());
-        let anchor = sel.getSelectionStart().equals(sel.getStartPosition())
+        // Use const for anchor and head based on conditional assignment
+        const anchor = sel.getSelectionStart().equals(sel.getStartPosition())
           ? startOffset
           : endOffset;
-        let head = sel.getSelectionStart().equals(sel.getStartPosition())
+        const head = sel.getSelectionStart().equals(sel.getStartPosition())
           ? endOffset
           : startOffset;
         return new OTSelection.SelectionRange(anchor, head);
