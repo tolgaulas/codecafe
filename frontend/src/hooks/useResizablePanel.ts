@@ -129,15 +129,7 @@ export function useResizablePanel({
 
       setSize(clampedSize);
     },
-    [
-      isResizing,
-      direction,
-      containerRef,
-      panelRef,
-      minSize,
-      maxSize,
-      collapseThreshold,
-    ]
+    [isResizing, direction, containerRef, minSize, maxSize, collapseThreshold]
   );
 
   const handleMouseUp = useCallback(() => {

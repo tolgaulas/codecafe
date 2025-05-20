@@ -36,6 +36,27 @@ import MainEditorArea from "./components/MainEditorArea";
 import { useFileStore } from "./store/useFileStore";
 import { Analytics } from "@vercel/analytics/react";
 
+// Interface for Monaco's find controller
+interface FindControllerInterface extends editor.IEditorContribution {
+  getState(): {
+    searchString: string;
+    matchesCount: number;
+    currentIndex: number;
+    [key: string]: unknown;
+  };
+  setSearchString(searchString: string): void;
+  start(options: {
+    searchString: string;
+    replaceString: string;
+    isRegex: boolean;
+    matchCase: boolean;
+    wholeWord: boolean;
+    autoFindInSelection: string;
+    seedSearchStringFromSelection: string;
+  }): void;
+  closeFindWidget(): void;
+}
+
 const App = () => {
   // REFS
   const terminalRef = useRef<TerminalHandle | null>(null);
@@ -461,10 +482,9 @@ const App = () => {
 
   // Utility to get the find controller
   const getFindController = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return editorInstanceRef.current?.getContribution(
       "editor.contrib.findController"
-    ) as any;
+    ) as FindControllerInterface;
   }, []);
 
   // Function to update match info from editor state

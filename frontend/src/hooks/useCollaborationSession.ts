@@ -118,7 +118,7 @@ export const useCollaborationSession = ({
     subscriptionsRef.current.forEach((sub) => {
       try {
         sub.unsubscribe();
-      } catch (_e) {
+      } catch (error) {
         // Intentional: ignore unsubscribe errors, already disconnected or failed
       }
     });
@@ -162,7 +162,7 @@ export const useCollaborationSession = ({
 
     stompClient.connect(
       {},
-      (_?: Stomp.Frame | undefined) => {
+      () => {
         handleConnectionStatusChange(true);
 
         const joinPayload = {
@@ -919,7 +919,7 @@ export const useCollaborationSession = ({
       subscriptionsRef.current.forEach((sub) => {
         try {
           sub.unsubscribe();
-        } catch (_e) {
+        } catch (error) {
           // Intentional: ignore unsubscribe errors, already disconnected or failed
         }
       });
@@ -974,6 +974,7 @@ export const useCollaborationSession = ({
     userId,
     userInfo.name,
     userInfo.color,
+    webViewFileIds,
   ]);
 
   // Add sendChatMessage function before the return statement

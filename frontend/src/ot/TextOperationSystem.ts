@@ -23,17 +23,17 @@ export class TextOperation {
   }
 
   // Helper to check if an op is retain.
-  static isRetain(op: any): op is number {
+  static isRetain(op: string | number): op is number {
     return typeof op === "number" && op > 0;
   }
 
   // Helper to check if an op is insert.
-  static isInsert(op: any): op is string {
+  static isInsert(op: string | number): op is string {
     return typeof op === "string";
   }
 
   // Helper to check if an op is delete.
-  static isDelete(op: any): op is number {
+  static isDelete(op: string | number): op is number {
     return typeof op === "number" && op < 0;
   }
 
@@ -45,7 +45,7 @@ export class TextOperation {
     if (n === 0) return this;
     this.baseLength += n;
     this.targetLength += n;
-    let lastOp = this.ops[this.ops.length - 1];
+    const lastOp = this.ops[this.ops.length - 1];
     if (TextOperation.isRetain(lastOp)) {
       // Combine consecutive retains.
       this.ops[this.ops.length - 1] = lastOp + n;
@@ -62,9 +62,9 @@ export class TextOperation {
     }
     if (str === "") return this;
     this.targetLength += str.length;
-    let ops = this.ops;
-    let lastOp = ops[ops.length - 1];
-    let secondLastOp = ops[ops.length - 2];
+    const ops = this.ops;
+    const lastOp = ops[ops.length - 1];
+    const secondLastOp = ops[ops.length - 2];
 
     if (TextOperation.isInsert(lastOp)) {
       // Combine consecutive inserts.
@@ -99,7 +99,7 @@ export class TextOperation {
       length = -length;
     }
     this.baseLength -= length; // baseLength increases
-    let lastOp = this.ops[this.ops.length - 1];
+    const lastOp = this.ops[this.ops.length - 1];
     if (TextOperation.isDelete(lastOp)) {
       this.ops[this.ops.length - 1] = lastOp + length;
     } else {
@@ -141,10 +141,10 @@ export class TextOperation {
 
   // Apply the operation to a string, returning a new string.
   apply(str: string): string {
-    let newStr = [];
+    const newStr = [];
     let strIndex = 0;
     for (let i = 0; i < this.ops.length; i++) {
-      let op = this.ops[i];
+      const op = this.ops[i];
       if (TextOperation.isRetain(op)) {
         if (strIndex + op > str.length) {
           throw new Error(
@@ -169,10 +169,10 @@ export class TextOperation {
 
   // Computes the inverse of an operation.
   invert(str: string): TextOperation {
-    let inverse = new TextOperation();
+    const inverse = new TextOperation();
     let strIndex = 0;
     for (let i = 0; i < this.ops.length; i++) {
-      let op = this.ops[i];
+      const op = this.ops[i];
       if (TextOperation.isRetain(op)) {
         inverse.retain(op);
         strIndex += op;
@@ -198,14 +198,14 @@ export class TextOperation {
 
   // Compose merges two consecutive operations into one.
   compose(operation2: TextOperation): TextOperation {
-    let operation1 = this;
+    const operation1 = this;
     if (operation1.targetLength !== operation2.baseLength) {
       throw new Error(
         "The base length of the second operation has to be the target length of the first operation"
       );
     }
 
-    let operation = new TextOperation(); // the combined operation
+    const operation = new TextOperation(); // the combined operation
     const ops1 = operation1.ops;
     const ops2 = operation2.ops;
     let i1 = 0,
@@ -258,8 +258,8 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isInsert(op1) && TextOperation.isDelete(op2)) {
-        let op1Insert = op1 as string;
-        let op2Delete = op2 as number;
+        const op1Insert = op1 as string;
+        const op2Delete = op2 as number;
         if (op1Insert.length > -op2Delete) {
           op1 = op1Insert.slice(0, op1Insert.length + op2Delete);
           op2 = ops2[i2++];
@@ -271,8 +271,8 @@ export class TextOperation {
           op1 = ops1[i1++];
         }
       } else if (TextOperation.isInsert(op1) && TextOperation.isRetain(op2)) {
-        let op1Insert = op1 as string;
-        let op2Retain = op2 as number;
+        const op1Insert = op1 as string;
+        const op2Retain = op2 as number;
         if (op1Insert.length > op2Retain) {
           operation.insert(op1Insert.slice(0, op2Retain));
           op1 = op1Insert.slice(op2Retain);
@@ -334,8 +334,8 @@ export class TextOperation {
     // }
     // );
 
-    let operation1prime = new TextOperation();
-    let operation2prime = new TextOperation();
+    const operation1prime = new TextOperation();
+    const operation2prime = new TextOperation();
     const ops1 = operation1.ops;
     const ops2 = operation2.ops;
     let i1 = 0,
@@ -1035,15 +1035,17 @@ interface IClientState {
 }
 
 class Synchronized implements IClientState {
-  applyClient(_client: Client, operation: TextOperation): IClientState {
-    _client.callbacks.sendOperation(_client.revision, operation);
+  applyClient(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] Synchronized -> Client op -> AwaitingConfirm`);
+    client.callbacks.sendOperation(client.revision, operation);
     return new AwaitingConfirm(operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
+    // console.log(`[${client.userId}] Synchronized -> Server op -> Synchronized`);
     client.callbacks.applyOperation(operation);
     return this;
   }
-  serverAck(_client: Client): IClientState {
+  serverAck(client: Client): IClientState {
     return this;
   }
   transformSelection(selection: OTSelection): OTSelection {
@@ -1058,7 +1060,7 @@ class AwaitingConfirm implements IClientState {
     this.outstanding = outstanding;
   }
 
-  applyClient(_client: Client, operation: TextOperation): IClientState {
+  applyClient(client: Client, operation: TextOperation): IClientState {
     // console.log(`[${client.userId}] AwaitingConfirm -> Buffering Op`);
     return new AwaitingWithBuffer(this.outstanding, operation);
   }
@@ -1071,7 +1073,7 @@ class AwaitingConfirm implements IClientState {
     client.callbacks.applyOperation(transformedOperation);
     return new AwaitingConfirm(newOutstanding);
   }
-  serverAck(_client: Client): IClientState {
+  serverAck(client: Client): IClientState {
     // console.log(`[${client.userId}] AwaitingConfirm -> ACK received -> Synchronized`);
     return synchronized_;
   }
