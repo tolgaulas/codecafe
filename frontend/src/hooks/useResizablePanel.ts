@@ -44,7 +44,6 @@ export function useResizablePanel({
   maxSize = Infinity,
   direction,
   containerRef,
-  panelRef,
   onResizeStart,
   onResizeEnd,
   onToggle,

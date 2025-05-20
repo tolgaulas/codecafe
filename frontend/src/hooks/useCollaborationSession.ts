@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import SockJS from "sockjs-client";
 import Stomp from "stompjs";
 import {
@@ -68,6 +68,11 @@ export const useCollaborationSession = ({
   const currentFileIdRef = useRef<string | null>(null);
   const subscribedWebViewOpsRef = useRef<Set<string>>(new Set());
 
+  // Memoize webViewFileIds value for dependency array
+  const memoizedWebViewFileIds = useMemo(() => {
+    return JSON.stringify(webViewFileIds);
+  }, [webViewFileIds]);
+
   const handleConnectionStatusChange = useCallback(
     (connected: boolean) => {
       setIsConnected(connected);
@@ -118,7 +123,8 @@ export const useCollaborationSession = ({
     subscriptionsRef.current.forEach((sub) => {
       try {
         sub.unsubscribe();
-      } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      } catch (_error) {
         // Intentional: ignore unsubscribe errors, already disconnected or failed
       }
     });
@@ -919,7 +925,8 @@ export const useCollaborationSession = ({
       subscriptionsRef.current.forEach((sub) => {
         try {
           sub.unsubscribe();
-        } catch (error) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (_error) {
           // Intentional: ignore unsubscribe errors, already disconnected or failed
         }
       });
@@ -952,7 +959,7 @@ export const useCollaborationSession = ({
     onChatMessageReceived,
     handleConnectionStatusChange,
     handleError,
-    JSON.stringify(webViewFileIds),
+    memoizedWebViewFileIds,
   ]);
 
   // Effect to send initial presence when connection is established

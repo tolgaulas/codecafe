@@ -123,9 +123,9 @@ export class TextOperation {
 
   // Creates an operation from a JSON representation.
   static fromJSON(ops: (string | number)[]): TextOperation {
-    let o = new TextOperation();
+    const o = new TextOperation();
     for (let i = 0; i < ops.length; i++) {
-      let op = ops[i];
+      const op = ops[i];
       if (TextOperation.isRetain(op)) {
         o.retain(op as number);
       } else if (TextOperation.isInsert(op)) {
@@ -198,15 +198,15 @@ export class TextOperation {
 
   // Compose merges two consecutive operations into one.
   compose(operation2: TextOperation): TextOperation {
-    const operation1 = this;
-    if (operation1.targetLength !== operation2.baseLength) {
+    // Use a different approach to avoid 'this' aliasing
+    if (this.targetLength !== operation2.baseLength) {
       throw new Error(
         "The base length of the second operation has to be the target length of the first operation"
       );
     }
 
     const operation = new TextOperation(); // the combined operation
-    const ops1 = operation1.ops;
+    const ops1 = this.ops;
     const ops2 = operation2.ops;
     let i1 = 0,
       i2 = 0; // current index into ops1/ops2
@@ -1027,25 +1027,23 @@ export interface IClientCallbacks {
 }
 
 interface IClientState {
-  applyClient(client: Client, operation: TextOperation): IClientState;
+  applyClient(_client: Client, operation: TextOperation): IClientState;
   applyServer(client: Client, operation: TextOperation): IClientState;
-  serverAck(client: Client): IClientState;
+  serverAck(_client: Client): IClientState;
   transformSelection(selection: OTSelection): OTSelection;
   resend?(client: Client): void;
 }
 
 class Synchronized implements IClientState {
-  applyClient(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] Synchronized -> Client op -> AwaitingConfirm`);
-    client.callbacks.sendOperation(client.revision, operation);
+  applyClient(_client: Client, operation: TextOperation): IClientState {
+    _client.callbacks.sendOperation(_client.revision, operation);
     return new AwaitingConfirm(operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] Synchronized -> Server op -> Synchronized`);
     client.callbacks.applyOperation(operation);
     return this;
   }
-  serverAck(client: Client): IClientState {
+  serverAck(_client: Client): IClientState {
     return this;
   }
   transformSelection(selection: OTSelection): OTSelection {
@@ -1060,8 +1058,9 @@ class AwaitingConfirm implements IClientState {
     this.outstanding = outstanding;
   }
 
-  applyClient(client: Client, operation: TextOperation): IClientState {
-    // console.log(`[${client.userId}] AwaitingConfirm -> Buffering Op`);
+  applyClient(_client: Client, operation: TextOperation): IClientState {
+    // Use a comment to document the purpose rather than using the parameter
+    // This is used in other implementations
     return new AwaitingWithBuffer(this.outstanding, operation);
   }
   applyServer(client: Client, operation: TextOperation): IClientState {
@@ -1073,8 +1072,9 @@ class AwaitingConfirm implements IClientState {
     client.callbacks.applyOperation(transformedOperation);
     return new AwaitingConfirm(newOutstanding);
   }
-  serverAck(client: Client): IClientState {
-    // console.log(`[${client.userId}] AwaitingConfirm -> ACK received -> Synchronized`);
+  serverAck(_client: Client): IClientState {
+    // Add comment to document purpose
+    // This is used in other implementations
     return synchronized_;
   }
   transformSelection(selection: OTSelection): OTSelection {
