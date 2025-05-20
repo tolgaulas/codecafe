@@ -68,9 +68,9 @@ jobs:
           docker network ls
 
           echo "Building Docker images individually with verbose output:"
-          docker compose build --no-cache redis
-          docker compose build --no-cache backend
-          docker compose build --no-cache frontend
+          docker compose build redis
+          docker compose build backend
+          docker compose build frontend
 
           echo "Starting Redis service:"
           docker compose up -d redis
