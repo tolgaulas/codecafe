@@ -58,9 +58,40 @@ jobs:
 
       - name: Build and test Docker Compose
         run: |
-          docker-compose build
-          docker-compose up -d
+          echo "Docker info:"
+          docker info
+          echo "Docker version:"
+          docker version
+          echo "Docker Compose version:"
+          docker-compose version
+          echo "Listing Docker networks:"
+          docker network ls
+
+          echo "Building Docker images individually with verbose output:"
+          docker-compose build --no-cache redis
+          docker-compose build --no-cache backend
+          docker-compose build --no-cache frontend
+
+          echo "Starting Redis service:"
+          docker-compose up -d redis
+          sleep 5
+          docker-compose ps redis
+          docker-compose logs redis
+
+          echo "Starting Backend service:"
+          docker-compose up -d backend
           sleep 10
+          docker-compose ps backend
+          docker-compose logs backend
+
+          echo "Starting Frontend service:"
+          docker-compose up -d frontend
+          sleep 5
+          docker-compose ps frontend
+          docker-compose logs frontend
+
+          echo "All container status:"
           docker-compose ps
-          docker-compose logs
+
+          echo "Cleaning up:"
           docker-compose down
