@@ -43,7 +43,8 @@ export interface UserInfo {
   selection: OTSelection | null;
 }
 
-export interface RemoteUser extends UserInfo {}
+// Changed to a type alias to avoid no-empty-object-type error
+export type RemoteUser = UserInfo;
 
 // Define the props for the CodeEditor component
 export interface CodeEditorProps {

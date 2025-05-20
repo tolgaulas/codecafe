@@ -3,28 +3,11 @@ import {
   Client,
   OTSelection,
   MonacoAdapter,
-  positionToOffset,
-  offsetToPosition,
   IClientCallbacks,
 } from "../../ot/TextOperationSystem";
-import {
-  Selection,
-  MockEditor,
-  MockTextModel,
-} from "../mocks/monaco-editor.mock";
+import { MockEditor } from "../mocks/monaco-editor.mock";
 import "@testing-library/jest-dom";
 import { describe, test, expect, jest, beforeEach } from "@jest/globals";
-
-// Helper for comparing TextOperation objects
-const expectOpsEqual = (
-  actual: TextOperation,
-  expected: TextOperation,
-  message: string
-) => {
-  expect(actual.ops).toEqual(expected.ops);
-  expect(actual.baseLength).toEqual(expected.baseLength);
-  expect(actual.targetLength).toEqual(expected.targetLength);
-};
 
 describe("TextOperation", () => {
   describe("Basic Operations", () => {
@@ -300,11 +283,11 @@ describe("OTSelection", () => {
 });
 
 class EnhancedMockEditor extends MockEditor {
-  onDidFocusEditorText(callback: () => void) {
+  onDidFocusEditorText(_callback: () => void) {
     return { dispose: () => {} };
   }
 
-  onDidBlurEditorText(callback: () => void) {
+  onDidBlurEditorText(_callback: () => void) {
     return { dispose: () => {} };
   }
 }
@@ -315,7 +298,9 @@ describe("MonacoAdapter", () => {
 
   beforeEach(() => {
     editor = new EnhancedMockEditor("hello world");
-    adapter = new MonacoAdapter(editor as any);
+    adapter = new MonacoAdapter(
+      editor as unknown as import("monaco-editor").editor.IStandaloneCodeEditor
+    );
   });
 
   test("should register callbacks", () => {
@@ -324,18 +309,21 @@ describe("MonacoAdapter", () => {
       selectionChange: jest.fn(),
       blur: jest.fn(),
       focus: jest.fn(),
-    };
+    } as MonacoAdapterEvents;
 
     adapter.registerCallbacks(callbacks);
     expect(adapter["callbacks"]).toEqual(callbacks);
   });
 
   test("should trigger callbacks", () => {
-    const callback = jest.fn();
-    adapter.registerCallbacks({ test: callback });
+    const mockOperation = new TextOperation().insert("testOp");
+    const mockInverse = new TextOperation().delete("testOp");
+    const changeCallback = jest.fn();
 
-    adapter.trigger("test", "arg1", "arg2");
-    expect(callback).toHaveBeenCalledWith("arg1", "arg2");
+    adapter.registerCallbacks({ change: changeCallback });
+
+    adapter.trigger("change", mockOperation, mockInverse);
+    expect(changeCallback).toHaveBeenCalledWith(mockOperation, mockInverse);
   });
 
   test("should convert Monaco changes to operations", () => {
@@ -362,6 +350,13 @@ describe("MonacoAdapter", () => {
     expect(inverse.ops.length).toBeGreaterThan(0);
   });
 });
+
+interface MonacoAdapterEvents {
+  change?: (operation: TextOperation, inverse: TextOperation) => void;
+  selectionChange?: () => void;
+  blur?: () => void;
+  focus?: () => void;
+}
 
 describe("Client", () => {
   let mockCallbacks: IClientCallbacks;

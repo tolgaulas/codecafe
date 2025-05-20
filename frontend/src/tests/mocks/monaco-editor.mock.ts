@@ -1,4 +1,11 @@
-import { editor } from "monaco-editor";
+import {
+  editor,
+  Position,
+  Range,
+  Selection as MonacoSelection,
+  ISelection as MonacoISelection,
+  Uri,
+} from "monaco-editor";
 import * as monaco from "monaco-editor"; // Keep this for other types if needed
 
 export class Selection {
@@ -9,11 +16,40 @@ export class Selection {
     public endColumn: number
   ) {}
 
-  public getPosition() {
-    return {
-      lineNumber: this.startLineNumber,
-      column: this.startColumn,
-    };
+  public getPosition(): monaco.Position {
+    return new monaco.Position(this.startLineNumber, this.startColumn);
+  }
+
+  isEmpty(): boolean {
+    return (
+      this.startLineNumber === this.endLineNumber &&
+      this.startColumn === this.endColumn
+    );
+  }
+
+  equals(other: Selection | monaco.Selection): boolean {
+    return (
+      this.startLineNumber === other.startLineNumber &&
+      this.startColumn === other.startColumn &&
+      this.endLineNumber === other.endLineNumber &&
+      this.endColumn === other.endColumn
+    );
+  }
+
+  getDirection(): monaco.SelectionDirection {
+    return monaco.SelectionDirection.LTR;
+  }
+
+  getEndPosition(): monaco.Position {
+    return new monaco.Position(this.endLineNumber, this.endColumn);
+  }
+
+  getSelectionStart(): monaco.Position {
+    return new monaco.Position(this.startLineNumber, this.startColumn);
+  }
+
+  getStartPosition(): monaco.Position {
+    return new monaco.Position(this.startLineNumber, this.startColumn);
   }
 }
 
@@ -26,13 +62,15 @@ export interface IRange {
 
 export class MockTextModel {
   private value: string;
-  private listeners: ((e: any) => void)[] = [];
+  private listeners: ((e: editor.IModelContentChangedEvent) => void)[] = [];
 
   constructor(initialValue: string = "") {
     this.value = initialValue;
   }
 
-  onDidChangeContent(listener: (e: any) => void): { dispose: () => void } {
+  onDidChangeContent(listener: (e: editor.IModelContentChangedEvent) => void): {
+    dispose: () => void;
+  } {
     this.listeners.push(listener);
     return {
       dispose: () => {
@@ -68,87 +106,51 @@ export class MockTextModel {
       versionId: 1,
       isUndoing: false,
       isRedoing: false,
+      isFlush: false,
+      isEolChange: false,
     });
   }
 
-  getPositionAt(offset: number): { lineNumber: number; column: number } {
+  getPositionAt(offset: number): monaco.Position {
     if (offset <= 0) {
-      return { lineNumber: 1, column: 1 };
+      return new monaco.Position(1, 1);
     }
-    if (offset >= this.value.length) {
-      return this.getLastPosition();
-    }
-
-    let lineNumber = 1;
-    let column = 1;
-    for (let i = 0; i < offset; i++) {
-      if (this.value[i] === "\n") {
-        lineNumber++;
-        column = 1;
-      } else {
-        column++;
-      }
-    }
-    return { lineNumber, column };
+    const textBefore = this.value.substring(0, offset);
+    const lines = textBefore.split("\n");
+    const lineNumber = lines.length;
+    const column = lines[lines.length - 1].length + 1;
+    return new monaco.Position(lineNumber, column);
   }
 
-  getOffsetAt(position: { lineNumber: number; column: number }): number {
-    if (position.lineNumber <= 0) {
-      return 0;
-    }
-
+  getOffsetAt(position: monaco.IPosition): number {
+    const lines = this.value.split("\n");
     let offset = 0;
-    let currentLine = 1;
-    let currentColumn = 1;
-
-    for (let i = 0; i < this.value.length; i++) {
-      if (
-        currentLine === position.lineNumber &&
-        currentColumn === position.column
-      ) {
-        return offset;
-      }
-
-      if (this.value[i] === "\n") {
-        currentLine++;
-        currentColumn = 1;
-      } else {
-        currentColumn++;
-      }
-
-      offset++;
+    for (let i = 0; i < position.lineNumber - 1; i++) {
+      offset += lines[i].length + 1;
     }
-
-    return offset;
+    offset += position.column - 1;
+    return Math.min(offset, this.value.length);
   }
 
-  getLastPosition(): { lineNumber: number; column: number } {
-    let lineNumber = 1;
-    let lastLineStart = 0;
-    for (let i = 0; i < this.value.length; i++) {
-      if (this.value[i] === "\n") {
-        lineNumber++;
-        lastLineStart = i + 1;
-      }
-    }
-    return {
-      lineNumber,
-      column: this.value.length - lastLineStart + 1,
-    };
+  getLastPosition(): monaco.Position {
+    const lines = this.value.split("\n");
+    const lineNumber = lines.length;
+    const column = lines[lines.length - 1].length + 1;
+    return new monaco.Position(lineNumber, column);
   }
 
   createFullModelRange(): IRange {
+    const lastPos = this.getLastPosition();
     return {
       startLineNumber: 1,
       startColumn: 1,
-      endLineNumber: this.getLastPosition().lineNumber,
-      endColumn: this.getLastPosition().column,
+      endLineNumber: lastPos.lineNumber,
+      endColumn: lastPos.column,
     };
   }
 
-  applyEdits(edits: any[]): void {
+  applyEdits(edits: editor.IIdentifiedSingleEditOperation[]): void {
     let newText = this.value;
-    // Apply edits in reverse order to avoid offset issues
     const sortedEdits = [...edits].sort((a, b) => {
       const rangeA = a.range;
       const rangeB = b.range;
@@ -170,12 +172,11 @@ export class MockTextModel {
 
       newText =
         newText.substring(0, startOffset) +
-        edit.text +
+        (edit.text || "") +
         newText.substring(endOffset);
     }
 
     if (newText !== this.value) {
-      const oldValue = this.value;
       this.value = newText;
       this.triggerContentChange({
         changes: edits.map((edit) => ({
@@ -199,17 +200,18 @@ export class MockTextModel {
         versionId: 1,
         isUndoing: false,
         isRedoing: false,
+        isFlush: false,
+        isEolChange: false,
       });
     }
   }
 
-  private triggerContentChange(event: any): void {
+  private triggerContentChange(event: editor.IModelContentChangedEvent): void {
     for (const listener of this.listeners) {
       listener(event);
     }
   }
 
-  // Simplified methods for testing
   getLineCount(): number {
     return this.value.split("\n").length;
   }
@@ -218,7 +220,6 @@ export class MockTextModel {
     return this.value.split("\n")[lineNumber - 1] || "";
   }
 
-  // Other methods as needed for tests
   getLinesContent(): string[] {
     return this.value.split("\n");
   }
@@ -229,15 +230,90 @@ export class MockTextModel {
     return 1;
   }
   dispose(): void {}
+  getFullModelRange(): monaco.Range {
+    const lastPos = this.getLastPosition();
+    return new monaco.Range(1, 1, lastPos.lineNumber, lastPos.column);
+  }
+  getWordAtPosition(
+    position: monaco.IPosition
+  ): monaco.editor.IWordAtPosition | null {
+    return null;
+  }
+  getWordUntilPosition(
+    position: monaco.IPosition
+  ): monaco.editor.IWordAtPosition {
+    return {
+      word: "",
+      startColumn: position.column,
+      endColumn: position.column,
+    };
+  }
+  findMatches(
+    searchString: string,
+    searchScope: any,
+    isRegex: boolean,
+    matchCase: boolean,
+    wordSeparators: string | null,
+    captureMatches: boolean,
+    limitResultCount?: number
+  ): monaco.editor.FindMatch[] {
+    return [];
+  }
+  findNextMatch(
+    searchString: string,
+    searchStart: monaco.IPosition,
+    isRegex: boolean,
+    matchCase: boolean,
+    wordSeparators: string | null,
+    captureMatches: boolean
+  ): monaco.editor.FindMatch | null {
+    return null;
+  }
+  findPreviousMatch(
+    searchString: string,
+    searchStart: monaco.IPosition,
+    isRegex: boolean,
+    matchCase: boolean,
+    wordSeparators: string | null,
+    captureMatches: boolean
+  ): monaco.editor.FindMatch | null {
+    return null;
+  }
+  getLineLength(lineNumber: number): number {
+    const lines = this.value.split("\n");
+    return lines[lineNumber - 1]?.length || 0;
+  }
+  getLineMaxColumn(lineNumber: number): number {
+    return this.getLineLength(lineNumber) + 1;
+  }
+  validatePosition(position: monaco.IPosition): monaco.Position {
+    return new monaco.Position(position.lineNumber, position.column);
+  }
+  normalizeIndentation(str: string): string {
+    return str;
+  }
+  pushStackElement(): void {}
+  pushEditOperations(
+    beforeCursorState: monaco.Selection[] | null,
+    editOperations: monaco.editor.IIdentifiedSingleEditOperation[],
+    cursorStateComputer: monaco.editor.ICursorStateComputer | null
+  ): monaco.Selection[] | null {
+    return null;
+  }
 }
 
 export class MockEditor {
   private decorations: string[] = [];
   private selections: Selection[] = [new Selection(1, 1, 1, 1)];
-  private model: MockTextModel = new MockTextModel("");
-  private cursorStateListeners: ((e: any) => void)[] = [];
-  private listeners: { [key: string]: Function[] } = {
+  public model: MockTextModel = new MockTextModel("");
+  private cursorStateListeners: ((
+    e: editor.ICursorPositionChangedEvent
+  ) => void)[] = [];
+  private listeners: { [key: string]: unknown[] } = {
     onDidChangeCursorPosition: [],
+    onDidChangeModelContent: [],
+    onDidFocusEditorText: [],
+    onDidBlurEditorText: [],
   };
 
   constructor(initialContent: string = "") {
@@ -248,59 +324,108 @@ export class MockEditor {
     return this.model;
   }
 
-  setModel(model: MockTextModel | null): void {
-    if (model) {
-      this.model = model;
-    }
+  getPosition(): monaco.Position | null {
+    const sel = this.getSelection();
+    return sel ? sel.getPosition() : new monaco.Position(1, 1);
+  }
+
+  getSelection(): Selection | null {
+    return this.selections[0] || null;
   }
 
   getSelections(): Selection[] {
     return this.selections;
   }
 
-  setSelections(selections: Selection[]): void {
-    this.selections = selections;
+  setSelections(selections: monaco.ISelection[]): void {
+    this.selections = selections.map(
+      (s) =>
+        new Selection(
+          s.selectionStartLineNumber,
+          s.selectionStartColumn,
+          s.positionLineNumber,
+          s.positionColumn
+        )
+    );
     this.notifyCursorPositionChanged();
   }
 
-  saveViewState(): any {
-    return { cursorState: this.selections };
+  setSelection(selection: monaco.ISelection): void {
+    this.setSelections([selection]);
   }
 
-  restoreViewState(state: any): void {
+  saveViewState(): editor.ICodeEditorViewState | null {
+    return null;
+  }
+
+  restoreViewState(state: editor.ICodeEditorViewState | null): void {
     if (state && state.cursorState) {
-      this.selections = state.cursorState;
+      this.selections = state.cursorState.map(
+        (cs) =>
+          new Selection(
+            cs.selectionStart.lineNumber,
+            cs.selectionStart.column,
+            cs.position.lineNumber,
+            cs.position.column
+          )
+      );
     }
   }
 
-  onDidChangeCursorPosition(listener: (e: any) => void): {
-    dispose: () => void;
-  } {
-    this.cursorStateListeners.push(listener);
+  onDidChangeCursorPosition(
+    listener: (e: editor.ICursorPositionChangedEvent) => void
+  ): { dispose: () => void } {
+    const key = "onDidChangeCursorPosition";
+    if (!this.listeners[key]) {
+      this.listeners[key] = [];
+    }
+    (
+      this.listeners[key] as Array<
+        (e: editor.ICursorPositionChangedEvent) => void
+      >
+    ).push(listener);
     return {
       dispose: () => {
-        const index = this.cursorStateListeners.indexOf(listener);
-        if (index !== -1) {
-          this.cursorStateListeners.splice(index, 1);
+        if (this.listeners[key]) {
+          this.listeners[key] = (
+            this.listeners[key] as Array<
+              (e: editor.ICursorPositionChangedEvent) => void
+            >
+          ).filter((l) => l !== listener);
         }
       },
     };
   }
 
   private notifyCursorPositionChanged(): void {
-    for (const listener of this.cursorStateListeners) {
-      listener({ position: this.selections[0].getPosition() });
+    const key = "onDidChangeCursorPosition";
+    if (this.listeners[key]) {
+      const selection = this.getSelection();
+      const currentPosition = selection
+        ? selection.getPosition()
+        : new monaco.Position(1, 1);
+      const eventArg: editor.ICursorPositionChangedEvent = {
+        position: currentPosition,
+        reason: monaco.editor.CursorChangeReason.Explicit,
+        secondaryPositions: [],
+        source: "mock",
+      };
+      (
+        this.listeners[key] as Array<
+          (e: editor.ICursorPositionChangedEvent) => void
+        >
+      ).forEach((listener) => listener(eventArg));
     }
   }
 
   pushEditOperations(
-    _selection: Selection | null,
+    _selection: monaco.Selection[] | null,
     editOperations: monaco.editor.IIdentifiedSingleEditOperation[],
-    _beforeCursorState: Selection[] | null
+    _beforeCursorState:
+      | ((ids: string[] | null) => monaco.Selection[] | null)
+      | null
   ): null {
-    editOperations.forEach((op) => {
-      this.model.applyEdits([op]);
-    });
+    this.model.applyEdits(editOperations);
     return null;
   }
 
@@ -312,25 +437,53 @@ export class MockEditor {
     this.model.setValue(content);
   }
 
-  // Add more methods as needed...
-  // These are placeholders for the IStandaloneCodeEditor interface
   layout(): void {}
   focus(): void {}
   getEditorType(): string {
-    return "standalone";
+    return "mock";
   }
-  dispose(): void {}
+  dispose(): void {
+    Object.keys(this.listeners).forEach((key) => (this.listeners[key] = []));
+    this.cursorStateListeners = [];
+  }
   onDidChangeModelContent(
     listener: (e: editor.IModelContentChangedEvent) => void
   ): { dispose: () => void } {
-    return this.model.onDidChangeContent(listener);
+    const key = "onDidChangeModelContent";
+    if (!this.listeners[key]) {
+      this.listeners[key] = [];
+    }
+    (
+      this.listeners[key] as Array<
+        (e: editor.IModelContentChangedEvent) => void
+      >
+    ).push(listener);
+    return {
+      dispose: () => {
+        if (this.listeners[key]) {
+          this.listeners[key] = (
+            this.listeners[key] as Array<
+              (e: editor.IModelContentChangedEvent) => void
+            >
+          ).filter((l) => l !== listener);
+        }
+      },
+    };
   }
-  updateOptions(): void {}
-  getOptions(): any {
-    return {};
+  updateOptions(newOptions: editor.IEditorOptions): void {}
+  getOptions(): editor.IComputedEditorOptions {
+    return {
+      get: <T extends editor.EditorOption>(
+        _id: T
+      ): editor.FindComputedEditorOptionValueById<T> => {
+        // This is a simplified mock. Real implementation would look up default values.
+        // For example: if (_id === editor.EditorOption.tabSize) return 4 as any;
+        return undefined as editor.FindComputedEditorOptionValueById<T>;
+      },
+    } as editor.IComputedEditorOptions; // Cast to satisfy the interface
   }
-  getConfiguration(): any {
-    return {};
+  getConfiguration(): editor.IEditorOptions {
+    return { lineNumbers: "on" } as editor.IEditorOptions; // Minimal mock
   }
   getContentHeight(): number {
     return 0;
@@ -347,68 +500,143 @@ export class MockEditor {
   getScrollTop(): number {
     return 0;
   }
-  setScrollLeft(): void {}
-  setScrollTop(): void {}
-  setScrollPosition(): void {}
-  getAction(): any {
+  setScrollLeft(newScrollLeft: number): void {}
+  setScrollTop(newScrollTop: number): void {}
+  setScrollPosition(position: Partial<editor.INewScrollPosition>): void {}
+  getAction(actionId: string): editor.IEditorAction | null {
     return null;
   }
-  executeCommand(): void {}
-  executeEdits(): boolean {
+  executeCommand(
+    source: string | null | undefined,
+    command: editor.ICommand
+  ): void {}
+  executeEdits(
+    source: string | null | undefined,
+    edits: editor.IIdentifiedSingleEditOperation[],
+    endCursorState?:
+      | monaco.Selection[]
+      | ((
+          inverseEditOperations: editor.IValidEditOperation[]
+        ) => monaco.Selection[] | null)
+  ): boolean {
     return true;
   }
-  trigger(): void {}
+  trigger(
+    source: string | null | undefined,
+    handlerId: string,
+    payload: any
+  ): void {}
   getContainerDomNode(): HTMLElement {
     return document.createElement("div");
   }
   getDomNode(): HTMLElement | null {
     return document.createElement("div");
   }
-  addAction(): any {
+  addAction(descriptor: editor.IActionDescriptor): monaco.IDisposable {
     return { dispose: () => {} };
   }
-  createContextKey(): any {
-    return { set: () => {} };
+  createContextKey<
+    T extends monaco.editor.ContextKeyValue = monaco.editor.ContextKeyValue
+  >(key: string, defaultValue: T | undefined): monaco.editor.IContextKey<T> {
+    return {
+      get: () => defaultValue,
+      set: () => {},
+      reset: () => {},
+    } as monaco.editor.IContextKey<T>;
   }
-  addCommand(): any {
+  addCommand(
+    commandId: string,
+    handler: (...args: any[]) => void,
+    keybindings?: number | number[]
+  ): monaco.IDisposable | null {
     return { dispose: () => {} };
-  }
-  addEditorAction(): any {
+  } // keybindings can be number[]
+  addEditorAction(action: editor.IEditorAction): monaco.IDisposable {
     return { dispose: () => {} };
   }
   hasTextFocus(): boolean {
-    return false;
+    return true;
   }
   hasWidgetFocus(): boolean {
     return false;
   }
   getId(): string {
-    return "mock-editor";
+    return "mockEditor";
   }
-  getPosition(): any {
-    return null;
-  }
-  revealLine(): void {}
-  revealLineInCenter(): void {}
-  revealLineInCenterIfOutsideViewport(): void {}
-  revealLineNearTop(): void {}
-  revealPosition(): void {}
-  revealPositionInCenter(): void {}
-  revealPositionInCenterIfOutsideViewport(): void {}
-  revealPositionNearTop(): void {}
-  getVisibleRanges(): any[] {
+  revealLine(lineNumber: number, scrollType?: editor.ScrollType): void {}
+  revealLineInCenter(
+    lineNumber: number,
+    scrollType?: editor.ScrollType
+  ): void {}
+  revealLineInCenterIfOutsideViewport(
+    lineNumber: number,
+    scrollType?: editor.ScrollType
+  ): void {}
+  revealLineNearTop(lineNumber: number, scrollType?: editor.ScrollType): void {}
+  revealPosition(
+    position: monaco.IPosition,
+    scrollType?: editor.ScrollType
+  ): void {}
+  revealPositionInCenter(
+    position: monaco.IPosition,
+    scrollType?: editor.ScrollType
+  ): void {}
+  revealPositionInCenterIfOutsideViewport(
+    position: monaco.IPosition,
+    scrollType?: editor.ScrollType
+  ): void {}
+  revealPositionNearTop(
+    position: monaco.IPosition,
+    scrollType?: editor.ScrollType
+  ): void {}
+  getVisibleRanges(): monaco.Range[] {
     return [];
   }
   hasPendingActions(): boolean {
     return false;
   }
-  getScrolledVisiblePosition(): any {
+  getScrolledVisiblePosition(
+    position: monaco.IPosition
+  ): { top: number; left: number; height: number } | null {
     return null;
   }
-  applyFontInfo(): void {}
+  applyFontInfo(target: HTMLElement): void {}
+
+  onDidFocusEditorText(listener: () => void): monaco.IDisposable {
+    const key = "onDidFocusEditorText";
+    if (!this.listeners[key]) {
+      this.listeners[key] = [];
+    }
+    (this.listeners[key] as Array<() => void>).push(listener);
+    return {
+      dispose: () => {
+        if (this.listeners[key]) {
+          this.listeners[key] = (
+            this.listeners[key] as Array<() => void>
+          ).filter((l) => l !== listener);
+        }
+      },
+    };
+  }
+
+  onDidBlurEditorText(listener: () => void): monaco.IDisposable {
+    const key = "onDidBlurEditorText";
+    if (!this.listeners[key]) {
+      this.listeners[key] = [];
+    }
+    (this.listeners[key] as Array<() => void>).push(listener);
+    return {
+      dispose: () => {
+        if (this.listeners[key]) {
+          this.listeners[key] = (
+            this.listeners[key] as Array<() => void>
+          ).filter((l) => l !== listener);
+        }
+      },
+    };
+  }
 }
 
-// Mock the editor export structure
 export const editorMock = {
   IModelContentChangedEvent: {},
   ITextModel: {},
@@ -417,7 +645,6 @@ export const editorMock = {
   IIdentifiedSingleEditOperation: {},
 };
 
-// Make default export match structure expected by imports
 export default {
   editor: editorMock,
   Selection,

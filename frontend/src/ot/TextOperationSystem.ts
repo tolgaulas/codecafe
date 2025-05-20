@@ -206,8 +206,8 @@ export class TextOperation {
     }
 
     let operation = new TextOperation(); // the combined operation
-    let ops1 = operation1.ops;
-    let ops2 = operation2.ops;
+    const ops1 = operation1.ops;
+    const ops2 = operation2.ops;
     let i1 = 0,
       i2 = 0; // current index into ops1/ops2
     let op1 = ops1[i1++];
@@ -336,8 +336,8 @@ export class TextOperation {
 
     let operation1prime = new TextOperation();
     let operation2prime = new TextOperation();
-    let ops1 = operation1.ops;
-    let ops2 = operation2.ops;
+    const ops1 = operation1.ops;
+    const ops2 = operation2.ops;
     let i1 = 0,
       i2 = 0;
     let op1 = ops1[i1++];
@@ -430,8 +430,8 @@ export class TextOperation {
         }
         operation1prime.delete(minLength);
       } else if (TextOperation.isRetain(op1) && TextOperation.isDelete(op2)) {
-        let op1Retain = op1 as number;
-        let op2Delete = op2 as number;
+        const op1Retain = op1 as number;
+        const op2Delete = op2 as number;
         if (op1Retain > -op2Delete) {
           minLength = -op2Delete;
           op1 = op1Retain + op2Delete;
@@ -712,10 +712,10 @@ export class MonacoAdapter {
     this.callbacks = cb;
   }
 
-  trigger(event: keyof MonacoAdapterEvents, ...args: any[]): void {
+  trigger(event: keyof MonacoAdapterEvents, ...args: unknown[]): void {
     const action = this.callbacks[event];
     if (action) {
-      (action as (...a: any[]) => void).apply(null, args);
+      (action as (...a: unknown[]) => void)(...args);
     }
   }
 
