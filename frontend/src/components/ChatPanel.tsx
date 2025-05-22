@@ -91,7 +91,7 @@ const ChatPanel = ({
             }
             disabled={!isSessionActive}
             style={{ height: "36px" }}
-            className={`w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm leading-4 focus:outline-none focus:border-stone-500 pr-10 resize-none overflow-y-auto box-border ${
+            className={`w-full bg-stone-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-3 py-2 text-sm leading-4 focus:outline-none focus:border-stone-500 pr-10 resize-none overflow-y-auto box-border rounded-sm ${
               !isSessionActive ? "opacity-50 cursor-not-allowed" : ""
             }`}
             rows={1}

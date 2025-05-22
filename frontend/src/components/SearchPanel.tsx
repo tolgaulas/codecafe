@@ -90,7 +90,7 @@ const SearchPanel = ({
             placeholder="Search"
             value={localSearchTerm}
             onChange={handleSearchInputChange}
-            className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
+            className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-24 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7 rounded-sm"
           />
           <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center space-x-0.5">
             <button
@@ -135,7 +135,7 @@ const SearchPanel = ({
               placeholder="Replace"
               value={replaceValue}
               onChange={handleReplaceInputChange}
-              className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7"
+              className="w-full bg-stone-900/80 border border-stone-600 text-stone-200 placeholder-stone-500 pl-3 pr-8 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors h-7 rounded-sm"
             />
             {/* Preserve Case Button */}
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">
