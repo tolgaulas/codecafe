@@ -67,7 +67,7 @@ const JoinSessionPanel = ({
               value={userName}
               onChange={onNameChange}
               placeholder="Enter your name"
-              className="w-full bg-neutral-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-2 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors"
+              className="w-full bg-neutral-800 border border-stone-600 text-stone-200 placeholder-stone-500 px-2 py-1 text-sm focus:outline-none focus:border-stone-500 transition-colors rounded-sm"
             />
           </div>
         </div>

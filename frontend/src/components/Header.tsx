@@ -272,7 +272,7 @@ const Header = ({
                     <p className="text-sm text-stone-400 text-left mb-1">
                       Share this link:
                     </p>
-                    <div className="flex items-stretch gap-2 bg-neutral-900 border border-stone-700">
+                    <div className="flex items-stretch gap-2 bg-neutral-900 border border-stone-700 rounded-sm">
                       <input
                         type="text"
                         readOnly
