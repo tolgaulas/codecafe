@@ -82,7 +82,7 @@ const SearchPanel = ({
         SEARCH
       </div>
       {/* Input Container */}
-      <div className="p-2 flex flex-col space-y-1">
+      <div className="pl-4 py-2 flex flex-col space-y-1 pr-2">
         {/* Search Input Row */}
         <div className="relative flex items-center">
           <input

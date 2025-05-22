@@ -11,7 +11,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
 
   return (
     <div className="py-3 border-b border-stone-600 hover:bg-stone-800/40">
-      <div className="pl-4 pr-4">
+      <div className="pl-4 pr-2">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center">
             {/* User Avatar/Icon */}
