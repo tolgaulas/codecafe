@@ -230,7 +230,9 @@ const App = () => {
     togglePanel: toggleWebViewPanel,
     isCollapsed: isWebViewCollapsed,
   } = useResizablePanel({
-    initialSize: 0,
+    initialSize: () =>
+      (mainContentRef.current?.offsetWidth ?? window.innerWidth * 0.85) *
+      DEFAULT_WEBVIEW_WIDTH_FRACTION,
     minSize: MIN_WEBVIEW_WIDTH,
     maxSize: initialMaxWebViewWidth,
     direction: "horizontal-right",
@@ -383,13 +385,20 @@ const App = () => {
   };
 
   const handleRunCode = async () => {
+    const activeFile = openFiles.find((f) => f.id === activeFileId);
+    if (activeFile && activeFile.language === "html") {
+      if (isWebViewCollapsed) {
+        toggleWebViewPanel();
+      }
+      return; // Don't execute HTML, just show it in the webview
+    }
+
     try {
       if (!activeFileId) {
         terminalRef.current?.writeToTerminal("No active file to run.\n");
         return;
       }
 
-      const activeFile = openFiles.find((f) => f.id === activeFileId);
       const contentToRun = fileContents[activeFileId];
 
       if (!activeFile || contentToRun === undefined) {
