@@ -18,7 +18,6 @@ RUN npm ci
 COPY . .
 
 # Build the application
-# VITE_BACKEND_URL will now be available to this script
 RUN npm run build
 
 # Production image

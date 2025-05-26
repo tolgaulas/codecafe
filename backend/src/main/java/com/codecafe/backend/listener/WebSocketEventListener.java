@@ -14,14 +14,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import org.springframework.web.socket.messaging.SessionSubscribeEvent;
-import org.springframework.messaging.MessageHeaders; // Import MessageHeaders
-import org.springframework.data.redis.core.StringRedisTemplate; // Import StringRedisTemplate
-import org.springframework.data.redis.core.SetOperations; // Import SetOperations
+import org.springframework.messaging.MessageHeaders; 
+import org.springframework.data.redis.core.StringRedisTemplate; 
+import org.springframework.data.redis.core.SetOperations; 
 import java.security.Principal;
 import java.util.List;
-import java.util.Map;
-import java.util.Set; // Import Set
-import java.util.Collections; // Import Collections
+import java.util.Set; 
+import java.util.Collections; 
 
 @Component
 public class WebSocketEventListener {
@@ -31,7 +30,7 @@ public class WebSocketEventListener {
     private final SessionRegistryService sessionRegistryService;
     private final SimpMessagingTemplate messagingTemplate;
     private final OtService otService;
-    private final StringRedisTemplate stringRedisTemplate; // Inject StringRedisTemplate
+    private final StringRedisTemplate stringRedisTemplate; 
     private final SetOperations<String, String> setOperations;
 
     private static final String USER_ACTIVE_DOCS_KEY_PREFIX = "user:active_docs:"; // Match prefix in EditorController
@@ -45,7 +44,7 @@ public class WebSocketEventListener {
         this.messagingTemplate = messagingTemplate;
         this.otService = otService;
         this.stringRedisTemplate = stringRedisTemplate;
-        this.setOperations = stringRedisTemplate.opsForSet(); // Initialize SetOperations
+        this.setOperations = stringRedisTemplate.opsForSet(); 
     }
 
     // Helper to get the tracking key for a user
@@ -97,13 +96,8 @@ public class WebSocketEventListener {
                 activeDocuments = setOperations.members(trackingKey);
             } catch (Exception e) {
                 log.error("Redis error retrieving active documents for user [{}], key [{}]: {}", userId, trackingKey, e.getMessage(), e);
-                 // If we can't retrieve the set, we cannot proceed with targeted removal.
-                 // Optionally fall back to scanning or log a warning.
                  log.warn("Could not retrieve active documents for user [{}], unable to perform targeted cleanup.", userId);
-                 // NOTE: Depending on requirements, you might want to fall back to userLeftAllSessions here,
-                 // or accept that cleanup might be missed if Redis is temporarily unavailable.
-                 // For now, we just log and exit this block.
-                 activeDocuments = Collections.emptySet(); // Ensure it's not null
+                 activeDocuments = Collections.emptySet(); 
             }
 
             if (activeDocuments != null && !activeDocuments.isEmpty()) {
@@ -138,7 +132,6 @@ public class WebSocketEventListener {
                      }
                  });
 
-                 // After processing all documents, remove the tracking key
                  try {
                      stringRedisTemplate.delete(trackingKey);
                      log.info("Deleted user tracking set '{}' for user [{}]", trackingKey, userId);
