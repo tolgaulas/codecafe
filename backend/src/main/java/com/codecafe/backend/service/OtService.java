@@ -24,8 +24,6 @@ import java.util.logging.Level;
 public class OtService {
     private static final Logger logger = Logger.getLogger(OtService.class.getName());
     private static final int MAX_HISTORY_SIZE_PER_DOC = 500; // Reduced history size
-    private static final String DOC_CONTENT_KEY_PREFIX = "doc:content:";
-    private static final String DOC_HISTORY_KEY_PREFIX = "doc:history:";
 
     // Format for keys using hash tags for Redis Cluster compatibility
     private static final String CLUSTER_KEY_FORMAT = "doc:{%s}:%s:%s"; // {sessionId} is the hash tag
@@ -206,26 +204,26 @@ public class OtService {
     }
 
     /** Prunes the operation history list in Redis for a specific document if it exceeds the maximum size */
-    private void pruneHistory(String sessionId, String documentId) {
-        String historyKey = getHistoryKey(sessionId, documentId);
-        try {
-            Long currentSize = historyListOperations.size(historyKey);
-            if (currentSize != null && currentSize > MAX_HISTORY_SIZE_PER_DOC) {
-                 long keepCount = MAX_HISTORY_SIZE_PER_DOC / 2;
-                 long startIndex = -keepCount;
-                 long endIndex = -1;
+    // private void pruneHistory(String sessionId, String documentId) {
+    //     String historyKey = getHistoryKey(sessionId, documentId);
+    //     try {
+    //         Long currentSize = historyListOperations.size(historyKey);
+    //         if (currentSize != null && currentSize > MAX_HISTORY_SIZE_PER_DOC) {
+    //              long keepCount = MAX_HISTORY_SIZE_PER_DOC / 2;
+    //              long startIndex = -keepCount;
+    //              long endIndex = -1;
 
-                 historyListOperations.trim(historyKey, startIndex, endIndex);
-                 long removedCount = currentSize - keepCount;
+    //              historyListOperations.trim(historyKey, startIndex, endIndex);
+    //              long removedCount = currentSize - keepCount;
 
-                 logger.info(String.format("[Session: %s, Doc: %s] Pruned Redis history list [%s]. Removed approx %d ops. Aiming for size ~%d",
-                         sessionId, documentId, historyKey, removedCount, keepCount));
-            }
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Redis error pruning history list [%s]: %s",
-                    sessionId, documentId, historyKey, e.getMessage()), e);
-        }
-    }
+    //              logger.info(String.format("[Session: %s, Doc: %s] Pruned Redis history list [%s]. Removed approx %d ops. Aiming for size ~%d",
+    //                      sessionId, documentId, historyKey, removedCount, keepCount));
+    //         }
+    //     } catch (Exception e) {
+    //         logger.log(Level.SEVERE, String.format("[Session: %s, Doc: %s] Redis error pruning history list [%s]: %s",
+    //                 sessionId, documentId, historyKey, e.getMessage()), e);
+    //     }
+    // }
 
     /**
      * Sets the document content directly in Redis and clears its history list.

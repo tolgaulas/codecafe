@@ -23,10 +23,10 @@ public class SessionRegistryService {
 
     private static final Logger logger = Logger.getLogger(SessionRegistryService.class.getName());
     private static final String SESSION_USERS_KEY_PREFIX = "session:users:";
-    private static final long SESSION_EXPIRY_MINUTES = 60; // Example: Expire inactive sessions after 60 minutes
+    private static final long SESSION_EXPIRY_MINUTES = 60; 
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final HashOperations<String, String, UserInfoDTO> hashOperations; // Specific HashOperations
+    private final HashOperations<String, String, UserInfoDTO> hashOperations; 
 
     @Autowired
     public SessionRegistryService(RedisTemplate<String, Object> redisTemplate) {
@@ -39,7 +39,6 @@ public class SessionRegistryService {
         return SESSION_USERS_KEY_PREFIX + sessionId + ":" + documentId;
     }
 
-    // Method to touch a key (update its TTL)
     private void touchKey(String key) {
         redisTemplate.expire(key, SESSION_EXPIRY_MINUTES, TimeUnit.MINUTES);
     }
@@ -269,7 +268,6 @@ public class SessionRegistryService {
         return affectedEntries;
     }
 
-    // Remove or comment out the old helper methods and logSessionState if they aren't needed
     /*
     private Map<String, Map<String, UserInfoDTO>> getOrCreateSessionMap(String sessionId) { ... }
     private Map<String, UserInfoDTO> getOrCreateDocumentUserMap(String sessionId, String documentId) { ... }

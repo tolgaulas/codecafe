@@ -67,11 +67,11 @@ public class OtController {
             // Prepare the payload for broadcasting
             Map<String, Object> broadcastPayload = new HashMap<>();
             broadcastPayload.put("documentId", documentId);
-            broadcastPayload.put("clientId", clientId); // The ID of the client who sent the original operation
-            broadcastPayload.put("operation", transformedOp.getOps()); // The transformed operation
+            broadcastPayload.put("clientId", clientId); 
+            broadcastPayload.put("operation", transformedOp.getOps());
             broadcastPayload.put("sessionId", sessionId);
 
-            // Include selection and cursor position if they were provided in the incoming payload
+
             if (payload.getSelection() != null) {
                 broadcastPayload.put("selection", payload.getSelection());
             }
@@ -91,10 +91,8 @@ public class OtController {
 
         } catch (IllegalArgumentException e) {
             logger.warning(String.format("Error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
-            // Consider sending an error message back to the client
         } catch (Exception e) {
             logger.severe(String.format("Unexpected error processing operation from client [%s] for session [%s], doc [%s]: %s", clientId, sessionId, documentId, e.getMessage()));
-             // Log the stack trace for unexpected errors
             e.printStackTrace();
         }
     }
@@ -114,12 +112,11 @@ public class OtController {
 
         logger.warning("Received message on deprecated /selection endpoint. Selection should be bundled with /operation. Payload: " + payload);
 
-        // Optionally, you could still process it as before, but it's redundant
+
         // String clientId = payload.getClientId();
         // String documentId = payload.getDocumentId();
         // ... (rest of the old logic) ...
 
-        // Or just do nothing
     }
 
     /**
@@ -150,7 +147,6 @@ public class OtController {
         // Fetch Participants
         List<UserInfoDTO> participants = Collections.emptyList(); 
         try {
-            // Fetch participants, excluding the requester if known (null means fetch all)
             participants = sessionRegistryService.getActiveParticipantsForDocument(sessionId, documentId, null);
             logger.info(String.format("Fetched %d participants for session [%s], document [%s]", participants.size(), sessionId, documentId));
 
@@ -159,7 +155,7 @@ public class OtController {
         }
 
         DocumentState stateResponse = new DocumentState();
-        stateResponse.setSessionId(sessionId); // Also include sessionId in the response
+        stateResponse.setSessionId(sessionId); 
         stateResponse.setDocumentId(documentId);
         stateResponse.setDocument(otService.getDocumentContent(sessionId, documentId));
         stateResponse.setRevision(otService.getRevision(sessionId, documentId));

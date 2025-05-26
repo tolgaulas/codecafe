@@ -21,7 +21,7 @@ public class TextOperation {
     private int baseLength;
     private int targetLength;
 
-    // --- Helper static methods for op types ---
+    // Helper static methods for op types
 
     public static boolean isRetain(Object op) {
         return op instanceof Integer && (Integer) op > 0;
