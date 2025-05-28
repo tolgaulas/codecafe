@@ -141,7 +141,7 @@ CodeCafé uses GitHub Actions for continuous integration and deployment:
 
 ## License
 
-CodeCafé is licensed under the GNU Affero General Public License v3.0.
+CodeCafé is open-sourced under the [MIT License](https://opensource.org/licenses/MIT).
 
 ---
 
