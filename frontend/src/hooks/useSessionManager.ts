@@ -15,8 +15,6 @@ export interface SessionManagerHookProps {
   setActiveIcon: (icon: string | null) => void;
   explorerPanelSize: number;
   setExplorerPanelSize: (size: number) => void;
-  isExplorerCollapsed: boolean;
-  toggleExplorerPanel: () => void;
   // userId: string;
 }
 
@@ -50,8 +48,6 @@ export const useSessionManager = ({
   setActiveIcon,
   explorerPanelSize,
   setExplorerPanelSize,
-  isExplorerCollapsed,
-  toggleExplorerPanel,
 }: SessionManagerHookProps): SessionManagerHookResult => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
@@ -185,21 +181,14 @@ export const useSessionManager = ({
       joinState === "joined" &&
       !hasShownInitialParticipants
     ) {
-      if (isExplorerCollapsed) {
-        toggleExplorerPanel();
-      }
-      // Delay showing participants to give collaboration hook time
-      setTimeout(() => {
-        setActiveIcon("share");
-        setHasShownInitialParticipants(true);
-      }, 150);
+      // Close the sidebar after joining instead of opening participants panel
+      setActiveIcon(null);
+      setHasShownInitialParticipants(true);
     }
   }, [
     isSessionActive,
     joinState,
     hasShownInitialParticipants,
-    isExplorerCollapsed,
-    toggleExplorerPanel,
     setActiveIcon,
     setHasShownInitialParticipants,
   ]);
