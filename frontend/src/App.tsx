@@ -159,8 +159,6 @@ const App = () => {
     setActiveIcon,
     explorerPanelSize,
     setExplorerPanelSize,
-    isExplorerCollapsed,
-    toggleExplorerPanel,
   });
 
   // Generic function to set active icon for simple panels (files, search, chat etc.)
