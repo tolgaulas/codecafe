@@ -229,6 +229,7 @@ const App = () => {
     handleMouseDown: handleWebViewPanelMouseDown,
     togglePanel: toggleWebViewPanel,
     isCollapsed: isWebViewCollapsed,
+    setSize: setWebViewPanelSize,
   } = useResizablePanel({
     initialSize: () =>
       (mainContentRef.current?.offsetWidth ?? window.innerWidth * 0.85) *
@@ -243,6 +244,14 @@ const App = () => {
       (mainContentRef.current?.offsetWidth ?? window.innerWidth * 0.85) *
       DEFAULT_WEBVIEW_WIDTH_FRACTION,
   });
+
+  // Effect to handle WebView state during prompting
+  useEffect(() => {
+    if (joinState === "prompting" && !isWebViewCollapsed) {
+      // Collapse WebView when entering prompting state
+      setWebViewPanelSize(0);
+    }
+  }, [joinState, isWebViewCollapsed, setWebViewPanelSize]);
 
   const { sendChatMessage } = useCollaborationSession({
     sessionId,
@@ -387,7 +396,8 @@ const App = () => {
   const handleRunCode = async () => {
     const activeFile = openFiles.find((f) => f.id === activeFileId);
     if (activeFile && activeFile.language === "html") {
-      if (isWebViewCollapsed) {
+      // Don't auto-open WebView during prompting state
+      if (joinState !== "prompting" && isWebViewCollapsed) {
         toggleWebViewPanel();
       }
       return; // Don't execute HTML, just show it in the webview
