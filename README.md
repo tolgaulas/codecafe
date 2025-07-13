@@ -58,79 +58,29 @@ Our implementation handles the complex synchronization challenges of collaborati
 
 This enables truly fluid, Google Docs-like collaboration where everyone can type simultaneously without stepping on each other's toes.
 
+## CI/CD Pipeline
+
+CodeCafé features a fully automated CI/CD pipeline built with GitHub Actions:
+
+- **Continuous Integration:** Automated testing for both frontend and backend on every pull request and push
+- **Continuous Deployment:** Automatic deployment to production (AWS EC2 + Vercel) when changes are merged to main
+- **Quality Assurance:** Ensures code quality and prevents regressions before deployment
+
+This enables rapid, reliable development cycles while maintaining production stability.
+
 ## Quick Start
 
-### Option 1: Using Docker (Recommended)
-
-The easiest way to get started with CodeCafé is to use Docker:
+Want to try CodeCafé locally? The easiest way is with Docker:
 
 ```bash
-# Clone the repo
 git clone https://github.com/mrktsm/codecafe.git
 cd codecafe
-
-# Start all services using Docker Compose
 docker-compose up
 ```
 
-Access the app in your browser at http://localhost:80
+Access the app at http://localhost:80
 
-### Option 2: Manual Setup
-
-**Prerequisites:** Git, Java JDK 23+, Maven, Node.js 18+, npm 9+, Redis Server
-
-**Setup and Run:**
-
-```bash
-# Clone the repo
-git clone https://github.com/mrktsm/codecafe.git
-cd codecafe
-
-# Start Redis (keep this running in a separate terminal or as a background service)
-redis-server &
-
-# Create backend config file with Redis connection
-mkdir -p backend/src/main/resources
-echo "spring.redis.host=localhost
-spring.redis.port=6379" > backend/src/main/resources/application.properties
-
-# Run the backend
-cd backend
-./mvnw install
-./mvnw spring-boot:run &
-
-# Create frontend config and run
-cd ../frontend
-echo "VITE_BACKEND_URL=http://localhost:8080" > .env
-npm install
-npm run dev
-```
-
-Access the app in your browser at the URL shown in terminal (typically http://localhost:5173).
-
-## CI/CD Pipeline
-
-CodeCafé uses GitHub Actions for continuous integration and deployment:
-
-- **CI Pipeline:** Automatically runs tests for both frontend and backend on every pull request and push to main/develop branches.
-- **CD Pipeline:** Automatically deploys:
-  - Backend to AWS EC2 when pushing to the main branch
-  - Frontend to Vercel when pushing to the main branch
-
-### Setting up CI/CD for your fork:
-
-1. **For AWS deployment:**
-
-   - Add the following secrets to your GitHub repository:
-     - `AWS_ACCESS_KEY_ID`
-     - `AWS_SECRET_ACCESS_KEY`
-     - `AWS_REGION`
-
-2. **For Vercel deployment:**
-   - Add the following secrets to your GitHub repository:
-     - `VERCEL_TOKEN`
-     - `VERCEL_ORG_ID`
-     - `VERCEL_PROJECT_ID`
+For detailed setup instructions, development guidelines, and contribution information, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## On the Horizon
 
@@ -139,10 +89,14 @@ CodeCafé uses GitHub Actions for continuous integration and deployment:
 - Session rewind & history playback
 - Expanded language support & tooling
 
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, guidelines, and how to get started.
+
 ## License
 
 CodeCafé is open-sourced under the [MIT License](https://opensource.org/licenses/MIT).
 
 ---
 
-_Making collaborative coding magic accessible to everyone._ ✨
+_Making collaborative coding magic accessible to everyone._
