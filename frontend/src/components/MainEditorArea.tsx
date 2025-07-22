@@ -192,7 +192,7 @@ const MainEditorArea = ({
           <div className="flex bg-stone-800 py-1 text-sm flex-shrink-0">
             <div className="px-4 py-1 text-stone-400 text-xs">TERMINAL</div>
           </div>
-          <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-hidden min-h-0">
+          <div className="flex-1 px-4 pt-2 font-mono text-sm overflow-y-auto min-h-0">
             <TerminalComponent ref={terminalRef} height={terminalPanelHeight} />
           </div>
         </div>
