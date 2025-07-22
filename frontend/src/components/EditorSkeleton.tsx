@@ -1,5 +1,3 @@
-import React from "react";
-
 const EditorSkeleton = () => {
   const lines = [
     { width: "w-32", indent: "ml-0" }, // import statement
@@ -35,7 +33,7 @@ const EditorSkeleton = () => {
         height: "100%",
       }}
     >
-      {/* Line numbers - matching Monaco's styling exactly */}
+      {/* Line numbers */}
       <div
         className="flex flex-col text-right select-none"
         style={{
@@ -54,7 +52,7 @@ const EditorSkeleton = () => {
         ))}
       </div>
 
-      {/* Code content - matching Monaco's content area */}
+      {/* Code content */}
       <div className="flex-1" style={{ padding: "0 0 0 12px" }}>
         {lines.map((line, index) => (
           <div
