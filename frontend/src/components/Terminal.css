@@ -9,13 +9,15 @@
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(121, 121, 121, 0); /* Invisible by default */
-  transition: background 0.1s ease-in-out;
+  transition: background 1s ease-in-out; /* VERY slow fade-out by default */
 }
 
 .terminal-container:hover .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(121, 121, 121, 0.4); /* Visible on hover */
+  transition: background 0.1s ease-in-out; /* Fast fade-in on hover */
 }
 
 .terminal-container:hover .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: rgba(121, 121, 121, 0.7); /* Darker on thumb hover */
+  transition: background 0.1s ease-in-out; /* Keep fade-in fast */
 }
