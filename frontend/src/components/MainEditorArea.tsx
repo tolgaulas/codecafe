@@ -9,6 +9,7 @@ import {
 } from "../types/editor";
 import { RemoteUser } from "../types/props";
 import CodeEditor from "./CodeEditor";
+import EditorSkeleton from "./EditorSkeleton";
 import TerminalComponent from "./TerminalComponent";
 import WebViewPanel from "./WebViewPanel";
 import FileTabs from "./FileTabs";
@@ -143,22 +144,26 @@ const MainEditorArea = ({
               Enter your details in the sidebar to join the session...
             </div>
           ) : activeFileId && openFiles.find((f) => f.id === activeFileId) ? (
-            <CodeEditor
-              theme="codeCafeTheme"
-              language={
-                editorLanguageMap[
-                  openFiles.find((f) => f.id === activeFileId)?.language ||
-                    "plaintext"
-                ]
-              }
-              showLineNumbers={true}
-              code={fileContents[activeFileId] ?? "// Loading..."}
-              onCodeChange={handleCodeChange}
-              onEditorDidMount={handleEditorDidMount}
-              users={currentRemoteUsers}
-              localUserId={localUserId}
-              isSessionActive={isSessionActive}
-            />
+            fileContents[activeFileId] !== undefined ? (
+              <CodeEditor
+                theme="codeCafeTheme"
+                language={
+                  editorLanguageMap[
+                    openFiles.find((f) => f.id === activeFileId)?.language ||
+                      "plaintext"
+                  ]
+                }
+                showLineNumbers={true}
+                code={fileContents[activeFileId]}
+                onCodeChange={handleCodeChange}
+                onEditorDidMount={handleEditorDidMount}
+                users={currentRemoteUsers}
+                localUserId={localUserId}
+                isSessionActive={isSessionActive}
+              />
+            ) : (
+              <EditorSkeleton />
+            )
           ) : (
             <div className="flex items-center justify-center h-full text-stone-500">
               Select a file to start editing.

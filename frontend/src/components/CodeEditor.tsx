@@ -3,6 +3,7 @@ import { Editor, loader, OnChange, OnMount } from "@monaco-editor/react";
 import { CodeEditorProps } from "../types/props";
 import * as monaco from "monaco-editor";
 import { THEMES } from "../constants/themes";
+import EditorSkeleton from "./EditorSkeleton";
 
 import { IDisposable } from "monaco-editor";
 import {
@@ -231,7 +232,7 @@ const CodeEditor = ({
         options={editorOptions}
         onMount={handleEditorDidMount}
         onChange={handleEditorChange}
-        loading={<div>Loading Editor...</div>}
+        loading={<EditorSkeleton />}
       />
     </div>
   );
