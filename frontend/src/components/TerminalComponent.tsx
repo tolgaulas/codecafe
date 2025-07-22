@@ -12,6 +12,7 @@ import { FitAddon } from "xterm-addon-fit";
 import { TerminalComponentProps } from "../types/props";
 import { ANSI_COLORS } from "../constants/terminal";
 import { TerminalHandle } from "../types/editor";
+import "./Terminal.css";
 
 const TerminalComponent = forwardRef<TerminalHandle, TerminalComponentProps>(
   (_, ref) => {
