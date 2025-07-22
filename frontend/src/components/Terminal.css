@@ -4,12 +4,12 @@
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-track {
-  background: transparent; /* Make track invisible */
+  background: transparent;
 }
 
 .terminal-container .xterm-viewport::-webkit-scrollbar-thumb {
   background: rgba(121, 121, 121, 0); /* Invisible by default */
-  transition: background 0.2s ease-in-out;
+  transition: background 0.1s ease-in-out;
 }
 
 .terminal-container:hover .xterm-viewport::-webkit-scrollbar-thumb {
