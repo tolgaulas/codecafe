@@ -16,7 +16,7 @@ A hyper-collaborative, real-time development environment right in your browser. 
 
 ![Untitled design (14)](https://github.com/user-attachments/assets/3f6875ac-58eb-4a57-8365-778e5a774304)
 
-[Click here to watch the demo video!](https://youtu.be/FL0qg1Uo-MQ?si=czYlT2vyO6qMIyL1)
+[Click here to see CodeCafé in action and learn how its OT works under the hood!](https://www.youtube.com/watch?v=NRYpmEbF7lk)
 
 ## Why CodeCafé?
 
