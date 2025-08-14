@@ -33,6 +33,29 @@ const EditorSkeleton = () => {
         height: "100%",
       }}
     >
+      <style>
+        {`
+          @keyframes shimmer {
+            0% {
+              background-position: -200px 0;
+            }
+            100% {
+              background-position: calc(200px + 100%) 0;
+            }
+          }
+          
+          .shimmer {
+            background: linear-gradient(
+              90deg,
+              #404040 0%,
+              #525252 50%,
+              #404040 100%
+            );
+            background-size: 200px 100%;
+            animation: shimmer 2s infinite;
+          }
+        `}
+      </style>
       {/* Line numbers */}
       <div
         className="flex flex-col text-right select-none"
@@ -46,7 +69,7 @@ const EditorSkeleton = () => {
         }}
       >
         {lines.map((_, index) => (
-          <div key={index} className="animate-pulse" style={{ height: "21px" }}>
+          <div key={index} style={{ height: "21px" }}>
             {index + 1}
           </div>
         ))}
@@ -62,14 +85,14 @@ const EditorSkeleton = () => {
           >
             {line.width !== "w-0" ? (
               <div
-                className={`${line.width} bg-neutral-700 rounded animate-pulse`}
+                className={`${line.width} shimmer rounded`}
                 style={{
-                  height: "12px",
+                  height: "15px",
                   transition: "opacity 0.2s ease-in-out",
                 }}
               ></div>
             ) : (
-              <div style={{ height: "12px" }}></div>
+              <div style={{ height: "15px" }}></div>
             )}
           </div>
         ))}
