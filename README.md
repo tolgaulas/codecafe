@@ -1,9 +1,8 @@
 # CodeCafé: Code Together, Instantly.
 
-![Build](https://img.shields.io/github/actions/workflow/status/mrktsm/codecafe/ci.yml?branch=main&label=build&style=for-the-badge&logo=github)
-![GitHub stars](https://img.shields.io/github/stars/mrktsm/codecafe?style=for-the-badge&logo=github&cacheSeconds=60)
-![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen?style=for-the-badge)
-![MIT License](https://img.shields.io/github/license/mrktsm/codecafe?style=for-the-badge&label=license)
+![Build](https://img.shields.io/github/actions/workflow/status/mrktsm/codecafe/ci.yml?branch=main&label=build&logo=github)
+![MIT License](https://img.shields.io/github/license/mrktsm/codecafe?label=license)
+![GitHub stars](https://img.shields.io/github/stars/mrktsm/codecafe?logo=github)
 
 A hyper-collaborative, real-time development environment right in your browser. CodeCafé makes pair programming, teaching, and building web projects together as fluid and instant as sharing a thought.
 
