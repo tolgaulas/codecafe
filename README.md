@@ -1,10 +1,10 @@
-# CodeCafé: Code Together, Instantly.
+## CodeCafé
 
 ![Build](https://img.shields.io/github/actions/workflow/status/mrktsm/codecafe/ci.yml?branch=main&label=build&logo=github)
 ![MIT License](https://img.shields.io/github/license/mrktsm/codecafe?label=license)
 ![GitHub stars](https://img.shields.io/github/stars/mrktsm/codecafe?logo=github)
 
-A hyper-collaborative, real-time development environment right in your browser. CodeCafé makes pair programming, teaching, and building web projects together as fluid and instant as sharing a thought.
+A real-time collaborative code editor that runs in your browser. Multiple users can edit the same files simultaneously with conflict resolution powered by operational transformation.
 
 [Try CodeCafé Live!](https://codecafe.app/)
 
@@ -17,16 +17,12 @@ A hyper-collaborative, real-time development environment right in your browser. 
 
 [Click here to see CodeCafé in action and learn how its OT works under the hood!](https://www.youtube.com/watch?v=NRYpmEbF7lk)
 
-## Why CodeCafé?
+## Features
 
-We saw coding classes juggling tools built for essays, not engineers. Existing solutions felt clunky for the dynamic nature of real-time programming. CodeCafé was born from the need for a seamless, browser-based coding space designed from the ground up for _true_ collaboration. Learn, teach, and build—together, instantly.
-
-## Core Features
-
-- **Pixel-Perfect Live Preview:** See your HTML, CSS, and JavaScript changes render _instantly_ in an integrated Web View. What you code is what you see!
-- **True Real-Time Collaboration:** Powered by Operational Transformation, multiple users can type in the same files simultaneously, with conflicts resolved seamlessly.
-- **VS Code Feel:** Enjoy a familiar, rich editing experience (via Monaco Editor) with syntax highlighting, smart suggestions, and error checking.
-- **Zero Setup:** Dive straight into coding. Everything runs in the browser.
+- **Live Preview:** HTML, CSS, and JavaScript changes render instantly in an integrated web view
+- **Real-Time Collaboration:** Multiple users can edit the same files simultaneously using operational transformation for conflict resolution
+- **Monaco Editor:** Full-featured code editor with syntax highlighting, autocomplete, and error checking
+- **Browser-Based:** No installation required - everything runs in your browser
 
 ## Tech Stack
 
@@ -97,5 +93,3 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deve
 CodeCafé is open-sourced under the [MIT License](https://opensource.org/licenses/MIT).
 
 ---
-
-_Making collaborative coding magic accessible to everyone._
