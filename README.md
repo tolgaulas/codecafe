@@ -91,5 +91,3 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deve
 ## License
 
 CodeCafé is open-sourced under the [MIT License](https://opensource.org/licenses/MIT).
-
----
