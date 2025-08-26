@@ -1,8 +1,8 @@
 services:
-  backend:
-    image: backend-app:latest
+  server:
+    image: server-app:latest
     build:
-      context: ./backend
+      context: ./server
       dockerfile: Dockerfile
     ports:
       - "8081:8080"
@@ -32,16 +32,16 @@ services:
       retries: 3
       start_period: 10s
 
-  frontend:
+  client:
     build:
-      context: ./frontend
+      context: ./client
       dockerfile: Dockerfile
       args:
         VITE_BACKEND_URL: "http://localhost:8081"
     ports:
       - "80:80"
     depends_on:
-      - backend
+      - server
     networks:
       - codecafe_network
     environment:

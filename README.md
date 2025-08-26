@@ -26,15 +26,15 @@ A real-time collaborative code editor that runs in your browser. Multiple users 
 
 ## Tech Stack
 
-- **Frontend:** React, TypeScript, Zustand (State Management), Tailwind CSS, Monaco Editor, Xterm.js (Integrated Terminal), Framer Motion, Axios, WebSocket Client
-- **Backend:** Java Spring Boot, WebSocket API, Jackson (JSON Processing)
+- **Client:** React, TypeScript, Zustand (State Management), Tailwind CSS, Monaco Editor, Xterm.js (Integrated Terminal), Framer Motion, Axios, WebSocket Client
+- **Server:** Java Spring Boot, WebSocket API, Jackson (JSON Processing)
 - **Real-time Collaboration:** Custom Operational Transformation (OT) Implementation
 - **State Management / Messaging:** Redis (AWS ElastiCache) utilizing Lua Scripting for atomic operations
-- **Hosting**: AWS EC2 (Backend), Vercel (Frontend), AWS ElastiCache (Redis)
+- **Hosting**: AWS EC2 (Server), Vercel (Client), AWS ElastiCache (Redis)
 
 ## Real-Time Collaboration with Operational Transformation
 
-At the heart of CodeCafé's seamless collaborative editing is our custom-built Operational Transformation (OT) system, implemented on both the frontend and backend.
+At the heart of CodeCafé's seamless collaborative editing is our custom-built Operational Transformation (OT) system, implemented on both the client and server.
 
 ### What is Operational Transformation?
 
@@ -57,7 +57,7 @@ This enables truly fluid, Google Docs-like collaboration where everyone can type
 
 CodeCafé features a fully automated CI/CD pipeline built with GitHub Actions:
 
-- **Continuous Integration:** Automated testing for both frontend and backend on every pull request and push
+- **Continuous Integration:** Automated testing for both client and server on every pull request and push
 - **Continuous Deployment:** Automatic deployment to production (AWS EC2 + Vercel) when changes are merged to main
 - **Quality Assurance:** Ensures code quality and prevents regressions before deployment
 
