@@ -7,7 +7,7 @@ on:
     branches: [main, develop]
 
 jobs:
-  server-test:
+  backend-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -20,10 +20,10 @@ jobs:
           cache: maven
 
       - name: Build and test with Maven
-        working-directory: ./server
+        working-directory: ./backend
         run: ./mvnw clean test
 
-  client-test:
+  frontend-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -33,22 +33,22 @@ jobs:
         with:
           node-version: "18"
           cache: "npm"
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./client
+        working-directory: ./frontend
         run: npm ci
 
       - name: Lint
-        working-directory: ./client
+        working-directory: ./frontend
         run: npm run lint
 
       - name: Test
-        working-directory: ./client
+        working-directory: ./frontend
         run: npm test
 
   docker-build:
-    needs: [server-test, client-test]
+    needs: [backend-test, frontend-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -69,8 +69,8 @@ jobs:
 
           echo "Building Docker images individually with verbose output:"
           docker compose build redis
-          docker compose build server
-          docker compose build client
+          docker compose build backend
+          docker compose build frontend
 
           echo "Starting Redis service:"
           docker compose up -d redis
@@ -78,17 +78,17 @@ jobs:
           docker compose ps redis
           docker compose logs redis
 
-          echo "Starting Server service:"
-          docker compose up -d server
+          echo "Starting Backend service:"
+          docker compose up -d backend
           sleep 10
-          docker compose ps server
-          docker compose logs server
+          docker compose ps backend
+          docker compose logs backend
 
-          echo "Starting Client service:"
-          docker compose up -d client
+          echo "Starting Frontend service:"
+          docker compose up -d frontend
           sleep 5
-          docker compose ps client
-          docker compose logs client
+          docker compose ps frontend
+          docker compose logs frontend
 
           echo "All container status:"
           docker compose ps
