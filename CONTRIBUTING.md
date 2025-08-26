@@ -30,15 +30,15 @@ cd codecafe
 # Start Redis
 redis-server &
 
-# Server setup
-cd server
+# Backend setup
+cd backend
 echo "spring.redis.host=localhost
 spring.redis.port=6379" > src/main/resources/application.properties
 ./mvnw install
 ./mvnw spring-boot:run &
 
-# Client setup
-cd ../client
+# Frontend setup
+cd ../frontend
 echo "VITE_BACKEND_URL=http://localhost:8080" > .env
 npm install
 npm run dev
@@ -53,7 +53,7 @@ npm run dev
 
 ## Development Guidelines
 
-### Client (React/TypeScript)
+### Frontend (React/TypeScript)
 
 - Use functional components with hooks
 - Zustand for global state, local state for component-specific data
@@ -61,7 +61,7 @@ npm run dev
 - Maintain TypeScript strict type safety
 - Run `npm run lint` and `npm run format` before committing
 
-### Server (Java/Spring Boot)
+### Backend (Java/Spring Boot)
 
 - Follow standard Java conventions
 - Maintain clean separation between controllers, services, and repositories
@@ -81,11 +81,11 @@ docs: update API documentation
 ## Testing
 
 ```bash
-# Client
-cd client && npm test
+# Frontend
+cd frontend && npm test
 
-# Server
-cd server && ./mvnw test
+# Backend
+cd backend && ./mvnw test
 ```
 
 **Manual Testing Checklist:**
